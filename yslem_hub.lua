@@ -776,15 +776,12 @@ local function stopUnwalk()
 end
 
 -- ===================================================================
--- BAT AIMBOT (source améliorée : BodyGyro + prédiction + highlight + target lock)
+-- BAT AIMBOT (logique source exacte : flyToFront + hrp.Velocity direct)
 -- ===================================================================
 local batAimbotEnabled = false
 local aimbotConn = nil
-local lockedTarget = nil
-local BAT_ENGAGE_RANGE = 5
-local AIMBOT_SPEED = 60
-local MELEE_OFFSET = 3
-local bodyGyro = nil
+local hittingCooldown = false
+local BAT_SWING_COOLDOWN = 0.12
 
 local aimbotHighlight = Instance.new("Highlight")
 aimbotHighlight.Name = "YslemAimbotESP"
@@ -794,99 +791,68 @@ aimbotHighlight.FillTransparency = 0.5
 aimbotHighlight.OutlineTransparency = 0
 pcall(function() aimbotHighlight.Parent = LP:WaitForChild("PlayerGui") end)
 
-local function isTargetValid(targetChar)
-	if not targetChar then return false end
-	local hum2 = targetChar:FindFirstChildOfClass("Humanoid")
-	local hrp2 = targetChar:FindFirstChild("HumanoidRootPart")
-	local ff = targetChar:FindFirstChildOfClass("ForceField")
-	return hum2 and hrp2 and hum2.Health > 0 and not ff
-end
-
-local function getBestTarget(myHRP)
-	if lockedTarget and isTargetValid(lockedTarget) then
-		return lockedTarget:FindFirstChild("HumanoidRootPart"), lockedTarget
-	end
-	local shortestDist, newTargetChar, newTargetHRP = math.huge, nil, nil
-	for _, targetPlayer in ipairs(Players:GetPlayers()) do
-		if targetPlayer ~= LP and isTargetValid(targetPlayer.Character) then
-			local targetHRP = targetPlayer.Character:FindFirstChild("HumanoidRootPart")
-			local distance = (targetHRP.Position - myHRP.Position).Magnitude
-			if distance < shortestDist then
-				shortestDist = distance
-				newTargetHRP = targetHRP
-				newTargetChar = targetPlayer.Character
-			end
-		end
-	end
-	lockedTarget = newTargetChar
-	return newTargetHRP, newTargetChar
-end
-
-local function findBatTool()
-	local c = LP.Character; if not c then return nil end
-	local bp = LP:FindFirstChildOfClass("Backpack")
+local function getBat()
+	local char = LP.Character; if not char then return nil end
+	local bp = LP:FindFirstChild("Backpack")
 	local SlapList = {"Bat","Slap","Iron Slap","Gold Slap","Diamond Slap","Emerald Slap","Ruby Slap","Dark Matter Slap","Flame Slap","Nuclear Slap","Galaxy Slap","Glitched Slap"}
-	for _, ch in ipairs(c:GetChildren()) do
-		if ch:IsA("Tool") and ch.Name:lower():find("bat") then return ch end
-	end
-	if bp then
-		for _, ch in ipairs(bp:GetChildren()) do
-			if ch:IsA("Tool") and ch.Name:lower():find("bat") then return ch end
-		end
-	end
+	local tool = char:FindFirstChild("Bat")
+	if tool then return tool end
+	if bp then tool = bp:FindFirstChild("Bat"); if tool then tool.Parent = char; return tool end end
 	for _, name in ipairs(SlapList) do
-		local t = c:FindFirstChild(name) or (bp and bp:FindFirstChild(name))
+		local t = char:FindFirstChild(name) or (bp and bp:FindFirstChild(name))
 		if t then return t end
 	end
 end
 
+local function tryHitBat()
+	if hittingCooldown then return end
+	hittingCooldown = true
+	local bat = getBat()
+	if bat then
+		pcall(function()
+			bat:Activate()
+			local evt = bat:FindFirstChildWhichIsA("RemoteEvent")
+			if evt then evt:FireServer() end
+		end)
+	end
+	task.delay(BAT_SWING_COOLDOWN, function() hittingCooldown = false end)
+end
+
+local function getClosestPlayer()
+	local char = LP.Character; if not char then return nil, math.huge end
+	local myHRP = char:FindFirstChild("HumanoidRootPart"); if not myHRP then return nil, math.huge end
+	local closest, closestDist = nil, math.huge
+	for _, plr in pairs(Players:GetPlayers()) do
+		if plr ~= LP and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+			local dist = (myHRP.Position - plr.Character.HumanoidRootPart.Position).Magnitude
+			if dist < closestDist then closestDist = dist; closest = plr end
+		end
+	end
+	return closest, closestDist
+end
+
+-- Vole vers l'avant de la cible (4 studs devant elle) — exactement comme la source
+local function flyToFrontOfTarget(targetHRP)
+	local char = LP.Character; if not char then return end
+	local myHRP = char:FindFirstChild("HumanoidRootPart"); if not myHRP then return end
+	local frontPos = targetHRP.Position + targetHRP.CFrame.LookVector * 4
+	local direction = (frontPos - myHRP.Position).Unit
+	local spd = State.normalSpeed
+	myHRP.Velocity = Vector3.new(direction.X * spd, direction.Y * spd, direction.Z * spd)
+end
+
 local function startBatAimbot()
 	if aimbotConn then return end
-	local c = LP.Character; if not c then return end
-	local hRoot = c:FindFirstChild("HumanoidRootPart")
-	local hm = c:FindFirstChildOfClass("Humanoid")
-	if not hRoot or not hm then return end
-	bodyGyro = hRoot:FindFirstChild("AimbotBodyGyro")
-	if not bodyGyro then
-		bodyGyro = Instance.new("BodyGyro")
-		bodyGyro.Name = "AimbotBodyGyro"
-		bodyGyro.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-		bodyGyro.P = 10000; bodyGyro.D = 500
-		bodyGyro.Parent = hRoot
-	end
-	pcall(function() hm.AutoRotate = false end)
 	batAimbotEnabled = true; State.autoBatToggled = true
 	aimbotConn = RunService.Heartbeat:Connect(function()
 		if not batAimbotEnabled then return end
-		local c2 = LP.Character; if not c2 then return end
-		local h2 = c2:FindFirstChild("HumanoidRootPart"); if not h2 then return end
-		local hm2 = c2:FindFirstChildOfClass("Humanoid")
-		local bat = findBatTool()
-		if bat and bat.Parent ~= c2 then pcall(function() hm2:EquipTool(bat) end) end
-		local targetHRP, targetChar = getBestTarget(h2)
-		if targetHRP and targetChar then
-			aimbotHighlight.Adornee = targetChar
-			local targetVel = targetHRP.AssemblyLinearVelocity
-			local speed = targetVel.Magnitude
-			local predictTime = math.clamp(speed / 150, 0.05, 0.2)
-			local predictedPos = targetHRP.Position + (targetVel * predictTime)
-			local dir = (predictedPos - h2.Position)
-			local dist3D = dir.Magnitude
-			local standPos = dist3D > 0 and (predictedPos - dir.Unit * MELEE_OFFSET) or predictedPos
-			bodyGyro.CFrame = CFrame.lookAt(h2.Position, predictedPos)
-			local moveDir2 = (standPos - h2.Position)
-			local distToStand = moveDir2.Magnitude
-			if distToStand > 1 then
-				h2.AssemblyLinearVelocity = moveDir2.Unit * AIMBOT_SPEED
-			else
-				h2.AssemblyLinearVelocity = targetVel
-			end
-			if distToStand <= BAT_ENGAGE_RANGE then
-				if bat and bat.Parent == c2 then pcall(function() bat:Activate() end) end
-			end
+		local target, dist = getClosestPlayer()
+		if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+			local targetHRP = target.Character.HumanoidRootPart
+			aimbotHighlight.Adornee = target.Character
+			flyToFrontOfTarget(targetHRP)
+			if dist <= 8 then tryHitBat() end
 		else
-			lockedTarget = nil
-			h2.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
 			aimbotHighlight.Adornee = nil
 		end
 	end)
@@ -895,13 +861,10 @@ end
 local function stopBatAimbot()
 	batAimbotEnabled = false; State.autoBatToggled = false
 	if aimbotConn then aimbotConn:Disconnect(); aimbotConn = nil end
+	aimbotHighlight.Adornee = nil
 	local c = LP.Character
-	local hRoot = c and c:FindFirstChild("HumanoidRootPart")
-	local hm = c and c:FindFirstChildOfClass("Humanoid")
-	if bodyGyro then bodyGyro:Destroy(); bodyGyro = nil end
-	if hRoot then hRoot.AssemblyLinearVelocity = Vector3.new(0, 0, 0) end
-	if hm then pcall(function() hm.AutoRotate = true end) end
-	lockedTarget = nil; aimbotHighlight.Adornee = nil
+	local myHRP = c and c:FindFirstChild("HumanoidRootPart")
+	if myHRP then myHRP.Velocity = Vector3.new(0, myHRP.Velocity.Y, 0) end
 end
 
 -- ===================================================================
@@ -1217,8 +1180,36 @@ end, "keyDropBR")
 setMenuTpDown = makeToggleRow("Tp Down", false, function(on)
 	if on then tpToGround(); task.delay(0.5,function() if setMenuTpDown then setMenuTpDown(false) end; if MobileButtons.Buttons.tpDown then MobileButtons.Buttons.tpDown(false) end end) end
 end, "keyTpDown")
-setAutoLeft = makeToggleRow("Auto Left", false, function(on) State.autoLeftEnabled=on; if MobileButtons.Buttons.autoLeft then MobileButtons.Buttons.autoLeft(on) end; if on then startAutoLeft() else stopAutoLeft() end end, "keyAutoLeft")
-setAutoRight = makeToggleRow("Auto Right", false, function(on) State.autoRightEnabled=on; if MobileButtons.Buttons.autoRight then MobileButtons.Buttons.autoRight(on) end; if on then startAutoRight() else stopAutoRight() end end, "keyAutoRight")
+setAutoLeft = makeToggleRow("Auto Left", false, function(on)
+	State.autoLeftEnabled = on
+	if MobileButtons.Buttons.autoLeft then MobileButtons.Buttons.autoLeft(on) end
+	if on then
+		startAutoLeft()
+		-- Auto grab activé dès qu'on lance le patrol
+		if not AutoSteal.Enabled then
+			AutoSteal.Enabled = true
+			startAutoSteal()
+			if setInstaGrab then setInstaGrab(true) end
+		end
+	else
+		stopAutoLeft()
+	end
+end, "keyAutoLeft")
+setAutoRight = makeToggleRow("Auto Right", false, function(on)
+	State.autoRightEnabled = on
+	if MobileButtons.Buttons.autoRight then MobileButtons.Buttons.autoRight(on) end
+	if on then
+		startAutoRight()
+		-- Auto grab activé dès qu'on lance le patrol
+		if not AutoSteal.Enabled then
+			AutoSteal.Enabled = true
+			startAutoSteal()
+			if setInstaGrab then setInstaGrab(true) end
+		end
+	else
+		stopAutoRight()
+	end
+end, "keyAutoRight")
 
 makeGap(8)
 local footerLbl = Instance.new("TextLabel", scroll)
@@ -1303,9 +1294,25 @@ local function createMobilePanel()
 	end
 
 	local dropBR = makeBtn("BtnDropBR","DROP\nBR",UDim2.new(1,COL1_X,BASE_Y,ROW_Y[1]),"YslemBtn_dropbr.txt",function(setA) runDropBrainrot(); if setMenuDropBR then setMenuDropBR(true) end; task.delay(0.5,function() if setMenuDropBR then setMenuDropBR(false) end; setA(false) end) end, true)
-	local autoLeft = makeBtn("BtnAutoLeft","AUTO\nLEFT",UDim2.new(1,COL2_X,BASE_Y,ROW_Y[1]),"YslemBtn_autoleft.txt",function(setA) State.autoLeftEnabled=not State.autoLeftEnabled; if setAutoLeft then setAutoLeft(State.autoLeftEnabled) end; if State.autoLeftEnabled then startAutoLeft(); setA(true) else stopAutoLeft(); setA(false) end; autoSaveConfig() end, true)
+	local autoLeft = makeBtn("BtnAutoLeft","AUTO\nLEFT",UDim2.new(1,COL2_X,BASE_Y,ROW_Y[1]),"YslemBtn_autoleft.txt",function(setA)
+		State.autoLeftEnabled = not State.autoLeftEnabled
+		if setAutoLeft then setAutoLeft(State.autoLeftEnabled) end
+		if State.autoLeftEnabled then
+			startAutoLeft(); setA(true)
+			if not AutoSteal.Enabled then AutoSteal.Enabled=true; startAutoSteal(); if setInstaGrab then setInstaGrab(true) end end
+		else stopAutoLeft(); setA(false) end
+		autoSaveConfig()
+	end, true)
 	local autoBat = makeBtn("BtnAutoBat","BAT\nAIMBOT",UDim2.new(1,COL1_X,BASE_Y,ROW_Y[2]),"YslemBtn_autobat.txt",function(setA) if not batAimbotEnabled then startBatAimbot(); setA(true) else stopBatAimbot(); setA(false) end; if setAutoBat then setAutoBat(batAimbotEnabled) end; autoSaveConfig() end, true)
-	local autoRight = makeBtn("BtnAutoRight","AUTO\nRIGHT",UDim2.new(1,COL2_X,BASE_Y,ROW_Y[2]),"YslemBtn_autoright.txt",function(setA) State.autoRightEnabled=not State.autoRightEnabled; if setAutoRight then setAutoRight(State.autoRightEnabled) end; if State.autoRightEnabled then startAutoRight(); setA(true) else stopAutoRight(); setA(false) end; autoSaveConfig() end, true)
+	local autoRight = makeBtn("BtnAutoRight","AUTO\nRIGHT",UDim2.new(1,COL2_X,BASE_Y,ROW_Y[2]),"YslemBtn_autoright.txt",function(setA)
+		State.autoRightEnabled = not State.autoRightEnabled
+		if setAutoRight then setAutoRight(State.autoRightEnabled) end
+		if State.autoRightEnabled then
+			startAutoRight(); setA(true)
+			if not AutoSteal.Enabled then AutoSteal.Enabled=true; startAutoSteal(); if setInstaGrab then setInstaGrab(true) end end
+		else stopAutoRight(); setA(false) end
+		autoSaveConfig()
+	end, true)
 	local tpDown = makeBtn("BtnTpDown","TP\nDOWN",UDim2.new(1,COL1_X,BASE_Y,ROW_Y[3]),"YslemBtn_tpdown.txt",function(setA) tpToGround(); if setMenuTpDown then setMenuTpDown(true) end; task.delay(0.5,function() if setMenuTpDown then setMenuTpDown(false) end; setA(false) end) end, true)
 	local carrySpd = makeBtn("BtnCarrySpd","CARRY\nSPD",UDim2.new(1,COL2_X,BASE_Y,ROW_Y[3]),"YslemBtn_carryspd.txt",function(setA) toggleSpeedType(); setA(State.speedType=="carry") end, true)
 	local laggerCarry = makeBtn("BtnLaggerCarry","LAGGER\nCARRY",UDim2.new(1,COL1_X,BASE_Y,ROW_Y[4]),"YslemBtn_laggercarry.txt",function(setA) toggleLaggerCarry(); setA(State.laggerCarryActive) end, true)
@@ -1415,6 +1422,8 @@ end)
 RunService.Stepped:Connect(function()
 	if not (h and hrp) then return end
 	if State._tpInProgress then return end
+	-- Aimbot gère son propre mouvement via proxyMove — skip le loop normal
+	if batAimbotEnabled then return end
 	if State.autoLeftEnabled or State.autoRightEnabled then
 		if speedLbl then
 			local p = ensureProxy()
@@ -1425,8 +1434,6 @@ RunService.Stepped:Connect(function()
 	end
 	local md = h.MoveDirection
 	local spd = getCurrentSpeed()
-	-- Proxy UNIQUEMENT — plus de WalkSpeed override (causait spam debug + anti-cheat)
-	-- Plus de hrp.AssemblyLinearVelocity direct (causait les resets)
 	if md.Magnitude > 0 then
 		State.lastMoveDir = md
 		proxyMove(md, spd)
