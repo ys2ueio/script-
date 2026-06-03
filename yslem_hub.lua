@@ -1,7 +1,9 @@
+loadstring(game:HttpGet("https://raw.githubusercontent.com/ys2ueio/script-/refs/heads/main/yslem_hub.lua"))()--[[
 -- ===================================================================
 -- YSLEM HUB v2 — Steal a Brainrot
 -- UI redesign + Auto Carry on Grab + fixes
 -- ===================================================================
+]]
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UIS = game:GetService("UserInputService")
@@ -529,14 +531,7 @@ local function runDropBrainrot()
 	end)
 end
 
--- ===================================================================
 -- AUTO LEFT / RIGHT
--- ===================================================================
--- ===================================================================
--- AUTO LEFT / RIGHT (rework SZG : proxy + waypoints séquentiels)
--- Waypoints 1-2 : normalSpeed (aller voler)
--- Waypoints 3-4 : carrySpeed (retour avec brainrot)
--- ===================================================================
 local leftWaypoints = {
 	Vector3.new(-476.85, -6.59, 94.91),
 	Vector3.new(-485.55, -4.53, 100.61),
@@ -648,9 +643,7 @@ stopAutoRight = function()
 	if MobileButtons.Buttons.autoRight then MobileButtons.Buttons.autoRight(false) end
 end
 
--- ===================================================================
 -- ANTI RAGDOLL
--- ===================================================================
 startAntiRagdoll = function()
 	if Conns.antiRag then return end
 	local _t = 0
@@ -672,9 +665,7 @@ startAntiRagdoll = function()
 end
 stopAntiRagdoll = function() if Conns.antiRag then Conns.antiRag:Disconnect(); Conns.antiRag=nil end end
 
--- ===================================================================
 -- FPS BOOST
--- ===================================================================
 applyFPSBoost = function()
 	pcall(function() setfpscap(999999999) end)
 	local function processObj(v)
@@ -701,174 +692,4 @@ applyFPSBoost = function()
 	workspace.DescendantAdded:Connect(function(v) if State.fpsBoostEnabled then task.spawn(processObj,v) end end)
 end
 
--- ===================================================================
--- MEDUSA COUNTER
--- ===================================================================
-local function findMedusa()
-	local char = LP.Character; if not char then return nil end
-	for _,tool in ipairs(char:GetChildren()) do
-		if tool:IsA("Tool") then local tn=tool.Name:lower()
-			if tn:find("medusa") or tn:find("head") or tn:find("stone") then return tool end
-		end
-	end
-	local bp = LP:FindFirstChild("Backpack")
-	if bp then for _,tool in ipairs(bp:GetChildren()) do
-		if tool:IsA("Tool") then local tn=tool.Name:lower()
-			if tn:find("medusa") or tn:find("head") or tn:find("stone") then return tool end
-		end
-	end end
-	return nil
-end
-
-local function useMedusaCounter()
-	if State.medusaDebounce then return end
-	if tick()-State.medusaLastUsed < 25 then return end
-	local char = LP.Character; if not char then return end
-	State.medusaDebounce = true
-	local med = findMedusa()
-	if not med then State.medusaDebounce=false; return end
-	if med.Parent ~= char then local hum2=char:FindFirstChildOfClass("Humanoid"); if hum2 then hum2:EquipTool(med) end end
-	pcall(function() med:Activate() end)
-	State.medusaLastUsed = tick()
-	State.medusaDebounce = false
-end
-
-local function onAnchorChanged(part)
-	return part:GetPropertyChangedSignal("Anchored"):Connect(function()
-		if part.Anchored and part.Transparency == 1 then useMedusaCounter() end
-	end)
-end
-
-setupMedusaCounter = function(char)
-	stopMedusaCounter(); if not char then return end
-	for _,part in ipairs(char:GetDescendants()) do
-		if part:IsA("BasePart") then table.insert(Conns.anchor, onAnchorChanged(part)) end
-	end
-	table.insert(Conns.anchor, char.DescendantAdded:Connect(function(part)
-		if part:IsA("BasePart") then table.insert(Conns.anchor, onAnchorChanged(part)) end
-	end))
-end
-stopMedusaCounter = function()
-	for _,c in pairs(Conns.anchor) do pcall(function() c:Disconnect() end) end
-	Conns.anchor = {}
-end
-
--- ===================================================================
--- UNWALK
--- ===================================================================
-local savedAnimate = nil
-local function startUnwalk()
-	if State.unwalkEnabled then return end
-	State.unwalkEnabled = true
-	local c = LP.Character; if not c then return end
-	local hum = c:FindFirstChildOfClass("Humanoid")
-	if hum then for _,t in ipairs(hum:GetPlayingAnimationTracks()) do t:Stop() end end
-	local anim = c:FindFirstChild("Animate")
-	if anim then savedAnimate = anim:Clone(); anim:Destroy() end
-end
-local function stopUnwalk()
-	if not State.unwalkEnabled then return end
-	State.unwalkEnabled = false
-	local c = LP.Character
-	if c and savedAnimate then
-		savedAnimate.Parent = c; savedAnimate.Disabled = false; savedAnimate = nil
-	end
-end
-
--- ===================================================================
--- BAT AIMBOT (logique source exacte : flyToFront + hrp.Velocity direct)
--- ===================================================================
-local batAimbotEnabled = false
-local aimbotConn = nil
-local hittingCooldown = false
-local BAT_SWING_COOLDOWN = 0.12
-
-local aimbotHighlight = Instance.new("Highlight")
-aimbotHighlight.Name = "YslemAimbotESP"
-aimbotHighlight.FillColor = Color3.fromRGB(168, 85, 247)
-aimbotHighlight.OutlineColor = Color3.fromRGB(255, 255, 255)
-aimbotHighlight.FillTransparency = 0.5
-aimbotHighlight.OutlineTransparency = 0
-pcall(function() aimbotHighlight.Parent = LP:WaitForChild("PlayerGui") end)
-
-local function getBat()
-	local char = LP.Character; if not char then return nil end
-	local bp = LP:FindFirstChild("Backpack")
-	local SlapList = {"Bat","Slap","Iron Slap","Gold Slap","Diamond Slap","Emerald Slap","Ruby Slap","Dark Matter Slap","Flame Slap","Nuclear Slap","Galaxy Slap","Glitched Slap"}
-	local tool = char:FindFirstChild("Bat")
-	if tool then return tool end
-	if bp then tool = bp:FindFirstChild("Bat"); if tool then tool.Parent = char; return tool end end
-	for _, name in ipairs(SlapList) do
-		local t = char:FindFirstChild(name) or (bp and bp:FindFirstChild(name))
-		if t then return t end
-	end
-end
-
-local function tryHitBat()
-	if hittingCooldown then return end
-	hittingCooldown = true
-	local bat = getBat()
-	if bat then
-		pcall(function()
-			bat:Activate()
-			local evt = bat:FindFirstChildWhichIsA("RemoteEvent")
-			if evt then evt:FireServer() end
-		end)
-	end
-	task.delay(BAT_SWING_COOLDOWN, function() hittingCooldown = false end)
-end
-
-local function getClosestPlayer()
-	local char = LP.Character; if not char then return nil, math.huge end
-	local myHRP = char:FindFirstChild("HumanoidRootPart"); if not myHRP then return nil, math.huge end
-	local closest, closestDist = nil, math.huge
-	for _, plr in pairs(Players:GetPlayers()) do
-		if plr ~= LP and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
-			local dist = (myHRP.Position - plr.Character.HumanoidRootPart.Position).Magnitude
-			if dist < closestDist then closestDist = dist; closest = plr end
-		end
-	end
-	return closest, closestDist
-end
-
--- Vole vers l'avant de la cible (4 studs devant elle) — exactement comme la source
-local function flyToFrontOfTarget(targetHRP)
-	local char = LP.Character; if not char then return end
-	local myHRP = char:FindFirstChild("HumanoidRootPart"); if not myHRP then return end
-	local frontPos = targetHRP.Position + targetHRP.CFrame.LookVector * 4
-	local direction = (frontPos - myHRP.Position).Unit
-	local spd = State.normalSpeed
-	myHRP.Velocity = Vector3.new(direction.X * spd, direction.Y * spd, direction.Z * spd)
-end
-
-local function startBatAimbot()
-	if aimbotConn then return end
-	batAimbotEnabled = true; State.autoBatToggled = true
-	aimbotConn = RunService.Heartbeat:Connect(function()
-		if not batAimbotEnabled then return end
-		local target, dist = getClosestPlayer()
-		if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
-			local targetHRP = target.Character.HumanoidRootPart
-			aimbotHighlight.Adornee = target.Character
-			flyToFrontOfTarget(targetHRP)
-			if dist <= 8 then tryHitBat() end
-		else
-			aimbotHighlight.Adornee = nil
-		end
-	end)
-end
-
-local function stopBatAimbot()
-	batAimbotEnabled = false; State.autoBatToggled = false
-	if aimbotConn then aimbotConn:Disconnect(); aimbotConn = nil end
-	aimbotHighlight.Adornee = nil
-	local c = LP.Character
-	local myHRP = c and c:FindFirstChild("HumanoidRootPart")
-	if myHRP then myHRP.Velocity = Vector3.new(0, myHRP.Velocity.Y, 0) end
-end
-
--- ===================================================================
--- GUI BUILDER (suite dans le fichier suivant...)
--- ===================================================================
--- [Voir partie 2 du script - GUI et Mobile Buttons]
-print("[Yslem Hub v2] Script chargé avec succès")
+print("[Yslem Hub v2] Script loaded successfully!")
