@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Le chat dit bonjour à Claude</title>
+<style>
+  :root {
+    --sky-top: #fef6e4;
+    --sky-bottom: #ffe8c9;
+    --ground: #d9c9a3;
+    --claude-orange: #da7756;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    height: 100%;
+    overflow: hidden;
+    font-family: "Segoe UI", system-ui, sans-serif;
+  }
+  body {
+    background: linear-gradient(to bottom, var(--sky-top) 0%, var(--sky-bottom) 70%, var(--ground) 70%);
+    position: relative;
+  }
+
+  /* ---------- Logo Claude (stylisé, non officiel) ---------- */
+  .claude-logo {
+    position: absolute;
+    top: 38%;
+    right: 8%;
+    transform: translateY(-50%);
+    width: 120px;
+    height: 120px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: idle-bounce 2.4s ease-in-out infinite;
+  }
+  .claude-logo svg { width: 100%; height: 100%; }
+  .claude-logo .ray {
+    fill: var(--claude-orange);
+    transform-origin: 60px 60px;
+  }
+  @keyframes idle-bounce {
+    0%, 100% { transform: translateY(-50%) scale(1); }
+    50%      { transform: translateY(-54%) scale(1.04); }
+  }
+  .claude-label {
+    position: absolute;
+    top: calc(38% + 78px);
+    right: 8%;
+    transform: translateX(-2px);
+    width: 120px;
+    text-align: center;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: #7a4632;
+  }
+
+  /* ---------- Bulle de dialogue ---------- */
+  .speech-bubble {
+    position: absolute;
+    top: 22%;
+    right: 6%;
+    background: #fff;
+    border: 2px solid var(--claude-orange);
+    border-radius: 16px;
+    padding: 8px 16px;
+    font-weight: 600;
+    color: #7a4632;
+    opacity: 0;
+    transform: scale(0.6);
+    transition: opacity 0.35s ease, transform 0.35s ease;
+    white-space: nowrap;
+  }
+  .speech-bubble::after {
+    content: "";
+    position: absolute;
+    bottom: -10px;
+    left: 40px;
+    border-width: 10px 8px 0 8px;
+    border-style: solid;
+    border-color: var(--claude-orange) transparent transparent transparent;
+  }
+  .speech-bubble.show {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  /* ---------- Le chat ---------- */
+  .cat-wrapper {
+    position: absolute;
+    bottom: 26%;
+    left: -160px;
+    width: 140px;
+    height: 100px;
+  }
+  .cat {
+    position: relative;
+    width: 100%;
+    height: 100%;
+  }
+  .cat, .cat * { transform-style: preserve-3d; }
+
+  .cat-body {
+    position: absolute;
+    left: 20px;
+    top: 30px;
+    width: 90px;
+    height: 45px;
+    background: #4b4b4b;
+    border-radius: 45px 40px 20px 20px;
+  }
+  .cat-head {
+    position: absolute;
+    left: 78px;
+    top: 5px;
+    width: 55px;
+    height: 45px;
+    background: #4b4b4b;
+    border-radius: 50%;
+  }
+  .cat-ear {
+    position: absolute;
+    top: -10px;
+    width: 0;
+    height: 0;
+    border-left: 9px solid transparent;
+    border-right: 9px solid transparent;
+    border-bottom: 16px solid #4b4b4b;
+  }
+  .cat-ear.left { left: 8px; transform: rotate(-10deg); }
+  .cat-ear.right { left: 30px; transform: rotate(10deg); }
+  .cat-face {
+    position: absolute;
+    left: 92px;
+    top: 20px;
+    width: 8px;
+    height: 8px;
+    background: #222;
+    border-radius: 50%;
+  }
+  .cat-mouth {
+    position: absolute;
+    left: 116px;
+    top: 30px;
+    width: 10px;
+    height: 6px;
+    border-bottom: 2px solid #222;
+    border-radius: 0 0 10px 10px;
+  }
+  .cat-tail {
+    position: absolute;
+    left: 4px;
+    top: 15px;
+    width: 12px;
+    height: 40px;
+    background: #4b4b4b;
+    border-radius: 20px;
+    transform-origin: bottom center;
+    animation: tail-wag 0.6s ease-in-out infinite alternate;
+  }
+  @keyframes tail-wag {
+    from { transform: rotate(-15deg); }
+    to   { transform: rotate(15deg); }
+  }
+
+  .leg {
+    position: absolute;
+    bottom: 0;
+    width: 9px;
+    height: 26px;
+    background: #333;
+    border-radius: 4px;
+    transform-origin: top center;
+  }
+  .leg.l1 { left: 32px; animation: walk-a 0.45s linear infinite; }
+  .leg.l2 { left: 50px; animation: walk-b 0.45s linear infinite; }
+  .leg.l3 { left: 70px; animation: walk-b 0.45s linear infinite; }
+  .leg.l4 { left: 90px; animation: walk-a 0.45s linear infinite; }
+  @keyframes walk-a {
+    0%, 100% { transform: rotate(25deg); }
+    50%      { transform: rotate(-25deg); }
+  }
+  @keyframes walk-b {
+    0%, 100% { transform: rotate(-25deg); }
+    50%      { transform: rotate(25deg); }
+  }
+
+  .cat-wrapper {
+    animation: walk-across 6s linear forwards, bob 0.45s ease-in-out infinite;
+  }
+  @keyframes walk-across {
+    0%   { left: -160px; }
+    78%  { left: calc(100% - 300px); }
+    100% { left: calc(100% - 300px); }
+  }
+  @keyframes bob {
+    0%, 100% { bottom: 26%; }
+    50%      { bottom: 27%; }
+  }
+  .cat-wrapper.arrived {
+    left: calc(100% - 300px);
+    animation: bob 0.6s ease-in-out infinite;
+  }
+  .cat-wrapper.arrived .leg {
+    animation: none;
+    transform: rotate(0deg);
+  }
+  .cat-wrapper.arrived .cat-tail {
+    animation: tail-wag 1s ease-in-out infinite alternate;
+  }
+
+  .credit {
+    position: absolute;
+    bottom: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 12px;
+    color: #8a7a5c;
+  }
+</style>
+</head>
+<body>
+
+  <div class="speech-bubble" id="bubble">Bonjour Claude ! 🐾</div>
+
+  <div class="claude-logo">
+    <svg viewBox="0 0 120 120">
+      <!-- soleil/étoile stylisé façon logo Claude, dessin original -->
+      <polygon class="ray" points="60.0,5.0 65.2,40.7 87.5,12.4 74.1,45.9 107.6,32.5 79.3,54.8 115.0,60.0 79.3,65.2 107.6,87.5 74.1,74.1 87.5,107.6 65.2,79.3 60.0,115.0 54.8,79.3 32.5,107.6 45.9,74.1 12.4,87.5 40.7,65.2 5.0,60.0 40.7,54.8 12.4,32.5 45.9,45.9 32.5,12.4 54.8,40.7"/>
+    </svg>
+  </div>
+  <div class="claude-label">Claude</div>
+
+  <div class="cat-wrapper" id="cat">
+    <div class="cat">
+      <div class="cat-tail"></div>
+      <div class="cat-body"></div>
+      <div class="leg l1"></div>
+      <div class="leg l2"></div>
+      <div class="leg l3"></div>
+      <div class="leg l4"></div>
+      <div class="cat-head">
+        <div class="cat-ear left"></div>
+        <div class="cat-ear right"></div>
+      </div>
+      <div class="cat-face"></div>
+      <div class="cat-mouth"></div>
+    </div>
+  </div>
+
+  <div class="credit">Un petit chat qui vient dire bonjour 👋</div>
+
+<script>
+  const cat = document.getElementById('cat');
+  const bubble = document.getElementById('bubble');
+
+  // Durée de la marche définie dans l'animation CSS "walk-across" (6s, arrêt à 78%)
+  const walkDuration = 6000;
+  const arrivalDelay = walkDuration * 0.78;
+
+  setTimeout(() => {
+    cat.classList.add('arrived');
+    bubble.classList.add('show');
+  }, arrivalDelay);
+</script>
+</body>
+</html>
