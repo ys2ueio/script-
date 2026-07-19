@@ -368,7 +368,7 @@ local _enumDefs = {
         Seated=13,PlatformStanding=14,Dead=15,Jumping=17,
         Freefall=18,Ragdoll=20,GettingUp=22,Jumping2=23,
         Swimming=4,SwimmingIdle=5,StrafingNoPhysics=11,
-        Landed=24,None=11,
+        Landed=24,None=25,Physics=16,Flying=6,
     },
     AnimationPriority = {Idle=0,Movement=1,Action=2,Action2=3,Action3=4,Core=1000},
     BodyPart = {Head=0,Torso=1,LeftArm=2,RightArm=3,LeftLeg=4,RightLeg=5},
@@ -418,11 +418,48 @@ Enum = setmetatable({}, {
 -- ============================================================
 
 task = {}
-task.wait   = function(t) return t or 0 end
--- task.spawn est volontairement un no-op : évite les boucles infinies async
-task.spawn  = function(fn, ...) end
-task.delay  = function(t, fn, ...) end
-task.defer  = function(fn, ...) end
+
+--[[
+    task.wait a un budget d'itérations LOCAL à chaque appel task.spawn
+    (pile de budgets, pas de compteur global — évite qu'une boucle épuise
+    le budget d'une autre coroutine sans rapport). Une fois épuisé, une
+    erreur marquée "_FAKEENV_BUDGET_" est levée et interceptée par
+    _runSpawned comme une fin normale (pas un vrai bug). Ça permet
+    d'exécuter réellement les coroutines task.spawn (contrairement à un
+    no-op complet) sans jamais bloquer sur un `while X.Parent do
+    task.wait() end` — tout en laissant remonter les vraies erreurs
+    (index nil, variable non déclarée, etc.) qui se produisent avant
+    l'épuisement du budget. Le code hors task.spawn (chunk principal)
+    n'a pas de budget : task.wait s'y comporte comme avant (no-op).
+]]
+local _BUDGET_MARKER = "_FAKEENV_BUDGET_EXCEEDED_"
+local _budgetStack = {}
+
+task.wait = function(t)
+    local top = _budgetStack[#_budgetStack]
+    if top then
+        top.n = top.n - 1
+        if top.n <= 0 then
+            error(_BUDGET_MARKER, 0)
+        end
+    end
+    return t or 0
+end
+
+local function _runSpawned(fn, ...)
+    if type(fn) ~= "function" then return end
+    table.insert(_budgetStack, { n = 50 })
+    local ok, err = pcall(fn, ...)
+    table.remove(_budgetStack)
+    if not ok and not tostring(err):find(_BUDGET_MARKER, 1, true) then
+        -- Vraie erreur (pas juste le budget épuisé) : la remonter
+        error("[fake_env] Erreur dans une coroutine task.spawn : " .. tostring(err), 0)
+    end
+end
+
+task.spawn  = _runSpawned
+task.defer  = _runSpawned
+task.delay  = function(t, fn, ...) _runSpawned(fn, ...) end
 task.cancel = function(thread) end
 task.synchronize = function() end
 task.desynchronize = function() end

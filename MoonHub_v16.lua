@@ -1003,7 +1003,7 @@ local function startAutoSteal()
 	
 	-- ===================================================================
 		task.spawn(function() pcall(scanAllPlots) end)
-		task.spawn(function() while mainFrame.Parent do task.wait(5); pcall(scanAllPlots) end end)
+		task.spawn(function() while gui.Parent do task.wait(5); pcall(scanAllPlots) end end)
 		autoStealConnection = RunService.Heartbeat:Connect(function()
 			if not AutoSteal.Enabled or _stealActive then return end
 			local target = pickClosest()
@@ -2789,7 +2789,7 @@ end)
 -- Ne met à jour lastPing que si le fetch a réussi, sinon on garde la
 -- dernière valeur connue au lieu de retomber sur 0 (bug affichage bloqué à "0ms").
 task.spawn(function()
-	while mainFrame.Parent do
+	while stealWidget.Parent do
 		local success, ping = pcall(function()
 			local netStats = Stats:FindFirstChild("Network")
 			if not netStats then return nil end
@@ -4386,7 +4386,7 @@ print("[Moon Hub v2] Loaded.")
 
 -- Auto-save toutes les 10s
 task.spawn(function()
-	while mainFrame.Parent do
+	while gui.Parent do
 		task.wait(10)
 		MH_save()
 	end
