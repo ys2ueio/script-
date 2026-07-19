@@ -2816,7 +2816,7 @@ do
 local QP_GAP      = 6
 local QP_PAD      = 5
 local QP_HANDLE_H = 18
-local QP_ROWS     = 6
+local QP_ROWS     = 7
 local QP_CONTENT_H = QP_ROWS * QP_ROW_H + (QP_ROWS-1) * QP_GAP
 local QP_PANEL_H   = QP_HANDLE_H + 6 + QP_PAD + QP_CONTENT_H + QP_PAD
 local QP_W         = 122
@@ -2954,6 +2954,15 @@ do
 		local on = not ABP.active
 		if on then if AB.active then AB.stop() end; ABP.start() else ABP.stop() end
 		av2Set(on)
+	end)
+
+	-- Rangée 7 : SPEED BYPASS (déclenche réellement le bypass, pas juste le panneau)
+	local sbBtn, sbSet = makeQpButton("SPEED BYPASS", 7, false, 1)
+	_G._MH_setSpeedBypassQpVisual = sbSet
+	sbSet(_G._MH_speedBypassIsActive and _G._MH_speedBypassIsActive() or false)
+	sbBtn.MouseButton1Click:Connect(function()
+		if _G._MH_speedBypassToggle then _G._MH_speedBypassToggle() end
+		sbSet(_G._MH_speedBypassIsActive and _G._MH_speedBypassIsActive() or false)
 	end)
 end
 end
@@ -3567,6 +3576,7 @@ local function toggle()
 		toggleBtn.BackgroundColor3 = C_OFF_BG; toggleBtn.BackgroundTransparency = 0.2
 		toggleBtn.TextColor3 = C_DIM
 	end
+	if _G._MH_setSpeedBypassQpVisual then _G._MH_setSpeedBypassQpVisual(activated) end
 end
 toggleBtn.MouseButton1Click:Connect(toggle)
 _G._MH_speedBypassToggle = toggle
