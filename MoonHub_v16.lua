@@ -956,9 +956,7 @@ local function startAutoSteal()
 			task.wait(CFG.HOLD_MIN)
 			local alreadyClose = distTo(a) <= CFG.STEAL_RANGE
 			local fired = false
-			while true do
-				if tick()-_stealStart > CFG.HOLD_MAX then break end
-				if not prompt.Parent then break end
+			while tick()-_stealStart <= CFG.HOLD_MAX and prompt.Parent do
 				if distTo(a) <= CFG.STEAL_RANGE then
 					if not alreadyClose then task.wait(CFG.ENTRY_DELAY) end
 					for _,fn in ipairs(data.trigger) do task.spawn(fn) end
@@ -1005,7 +1003,7 @@ local function startAutoSteal()
 	
 	-- ===================================================================
 		task.spawn(function() pcall(scanAllPlots) end)
-		task.spawn(function() while true do task.wait(5); pcall(scanAllPlots) end end)
+		task.spawn(function() while mainFrame.Parent do task.wait(5); pcall(scanAllPlots) end end)
 		autoStealConnection = RunService.Heartbeat:Connect(function()
 			if not AutoSteal.Enabled or _stealActive then return end
 			local target = pickClosest()
@@ -2787,7 +2785,7 @@ RunService.RenderStepped:Connect(function()
 	end
 end)
 task.spawn(function()
-	while true do task.wait(0.5); pcall(function()
+	while mainFrame.Parent do task.wait(0.5); pcall(function()
 		local ping=0; local netStats=Stats:FindFirstChild("Network")
 		if netStats then local sci=netStats:FindFirstChild("ServerStatsItem"); if sci then local dp=sci:FindFirstChild("Data Ping"); if dp then ping=math.floor(dp:GetValue() or 0) end end end
 		lastPing=ping; refreshInfoLabel()
@@ -4371,7 +4369,7 @@ print("[Moon Hub v2] Loaded.")
 
 -- Auto-save toutes les 30s (filet de sécurité en complément du save-on-change)
 task.spawn(function()
-	while true do
+	while mainFrame.Parent do
 		task.wait(30)
 		MH_save()
 	end
