@@ -384,7 +384,6 @@ end
 -- ===================================================================
 local WIN_W, WIN_H = 300, 340
 local TITLE_H = 34
-local QP_ROW_H = 28  -- partagé entre applyScale (Visual) et applyDetach (Quick Panel)
 
 local mainOuter = Instance.new("Frame", gui)
 mainOuter.Name = "MainOuter"
@@ -1833,17 +1832,20 @@ buildPage("Combat", function()
 	addLivingTextGradient(dropClk); dropClk.MouseButton1Click:Connect(runDropBrainrot)
 end)
 
--- Déclarés ici (avant buildPage Visual) pour être visibles dans applyScale
--- Remplis par le bloc Quick Panel qui vient après
-local _qpButtons = {}
-local _qpDetached = false
-local _qpDetachedPositions = {}
-local _qpOuter   = nil
-local _qpPanel   = nil
+-- Déclarés ici (avant buildPage Visual) pour être visibles dans applyScale.
+-- Système de boutons flottants "spawnables" (remplace le Quick Panel fixe +
+-- l'attach/detach) : chaque action a un toggle dans Settings qui fait
+-- apparaître/disparaître son bouton flottant. "Lock" gèle le drag de tous
+-- les boutons actuellement affichés.
+local _floatDefs      = {}   -- id -> {label, onClick, isActive, momentary}
+local _floatBtns      = {}   -- id -> {frame, setActive}
+local _floatPositions = {}   -- id -> {xs,xo,ys,yo}
+local _floatLocked    = false
+local FLOAT_SZ = 54
 
 buildPage("Visual", function()
-	-- ── SCALE des boutons du Quick Panel ─────────────────────────────
-	-- Taille actuelle des boutons (QP_ROW_H=28). Echelle 1=min(17px) → 10=max(50px).
+	-- ── SCALE des boutons flottants ───────────────────────────────────
+	-- Taille des boutons spawnables. Echelle 1=min(40px) → 10=max(74px).
 	-- On stocke la valeur courante pour que le slider reflète l'état réel.
 	UIB.makeSectionLabel("Button Size")
 	UIB.makeGap(2)
@@ -1892,35 +1894,13 @@ buildPage("Visual", function()
 		thumb.Position = UDim2.new(0, 14 + t * math.max(_trackAbsW - 1, 1), 0.5, 0)
 		scaleValLbl.Text = "Scale: " .. _scaleVal .. " / 10"
 
-		-- Range : 17px (scale 1) → 50px (scale 10)
-		local newH   = 17 + math.floor((_scaleVal - 1) * (50 - 17) / 9)
-		local newGap = math.max(3, math.floor(newH * 0.2))
-		QP_ROW_H = newH  -- synchronise pour que applyDetach utilise la même échelle
-
-		-- _qpButtons est une table de {btn, rowIndex, btnW}
-		-- remplie par le Quick Panel après buildPage("Visual") — lue ici à l'appel
-		if _qpButtons then
-			local detachedSz = math.max(44, math.min(newH + 10, 66))
-			for _, entry in ipairs(_qpButtons) do
-				local btn = entry.btn
-				if btn and btn.Parent then
-					if _qpDetached then
-						btn.Size = UDim2.new(0, detachedSz, 0, detachedSz)
-					else
-						local newY = 5 + (entry.rowIndex - 1) * (newH + newGap)
-						btn.Size     = UDim2.new(0, entry.btnW, 0, newH)
-						btn.Position = UDim2.new(0, entry.btnX,  0, newY)
-					end
-				end
+		-- Range : 40px (scale 1) → 74px (scale 10) — taille des boutons flottants
+		local newSz = 40 + math.floor((_scaleVal - 1) * (74 - 40) / 9)
+		FLOAT_SZ = newSz
+		for _, entry in pairs(_floatBtns) do
+			if entry.frame and entry.frame.Parent then
+				entry.frame.Size = UDim2.new(0, newSz, 0, newSz)
 			end
-		end
-		-- Redimensionne le panel conteneur pour éviter overflow ou vide
-		local totalH = 5 + 6 * (newH + newGap) - newGap + 5
-		if _qpPanel and _qpPanel.Parent then
-			_qpPanel.Size = UDim2.new(1, 0, 0, totalH)
-		end
-		if _qpOuter and _qpOuter.Parent then
-			_qpOuter.Size = UDim2.new(0, 122, 0, 18 + 6 + totalH)
 		end
 	end
 
@@ -2802,110 +2782,157 @@ end)
 end
 
 -- ===================================================================
--- QUICK PANEL — boutons réduits (QP_ROW_H 34→28, QP_W 144→122)
+-- FLOATING BUTTONS — remplace le Quick Panel fixe + l'attach/detach.
+-- Chaque action a un toggle dans Settings qui fait spawn/despawn son
+-- propre bouton flottant carré. "Lock" gèle le drag une fois placés.
 -- ===================================================================
-do
--- QP_ROW_H partagé avec applyScale (Visual tab) — déclaré au niveau de _MH_buildUI
-local QP_GAP      = 6
-local QP_PAD      = 5
-local QP_HANDLE_H = 18
-local QP_ROWS     = 7
-local QP_CONTENT_H = QP_ROWS * QP_ROW_H + (QP_ROWS-1) * QP_GAP
-local QP_PANEL_H   = QP_HANDLE_H + 6 + QP_PAD + QP_CONTENT_H + QP_PAD
-local QP_W         = 122
+local function makeFloatButton(id)
+	if _floatBtns[id] then return _floatBtns[id] end
+	local def = _floatDefs[id]; if not def then return nil end
 
-local quickPanelOuter=Instance.new("Frame",gui)
-_qpOuter=quickPanelOuter   -- exposé au slider
-quickPanelOuter.Name="QuickPanelOuter"
-quickPanelOuter.Size=UDim2.new(0,QP_W,0,QP_PANEL_H)
-quickPanelOuter.Position=UDim2.new(1,-(QP_W+36),0,60)
-quickPanelOuter.BackgroundTransparency=1
-
-local qpHandle=Instance.new("Frame",quickPanelOuter)
-qpHandle.Name="DragHandle"; qpHandle.Size=UDim2.new(1,0,0,QP_HANDLE_H)
-qpHandle.BackgroundColor3=Color3.fromRGB(0,0,0); qpHandle.BorderSizePixel=0; qpHandle.Active=true
-addCorner(qpHandle,8); addLivingStroke(qpHandle,1)
-local qpGrip=Instance.new("TextLabel",qpHandle)
-qpGrip.Size=UDim2.new(1,0,1,0); qpGrip.BackgroundTransparency=1
-qpGrip.Text="•  •  •"; qpGrip.TextColor3=C_MOON2; qpGrip.Font=Enum.Font.GothamBlack; qpGrip.TextSize=10
-makeDraggable(quickPanelOuter,qpHandle)
-
-local quickPanel=Instance.new("Frame",quickPanelOuter)
-_qpPanel=quickPanel   -- exposé au slider
-quickPanel.Name="QuickPanel"
-quickPanel.Size=UDim2.new(1,0,0,QP_PANEL_H-QP_HANDLE_H-6)
-quickPanel.Position=UDim2.new(0,0,0,QP_HANDLE_H+6)
-quickPanel.BackgroundColor3=C_BG; quickPanel.BackgroundTransparency=0.08; quickPanel.BorderSizePixel=0
-addCorner(quickPanel,10); addLivingStroke(quickPanel,1.5)
-
-local function makeQpButton(label, rowIndex, half, colIndex)
-	local rowY  = QP_PAD + (rowIndex-1)*(QP_ROW_H+QP_GAP)
-	local btnW  = half and ((QP_W-2*QP_PAD-6)/2) or (QP_W-2*QP_PAD)
-	local btnX  = QP_PAD + (half and colIndex==2 and (btnW+6) or 0)
-	local btn   = Instance.new("TextButton",quickPanel)
-	btn.ZIndex  = 5
-	btn.Position = UDim2.new(0,btnX,0,rowY)
-	btn.Size     = UDim2.new(0,btnW,0,QP_ROW_H)
-	btn.BackgroundColor3=C_ROW; btn.BackgroundTransparency=0.35; btn.BorderSizePixel=0
-	btn.Text=label; btn.TextColor3=C_WHITE; btn.Font=Enum.Font.GothamBold
-	btn.TextSize=half and 9 or 10   -- taille texte réduite aussi
-	btn.AutoButtonColor=false
-	addCorner(btn,8); addLivingStroke(btn,1); addLivingTextGradient(btn)
-	btn.MouseEnter:Connect(function() TweenService:Create(btn,TweenInfo.new(0.1),{BackgroundTransparency=0.15}):Play() end)
-	btn.MouseLeave:Connect(function() TweenService:Create(btn,TweenInfo.new(0.1),{BackgroundTransparency=0.35}):Play() end)
-	_qpButtons[#_qpButtons+1] = {btn=btn, rowIndex=rowIndex, btnW=btnW, btnX=btnX}
-	local function setActive(on)
-		btn.BackgroundColor3=on and C_ON_BG or C_ROW
-		TweenService:Create(btn,TweenInfo.new(0.15),{BackgroundTransparency=on and 0.1 or 0.35}):Play()
+	local btn = Instance.new("TextButton", gui)
+	btn.Name = "Float_"..id
+	btn.Size = UDim2.new(0, FLOAT_SZ, 0, FLOAT_SZ)
+	local saved = _floatPositions[id]
+	if saved then
+		btn.Position = UDim2.new(saved[1], saved[2], saved[3], saved[4])
+	else
+		local n = 0
+		for _ in pairs(_floatBtns) do n = n + 1 end
+		btn.Position = UDim2.new(0, 30 + (n % 5) * (FLOAT_SZ + 8), 0, 220 + math.floor(n / 5) * (FLOAT_SZ + 8))
 	end
-	return btn,setActive
+	btn.BackgroundColor3 = C_ROW; btn.BackgroundTransparency = 0.2; btn.BorderSizePixel = 0
+	btn.Text = def.label; btn.TextColor3 = C_WHITE; btn.Font = Enum.Font.GothamBold
+	btn.TextScaled = true; btn.TextWrapped = true; btn.AutoButtonColor = false
+	btn.ZIndex = 500; btn.Active = true
+	addCorner(btn, 14); addLivingStroke(btn, 1); addLivingTextGradient(btn)
+	local pad = Instance.new("UIPadding", btn)
+	pad.PaddingLeft = UDim.new(0,4); pad.PaddingRight = UDim.new(0,4)
+	pad.PaddingTop = UDim.new(0,3); pad.PaddingBottom = UDim.new(0,3)
+
+	local function setActive(on)
+		btn.BackgroundColor3 = on and C_ON_BG or C_ROW
+		TweenService:Create(btn, TweenInfo.new(0.15), {BackgroundTransparency = on and 0.1 or 0.2}):Play()
+	end
+
+	-- Drag (désactivé quand verrouillé)
+	local drag, ds, dp = false, nil, nil
+	btn.InputBegan:Connect(function(inp)
+		if _floatLocked then return end
+		if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then
+			drag = true; ds = inp.Position; dp = btn.Position
+			inp.Changed:Connect(function()
+				if inp.UserInputState == Enum.UserInputState.End then
+					drag = false
+					local p2 = btn.Position
+					_floatPositions[id] = {p2.X.Scale, p2.X.Offset, p2.Y.Scale, p2.Y.Offset}
+					if _G._MH_autoSave then _G._MH_autoSave() end
+				end
+			end)
+		end
+	end)
+	btn.InputChanged:Connect(function(inp)
+		if _floatLocked or not drag or not ds then return end
+		if inp.UserInputType == Enum.UserInputType.MouseMovement or inp.UserInputType == Enum.UserInputType.Touch then
+			local d = inp.Position - ds
+			btn.Position = UDim2.new(dp.X.Scale, dp.X.Offset + d.X, dp.Y.Scale, dp.Y.Offset + d.Y)
+		end
+	end)
+
+	btn.MouseButton1Click:Connect(function()
+		if def.onClick then def.onClick() end
+		if def.momentary then
+			setActive(true)
+			task.delay(0.2, function() setActive(false) end)
+		elseif def.isActive then
+			setActive(def.isActive())
+		end
+	end)
+
+	_floatBtns[id] = {frame = btn, setActive = setActive}
+	if def.isActive then setActive(def.isActive()) end
+	return _floatBtns[id]
 end
 
-do
-	local abBtn,abSetActive=makeQpButton("ANTIBAT AIMBOT",1,false,1)
-	setAntiBatQuickBtnVisual=abSetActive; abSetActive(BC.active)
-	abBtn.MouseButton1Click:Connect(function() applyAntiBatState(not BC.active) end)
+local function removeFloatButton(id)
+	local entry = _floatBtns[id]
+	if entry then entry.frame:Destroy(); _floatBtns[id] = nil end
 end
-do
-	local b1,s1=makeQpButton("DROP BR",2,true,1); local b2,s2=makeQpButton("AUTO LEFT",2,true,2)
-	b1.MouseButton1Click:Connect(function() runDropBrainrot(); s1(true); task.delay(0.2,function() s1(false) end) end)
-	b2.MouseButton1Click:Connect(function()
-		State.autoLeftEnabled=not State.autoLeftEnabled
-		if State.autoLeftEnabled then startAutoLeft() else stopAutoLeft() end; s2(State.autoLeftEnabled)
-	end)
+
+local function setFloatLocked(on)
+	_floatLocked = on
 end
-do
-	local b1,s1=makeQpButton("AIM BOT",3,true,1); local b2,s2=makeQpButton("AUTO RIGHT",3,true,2)
-	b1.MouseButton1Click:Connect(function()
-		local on=not AB.active
-		if on then if ABP.active then ABP.stop() end; AB.start() else AB.stop() end; s1(on)
-	end)
-	b2.MouseButton1Click:Connect(function()
-		State.autoRightEnabled=not State.autoRightEnabled
-		if State.autoRightEnabled then startAutoRight() else stopAutoRight() end; s2(State.autoRightEnabled)
-	end)
-end
-do
-	local b1,s1=makeQpButton("TP DOWN",4,false,1)
-	b1.MouseButton1Click:Connect(function() tpToGround(); s1(true); task.delay(0.2,function() s1(false) end) end)
-end
-do
-	local b2,s2=makeQpButton("BAT TP",5,false,1)
-	b2.MouseButton1Click:Connect(function()
+
+-- Sync périodique des visuels (état ON/OFF réel, peu importe d'où vient
+-- le changement — clic sur le bouton, keybind, ou autre toggle)
+task.spawn(function()
+	while gui.Parent do
+		for id, entry in pairs(_floatBtns) do
+			local def = _floatDefs[id]
+			if def and def.isActive and not def.momentary then
+				entry.setActive(def.isActive())
+			end
+		end
+		task.wait(0.3)
+	end
+end)
+
+-- ── Enregistrement des actions ──────────────────────────────────────
+_floatDefs.antibat = {
+	label = "ANTIBAT\nAIMBOT",
+	onClick = function() applyAntiBatState(not BC.active) end,
+	isActive = function() return BC.active end,
+}
+_floatDefs.dropbr = {
+	label = "DROP BR",
+	onClick = function() runDropBrainrot() end,
+	momentary = true,
+}
+_floatDefs.autoleft = {
+	label = "AUTO\nLEFT",
+	onClick = function()
+		State.autoLeftEnabled = not State.autoLeftEnabled
+		if State.autoLeftEnabled then startAutoLeft() else stopAutoLeft() end
+	end,
+	isActive = function() return State.autoLeftEnabled end,
+}
+_floatDefs.aimbot = {
+	label = "AIM BOT",
+	onClick = function()
+		local on = not AB.active
+		if on then if ABP.active then ABP.stop() end; AB.start() else AB.stop() end
+	end,
+	isActive = function() return AB.active end,
+}
+_floatDefs.autoright = {
+	label = "AUTO\nRIGHT",
+	onClick = function()
+		State.autoRightEnabled = not State.autoRightEnabled
+		if State.autoRightEnabled then startAutoRight() else stopAutoRight() end
+	end,
+	isActive = function() return State.autoRightEnabled end,
+}
+_floatDefs.tpdown = {
+	label = "TP DOWN",
+	onClick = function() tpToGround() end,
+	momentary = true,
+}
+_floatDefs.battp = {
+	label = "BAT TP",
+	onClick = function()
 		local on = not AimV3.active
-		if on then AimV3.start() else AimV3.stop() end; s2(AimV3.active)
-	end)
-end
+		if on then AimV3.start() else AimV3.stop() end
+	end,
+	isActive = function() return AimV3.active end,
+}
 
 -- ===================================================================
--- INSTA RESET (rangée 6 — logique intégrée depuis InstaReset script)
+-- INSTA RESET — logique intégrée depuis InstaReset script
 -- ===================================================================
 do
-	-- Constantes InstaReset
 	local IR_GUID        = "f888ee6e-c86d-46e1-93d7-0639d6635d42"
 	local IR_resetRemote = nil
 
-	-- Hook pour capturer le RemoteEvent de reset dès qu'il passe
 	pcall(function()
 		local o_
 		o_ = hookfunction(Instance.new("RemoteEvent").FireServer, newcclosure(function(self, ...)
@@ -2916,7 +2943,6 @@ do
 		end))
 	end)
 
-	-- Fonction de reset (boucle jusqu'au respawn)
 	local function instareset(resetType)
 		if not IR_resetRemote then return end
 		local oldChar = LP.Character
@@ -2929,33 +2955,32 @@ do
 	end
 	_G.MH_instareset = function() instareset("balloon") end  -- exposé au keybind
 
-	-- Rangée 6 : INSTANT RESET (gauche) + AIM V2 (droite)
-	local irBtn, irSet = makeQpButton("INSTANT\nRESET", 6, true, 1)
-	local av2Btn, av2Set = makeQpButton("AIM V2", 6, true, 2)
+	_floatDefs.instareset = {
+		label = "INSTANT\nRESET",
+		onClick = function() instareset("balloon") end,
+		momentary = true,
+	}
+end
 
-	irBtn.MouseButton1Click:Connect(function()
-		instareset("balloon")
-		TweenService:Create(irBtn, TweenInfo.new(0.07), {BackgroundColor3=Color3.fromRGB(255,255,255)}):Play()
-		task.delay(0.07, function()
-			TweenService:Create(irBtn, TweenInfo.new(0.15), {BackgroundColor3=Color3.fromRGB(180,30,30)}):Play()
-		end)
-	end)
-	av2Btn.MouseButton1Click:Connect(function()
+_floatDefs.aimv2 = {
+	label = "AIM V2",
+	onClick = function()
 		local on = not ABP.active
 		if on then if AB.active then AB.stop() end; ABP.start() else ABP.stop() end
-		av2Set(on)
-	end)
+	end,
+	isActive = function() return ABP.active end,
+}
+_floatDefs.speedbypass = {
+	label = "SPEED\nBYPASS",
+	onClick = function() if _G._MH_speedBypassToggle then _G._MH_speedBypassToggle() end end,
+	isActive = function() return _G._MH_speedBypassIsActive and _G._MH_speedBypassIsActive() or false end,
+}
 
-	-- Rangée 7 : SPEED BYPASS (déclenche réellement le bypass, pas juste le panneau)
-	local sbBtn, sbSet = makeQpButton("SPEED BYPASS", 7, false, 1)
-	_G._MH_setSpeedBypassQpVisual = sbSet
-	sbSet(_G._MH_speedBypassIsActive and _G._MH_speedBypassIsActive() or false)
-	sbBtn.MouseButton1Click:Connect(function()
-		if _G._MH_speedBypassToggle then _G._MH_speedBypassToggle() end
-		sbSet(_G._MH_speedBypassIsActive and _G._MH_speedBypassIsActive() or false)
-	end)
-end
-end
+_G._MH_makeFloatButton   = makeFloatButton
+_G._MH_removeFloatButton = removeFloatButton
+_G._MH_setFloatLocked    = setFloatLocked
+_G._MH_floatDefs         = _floatDefs
+_G._MH_floatPositions    = _floatPositions
 
 -- ===================================================================
 -- STUN TIMER BILLBOARD (au-dessus du personnage)
@@ -3188,6 +3213,13 @@ local function MH_save()
 				autoGrabEnabled  = AutoSteal and AutoSteal.Enabled or false,
 				grabRadius       = AutoSteal and AutoSteal.Radius or nil,
 				grabDuration     = AutoSteal and AutoSteal.Duration or nil,
+				floatSpawned = (function()
+					local ids = {}
+					for id in pairs(_floatBtns) do ids[#ids+1] = id end
+					return ids
+				end)(),
+				floatPositions = _floatPositions,
+				floatLocked = _floatLocked,
 				kb = {
 					AntiBatAimbot = ks(kb.AntiBatAimbot),
 					DropBR        = ks(kb.DropBR),
@@ -3314,100 +3346,54 @@ local function MH_load()
 				end
 			end
 		end
+
+		-- Boutons flottants : positions d'abord, puis spawn, puis lock
+		if type(data.floatPositions) == "table" then
+			for id, pos in pairs(data.floatPositions) do
+				_floatPositions[id] = pos
+			end
+		end
+		if type(data.floatSpawned) == "table" then
+			for _, id in ipairs(data.floatSpawned) do
+				makeFloatButton(id)
+				if _floatRowSetters[id] then _floatRowSetters[id](true) end
+			end
+		end
+		if type(data.floatLocked) == "boolean" then
+			setFloatLocked(data.floatLocked)
+			if _floatLockRowSetter then _floatLockRowSetter(data.floatLocked) end
+		end
 	end)
 	if not loadOk then warn("[MoonHub] MH_load a échoué en cours de route — vérifier les modules référencés") end
 
 	return true
 end
 
--- ===================================================================
--- DÉTACHEMENT BOUTONS QP (style WesKid — boutons carrés flottants)
--- ===================================================================
--- (déclarations _qpDetached / _qpDetachedPositions déplacées plus haut, ligne ~1786)
-
-local function applyDetach(on)
-	_qpDetached = on
-	local sz = math.max(44, math.min(QP_ROW_H + 10, 66))
-	for id, entry in ipairs(_qpButtons) do
-		local btn = entry.btn
-		if btn then
-			if on then
-				local localPos = btn.Position
-				local savedPos = _qpDetachedPositions[id]
-				btn.Parent = gui
-				btn.ZIndex = 500
-				btn.Size = UDim2.new(0, sz, 0, sz)
-				if savedPos then
-					btn.Position = UDim2.new(savedPos[1], savedPos[2], savedPos[3], savedPos[4])
-				else
-					local nXS = quickPanelOuter.Position.X.Scale + localPos.X.Scale
-					local nXO = quickPanelOuter.Position.X.Offset + localPos.X.Offset
-					local nYS = quickPanelOuter.Position.Y.Scale + localPos.Y.Scale
-					local nYO = quickPanelOuter.Position.Y.Offset + localPos.Y.Offset
-					btn.Position = UDim2.new(nXS, nXO, nYS, nYO)
-					_qpDetachedPositions[id] = {nXS, nXO, nYS, nYO}
-				end
-				btn.TextScaled = true
-				local corner = btn:FindFirstChildOfClass("UICorner")
-				if not corner then corner = Instance.new("UICorner", btn) end
-				corner.CornerRadius = UDim.new(0, 14)
-				local pad = btn:FindFirstChildOfClass("UIPadding")
-				if not pad then pad = Instance.new("UIPadding", btn) end
-				pad.PaddingLeft=UDim.new(0,3); pad.PaddingRight=UDim.new(0,3)
-				pad.PaddingTop=UDim.new(0,2); pad.PaddingBottom=UDim.new(0,2)
-			else
-				btn.Parent = quickPanel
-				btn.ZIndex = 5
-				btn.Size = UDim2.new(0, entry.btnW, 0, QP_ROW_H)
-				local rowY = QP_PAD + (entry.rowIndex-1)*(QP_ROW_H+QP_GAP)
-				btn.Position = UDim2.new(0, entry.btnX, 0, rowY)
-				btn.TextScaled = false
-				local corner = btn:FindFirstChildOfClass("UICorner")
-				if corner then corner.CornerRadius = UDim.new(0, 8) end
-				local pad = btn:FindFirstChildOfClass("UIPadding")
-				if pad then pad:Destroy() end
-			end
-		end
-	end
-	-- Cacher/montrer TOUT le cadre (parent unique — cache automatiquement
-	-- qpHandle et quickPanel puisqu'ils en sont les enfants directs)
-	quickPanelOuter.Visible = not on
-	quickPanelOuter.Active = not on
-end
-
--- Drag setup UNE SEULE FOIS par bouton (pas à chaque toggle detach)
-for id, entry in ipairs(_qpButtons) do
-	local btn = entry.btn
-	if btn then
-		local drag,ds,dp=false,nil,nil
-		btn.InputBegan:Connect(function(inp)
-			if not _qpDetached then return end
-			if inp.UserInputType==Enum.UserInputType.MouseButton1 or inp.UserInputType==Enum.UserInputType.Touch then
-				drag=true;ds=inp.Position;dp=btn.Position
-				inp.Changed:Connect(function()
-					if inp.UserInputState==Enum.UserInputState.End then
-						drag=false
-						if _qpDetached then
-							local p2=btn.Position
-							_qpDetachedPositions[id]={p2.X.Scale,p2.X.Offset,p2.Y.Scale,p2.Y.Offset}
-						end
-					end
-				end)
-			end
-		end)
-		btn.InputChanged:Connect(function(inp)
-			if not _qpDetached or not drag or not ds then return end
-			if inp.UserInputType==Enum.UserInputType.MouseMovement or inp.UserInputType==Enum.UserInputType.Touch then
-				local d=inp.Position-ds
-				btn.Position=UDim2.new(dp.X.Scale,dp.X.Offset+d.X,dp.Y.Scale,dp.Y.Offset+d.Y)
-			end
-		end)
-	end
-end
-
+local _floatRowSetters = {}
+local _floatLockRowSetter = nil
 buildPage("Settings", function()
-	UIB.makeSectionLabel("Boutons")
-	UIB.makeToggleRow("Détacher boutons (QP)", false, function(on) applyDetach(on) end)
+	UIB.makeSectionLabel("Boutons flottants")
+	_floatLockRowSetter = UIB.makeToggleRow("Verrouiller (Lock)", false, function(on) setFloatLocked(on) end)
+	UIB.makeGap(2)
+
+	local FLOAT_LABELS = {
+		{id="antibat",     name="Anti Bat Aimbot"},
+		{id="aimbot",      name="Aim Bot"},
+		{id="aimv2",       name="Aim V2"},
+		{id="dropbr",      name="Drop Brainrot"},
+		{id="autoleft",    name="Auto Left"},
+		{id="autoright",   name="Auto Right"},
+		{id="tpdown",      name="TP Down"},
+		{id="battp",       name="Bat TP"},
+		{id="instareset",  name="Instant Reset"},
+		{id="speedbypass", name="Speed Bypass"},
+	}
+	for _, entry in ipairs(FLOAT_LABELS) do
+		_floatRowSetters[entry.id] = UIB.makeToggleRow(entry.name, false, function(on)
+			if on then makeFloatButton(entry.id) else removeFloatButton(entry.id) end
+			if _G._MH_autoSave then _G._MH_autoSave() end
+		end)
+	end
 	UIB.makeGap(4)
 
 	UIB.makeGap(4)
