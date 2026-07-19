@@ -393,6 +393,7 @@ mainOuter.Position = UDim2.new(0.5,-WIN_W/2,0.5,-137)
 mainOuter.BackgroundTransparency = 1; mainOuter.BorderSizePixel = 0
 mainOuter.ClipsDescendants = true; mainOuter.Active = true
 addCorner(mainOuter, 24); makeDraggable(mainOuter)
+local mainUIScale = Instance.new("UIScale", mainOuter)
 
 local bgImg = Instance.new("Frame", mainOuter)
 bgImg.Name = "BgFill"; bgImg.Size = UDim2.new(1,0,1,0)
@@ -2006,11 +2007,13 @@ buildPage("Visual", function()
 		end
 		uiScaleValLbl.Text  = "Scale: " .. _uiScaleVal .. " / 10"
 		local factor = 0.6 + t * 0.8
-		local newW = math.floor(WIN_W * factor)
-		local newH = math.floor(WIN_H * factor)
 		if mainOuter and mainOuter.Parent then
-			mainOuter.Size     = UDim2.new(0, newW, 0, newH)
-			mainOuter.Position = UDim2.new(0.5, -newW/2, 0.5, -137)
+			-- UIScale redimensionne tout proportionnellement (texte, rows, espacement)
+			-- au lieu de juste réduire la taille du cadre — plus rien n'est coupé
+			-- par ClipsDescendants, contrairement à l'ancien redimensionnement direct.
+			mainUIScale.Scale = factor
+			local scaledW = WIN_W * factor
+			mainOuter.Position = UDim2.new(0.5, -scaledW/2, 0.5, -137)
 		end
 	end
 
@@ -2549,21 +2552,11 @@ local spDot=Instance.new("Frame",spH)
 spDot.Size=UDim2.new(0,5,0,5); spDot.Position=UDim2.new(0,10,0,11)
 spDot.BackgroundColor3=C_MOON; spDot.BorderSizePixel=0; addCorner(spDot,3)
 local spTitleLbl=Instance.new("TextLabel",spH)
-spTitleLbl.Size=UDim2.new(1,-46,1,0); spTitleLbl.Position=UDim2.new(0,16,0,0)
+spTitleLbl.Size=UDim2.new(1,-16,1,0); spTitleLbl.Position=UDim2.new(0,16,0,0)
 spTitleLbl.BackgroundTransparency=1; spTitleLbl.Text="SPEED BOOSTER"
 spTitleLbl.TextColor3=C_WHITE; spTitleLbl.Font=Enum.Font.GothamBlack; spTitleLbl.TextSize=9
 spTitleLbl.TextXAlignment=Enum.TextXAlignment.Left; addLivingTextGradient(spTitleLbl)
-local spCollapsed=false; local spFullH=160
-local spMinBtn=Instance.new("TextButton",spH)
-spMinBtn.Size=UDim2.new(0,18,0,18); spMinBtn.Position=UDim2.new(1,-24,0.5,-9)
-spMinBtn.BackgroundColor3=Color3.fromRGB(30,30,34); spMinBtn.BorderSizePixel=0
-spMinBtn.Text="-"; spMinBtn.TextColor3=C_WHITE; spMinBtn.Font=Enum.Font.GothamBlack; spMinBtn.TextSize=15
-addCorner(spMinBtn,6); addLivingStroke(spMinBtn,1)
-spMinBtn.MouseButton1Click:Connect(function()
-	spCollapsed=not spCollapsed
-	spW.Size=UDim2.new(0,150,0,spCollapsed and 28 or spFullH)
-	spMinBtn.Text=spCollapsed and "+" or "-"
-end)
+-- Normal / Lagger restent toujours affichés (pas de collapse/expand)
 -- Tabs NORMAL / LAGGER
 local tabRow=Instance.new("Frame",spW)
 tabRow.Size=UDim2.new(1,-16,0,26); tabRow.Position=UDim2.new(0,8,0,32)
@@ -2694,11 +2687,11 @@ _buildSpeedWidget()
 -- ===================================================================
 do
 local stealWidget=Instance.new("Frame",gui)
-stealWidget.Name="StealBarWidget"; stealWidget.Size=UDim2.new(0,260,0,40)
-stealWidget.Position=UDim2.new(0.5,-130,0,35); stealWidget.BackgroundTransparency=1; stealWidget.Active=true
+stealWidget.Name="StealBarWidget"; stealWidget.Size=UDim2.new(0,200,0,32)
+stealWidget.Position=UDim2.new(0.5,-100,0,35); stealWidget.BackgroundTransparency=1; stealWidget.Active=true
 makeDraggable(stealWidget)
 local stealPill=Instance.new("Frame",stealWidget)
-stealPill.Size=UDim2.new(1,0,0,40); stealPill.BackgroundColor3=C_BG
+stealPill.Size=UDim2.new(1,0,0,32); stealPill.BackgroundColor3=C_BG
 stealPill.BackgroundTransparency=0.1; stealPill.BorderSizePixel=0; stealPill.ClipsDescendants=true
 addCorner(stealPill,18)
 local stealPillStk=addStroke(stealPill,C_MOON,1.5,0.2)
@@ -2723,17 +2716,17 @@ end
 local stealLeftHalf=Instance.new("Frame",stealPill)
 stealLeftHalf.Size=UDim2.new(0.56,0,1,0); stealLeftHalf.BackgroundTransparency=1; stealLeftHalf.ZIndex=6
 local stealLabel=Instance.new("TextLabel",stealLeftHalf)
-stealLabel.Size=UDim2.new(1,-24,1,0); stealLabel.Position=UDim2.new(0,16,0,0)
+stealLabel.Size=UDim2.new(1,-20,1,0); stealLabel.Position=UDim2.new(0,12,0,0)
 stealLabel.BackgroundTransparency=1; stealLabel.Text="READY"
-stealLabel.TextColor3=C_WHITE; stealLabel.Font=Enum.Font.GothamBlack; stealLabel.TextSize=13
+stealLabel.TextColor3=C_WHITE; stealLabel.Font=Enum.Font.GothamBlack; stealLabel.TextSize=11
 stealLabel.TextXAlignment=Enum.TextXAlignment.Left; stealLabel.ZIndex=6; addLivingTextGradient(stealLabel)
 local stealDivider=Instance.new("Frame",stealPill)
-stealDivider.Size=UDim2.new(0,1,0,24); stealDivider.Position=UDim2.new(0.56,0,0.5,-12)
+stealDivider.Size=UDim2.new(0,1,0,18); stealDivider.Position=UDim2.new(0.56,0,0.5,-9)
 stealDivider.BackgroundColor3=C_SILVER2; stealDivider.BackgroundTransparency=0.4; stealDivider.BorderSizePixel=0; stealDivider.ZIndex=6
 local infoLabel=Instance.new("TextLabel",stealPill)
-infoLabel.Size=UDim2.new(0.44,-16,1,0); infoLabel.Position=UDim2.new(0.56,16,0,0)
+infoLabel.Size=UDim2.new(0.44,-12,1,0); infoLabel.Position=UDim2.new(0.56,12,0,0)
 infoLabel.BackgroundTransparency=1; infoLabel.Text="0 FPS | --ms"
-infoLabel.TextColor3=C_WHITE; infoLabel.Font=Enum.Font.GothamBold; infoLabel.TextSize=13
+infoLabel.TextColor3=C_WHITE; infoLabel.Font=Enum.Font.GothamBold; infoLabel.TextSize=11
 infoLabel.TextXAlignment=Enum.TextXAlignment.Left; infoLabel.ZIndex=6
 local stealFill=Instance.new("Frame",stealPill)
 stealFill.Size=UDim2.new(0,0,1,0); stealFill.BackgroundColor3=C_MOON
@@ -2749,22 +2742,22 @@ local stealEdge=Instance.new("Frame",stealFill)
 stealEdge.AnchorPoint=Vector2.new(1,0.5); stealEdge.Size=UDim2.new(0,4,1,-6); stealEdge.Position=UDim2.new(1,0,0.5,0)
 stealEdge.BackgroundColor3=C_WHITE; stealEdge.BorderSizePixel=0; stealEdge.ZIndex=2; addCorner(stealEdge,2)
 local stealPctLbl=Instance.new("TextLabel",stealLeftHalf)
-stealPctLbl.Size=UDim2.new(1,-40,1,0); stealPctLbl.Position=UDim2.new(0,16,0,0)
+stealPctLbl.Size=UDim2.new(1,-32,1,0); stealPctLbl.Position=UDim2.new(0,12,0,0)
 stealPctLbl.BackgroundTransparency=1; stealPctLbl.Text=""
-stealPctLbl.TextColor3=C_MOON2; stealPctLbl.Font=Enum.Font.GothamBlack; stealPctLbl.TextSize=13
+stealPctLbl.TextColor3=C_MOON2; stealPctLbl.Font=Enum.Font.GothamBlack; stealPctLbl.TextSize=11
 stealPctLbl.TextXAlignment=Enum.TextXAlignment.Right; stealPctLbl.ZIndex=6
 AutoSteal.ProgressFill=stealFill; AutoSteal.ProgressText=stealPctLbl; AutoSteal.Widget=stealWidget; AutoSteal.StatusLabel=stealLabel
 task.spawn(function() task.wait(0.6); if AutoSteal.SetReadyColor then AutoSteal.SetReadyColor("READY") end end)
 local function _setReadyColor(state)
 	local lbl = AutoSteal.StatusLabel; if not lbl then return end
 	local isReady = (state == "READY")
-	local col = isReady and C_GREEN or C_RED
+	local col = isReady and C_MOON or C_RED
 	lbl.TextColor3 = col
 	-- Changer le gradient animé du label
 	local g = lbl:FindFirstChildOfClass("UIGradient")
 	if g then
-		local c1 = isReady and Color3.fromRGB(30,120,60)  or Color3.fromRGB(120,20,20)
-		local c2 = isReady and Color3.fromRGB(90,255,150) or Color3.fromRGB(255,100,100)
+		local c1 = isReady and Color3.fromRGB(20,70,140)  or Color3.fromRGB(120,20,20)
+		local c2 = isReady and Color3.fromRGB(120,180,255) or Color3.fromRGB(255,100,100)
 		g.Color = ColorSequence.new({
 			ColorSequenceKeypoint.new(0,    c2),
 			ColorSequenceKeypoint.new(0.25, c1),
@@ -2897,10 +2890,7 @@ do
 	b1.MouseButton1Click:Connect(function() tpToGround(); s1(true); task.delay(0.2,function() s1(false) end) end)
 end
 do
-	local b1,s1=makeQpButton("LAG NORM",5,true,1); local b2,s2=makeQpButton("BAT TP",5,true,2)
-	b1.MouseButton1Click:Connect(function()
-		State.laggerActive=not State.laggerActive; if not State.laggerActive then proxyStop() end; s1(State.laggerActive)
-	end)
+	local b2,s2=makeQpButton("BAT TP",5,false,1)
 	b2.MouseButton1Click:Connect(function()
 		local on = not AimV3.active
 		if on then AimV3.start() else AimV3.stop() end; s2(AimV3.active)
@@ -2997,7 +2987,7 @@ do
 		speedLbl.Size = UDim2.new(1,0,0,22)
 		speedLbl.Position = UDim2.new(0,0,0,0)
 		speedLbl.BackgroundTransparency = 1
-		speedLbl.Text = "speed  0"
+		speedLbl.Text = "0"
 		speedLbl.TextColor3 = C_MOON
 		speedLbl.TextScaled = true
 		speedLbl.Font = Enum.Font.GothamBlack
@@ -3082,7 +3072,7 @@ do
 			if dt > 0 then
 				local dist = (pos - _lastPos).Magnitude
 				local spd = dist / dt
-				speedLbl.Text = "Speed: "..string.format("%.1f", spd)
+				speedLbl.Text = string.format("%.1f", spd)
 			end
 		end
 		_lastPos, _lastT = pos, now
@@ -3105,7 +3095,7 @@ do
 			bb.StudsOffset = Vector3.new(0,2.2,0); bb.AlwaysOnTop = true
 			local lbl = Instance.new("TextLabel", bb)
 			lbl.Size = UDim2.new(1,0,1,0); lbl.BackgroundTransparency = 1
-			lbl.Text = "speed  0"; lbl.TextColor3 = C_MOON2
+			lbl.Text = "0"; lbl.TextColor3 = C_MOON2
 			lbl.TextScaled = true; lbl.Font = Enum.Font.GothamBlack
 			lbl.TextStrokeTransparency = 0.35
 			lbl.TextStrokeColor3 = Color3.fromRGB(0,0,0)
@@ -3132,7 +3122,7 @@ do
 							local dist = (pos - data._lastPos).Magnitude
 							local spd2 = dist / dt
 							if spd2 < 800 then
-								data.lbl.Text = "Speed: "..string.format("%.1f", spd2)
+								data.lbl.Text = string.format("%.1f", spd2)
 							end
 						end
 					end
