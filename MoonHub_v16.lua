@@ -2532,11 +2532,23 @@ local spDot=Instance.new("Frame",spH)
 spDot.Size=UDim2.new(0,5,0,5); spDot.Position=UDim2.new(0,10,0,11)
 spDot.BackgroundColor3=C_MOON; spDot.BorderSizePixel=0; addCorner(spDot,3)
 local spTitleLbl=Instance.new("TextLabel",spH)
-spTitleLbl.Size=UDim2.new(1,-16,1,0); spTitleLbl.Position=UDim2.new(0,16,0,0)
+spTitleLbl.Size=UDim2.new(1,-46,1,0); spTitleLbl.Position=UDim2.new(0,16,0,0)
 spTitleLbl.BackgroundTransparency=1; spTitleLbl.Text="SPEED BOOSTER"
 spTitleLbl.TextColor3=C_WHITE; spTitleLbl.Font=Enum.Font.GothamBlack; spTitleLbl.TextSize=9
 spTitleLbl.TextXAlignment=Enum.TextXAlignment.Left; addLivingTextGradient(spTitleLbl)
--- Normal / Lagger restent toujours affichés (pas de collapse/expand)
+-- Bouton minimize : replié par défaut = déplié (Normal/Lagger visibles),
+-- l'utilisateur peut cliquer "-" pour replier s'il le souhaite
+local spCollapsed=false; local spFullH=160
+local spMinBtn=Instance.new("TextButton",spH)
+spMinBtn.Size=UDim2.new(0,18,0,18); spMinBtn.Position=UDim2.new(1,-24,0.5,-9)
+spMinBtn.BackgroundColor3=Color3.fromRGB(30,30,34); spMinBtn.BorderSizePixel=0
+spMinBtn.Text="-"; spMinBtn.TextColor3=C_WHITE; spMinBtn.Font=Enum.Font.GothamBlack; spMinBtn.TextSize=15
+addCorner(spMinBtn,6); addLivingStroke(spMinBtn,1)
+spMinBtn.MouseButton1Click:Connect(function()
+	spCollapsed=not spCollapsed
+	spW.Size=UDim2.new(0,150,0,spCollapsed and 28 or spFullH)
+	spMinBtn.Text=spCollapsed and "+" or "-"
+end)
 -- Tabs NORMAL / LAGGER
 local tabRow=Instance.new("Frame",spW)
 tabRow.Size=UDim2.new(1,-16,0,26); tabRow.Position=UDim2.new(0,8,0,32)
