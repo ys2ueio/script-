@@ -2785,11 +2785,23 @@ RunService.RenderStepped:Connect(function()
 	end
 end)
 task.spawn(function()
-	while mainFrame.Parent do task.wait(0.5); pcall(function()
-		local ping=0; local netStats=Stats:FindFirstChild("Network")
-		if netStats then local sci=netStats:FindFirstChild("ServerStatsItem"); if sci then local dp=sci:FindFirstChild("Data Ping"); if dp then ping=math.floor(dp:GetValue() or 0) end end end
-		lastPing=ping; refreshInfoLabel()
-	end) end
+	while mainFrame.Parent do
+		local success, ping = pcall(function()
+			local netStats=Stats:FindFirstChild("Network")
+			if not netStats then return nil end
+			local sci=netStats:FindFirstChild("ServerStatsItem")
+			if not sci then return nil end
+			local dp=sci:FindFirstChild("Data Ping")
+			if not dp then return nil end
+			return math.floor(dp:GetValue() or 0)
+		end)
+		-- Ne met à jour que si on a bien récupéré une valeur, sinon on garde
+		-- l'ancienne au lieu de retomber sur 0 (bug : reset silencieux du ping)
+		if success and ping then
+			lastPing=ping; refreshInfoLabel()
+		end
+		task.wait(0.5)
+	end
 end)
 end
 
