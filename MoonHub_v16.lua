@@ -1984,7 +1984,6 @@ buildPage("Visual", function()
 	local _uiTrackAbsX, _uiTrackAbsW = 0, 1
 
 	local function applyUIScale(v)
-		_G._MH_applyUIScale = applyUIScale
 		_uiScaleVal = math.clamp(math.floor(v + 0.5), 1, 10)
 		local t   = (_uiScaleVal - 1) / 9
 		uiTrackFill.Size    = UDim2.new(t, 0, 1, 0)
@@ -2003,6 +2002,7 @@ buildPage("Visual", function()
 			mainOuter.Position = UDim2.new(0.5, -scaledW/2, 0.5, -137)
 		end
 	end
+	_G._MH_applyUIScale = applyUIScale  -- exposé une fois, pas seulement au 1er appel
 
 	uiThumb.InputBegan:Connect(function(inp)
 		if inp.UserInputType == Enum.UserInputType.MouseButton1
@@ -2835,7 +2835,7 @@ local function makeFloatButton(id)
 		for _ in pairs(_floatBtns) do n = n + 1 end
 		btn.Position = UDim2.new(0, 30 + (n % 5) * (FLOAT_SZ + 8), 0, 220 + math.floor(n / 5) * (FLOAT_SZ + 8))
 	end
-	btn.BackgroundColor3 = C_ROW; btn.BackgroundTransparency = 0.2; btn.BorderSizePixel = 0
+	btn.BackgroundColor3 = C_ROW; btn.BackgroundTransparency = 0; btn.BorderSizePixel = 0
 	btn.Text = def.label; btn.TextColor3 = C_WHITE; btn.Font = Enum.Font.GothamBold
 	btn.TextScaled = false; btn.TextSize = 9; btn.TextWrapped = true; btn.AutoButtonColor = false
 	btn.ZIndex = 500; btn.Active = true
@@ -2846,7 +2846,7 @@ local function makeFloatButton(id)
 
 	local function setActive(on)
 		btn.BackgroundColor3 = on and C_ON_BG or C_ROW
-		TweenService:Create(btn, TweenInfo.new(0.15), {BackgroundTransparency = on and 0.1 or 0.2}):Play()
+		TweenService:Create(btn, TweenInfo.new(0.15), {BackgroundTransparency = 0}):Play()
 	end
 
 	-- Drag (désactivé quand verrouillé)
