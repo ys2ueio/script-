@@ -2732,7 +2732,7 @@ stealDivider.Size=UDim2.new(0,1,0,24); stealDivider.Position=UDim2.new(0.56,0,0.
 stealDivider.BackgroundColor3=C_SILVER2; stealDivider.BackgroundTransparency=0.4; stealDivider.BorderSizePixel=0; stealDivider.ZIndex=6
 local infoLabel=Instance.new("TextLabel",stealPill)
 infoLabel.Size=UDim2.new(0.44,-16,1,0); infoLabel.Position=UDim2.new(0.56,16,0,0)
-infoLabel.BackgroundTransparency=1; infoLabel.Text="0 FPS | 0ms"
+infoLabel.BackgroundTransparency=1; infoLabel.Text="0 FPS"
 infoLabel.TextColor3=C_WHITE; infoLabel.Font=Enum.Font.GothamBold; infoLabel.TextSize=13
 infoLabel.TextXAlignment=Enum.TextXAlignment.Left; infoLabel.ZIndex=6
 local stealFill=Instance.new("Frame",stealPill)
@@ -2775,32 +2775,12 @@ local function _setReadyColor(state)
 	end
 end
 AutoSteal.SetReadyColor = _setReadyColor
-local Stats=game:GetService("Stats")
-local frameCount,lastFpsTime,lastFps,lastPing=0,tick(),60,0
-local function refreshInfoLabel() infoLabel.Text=lastFps.." FPS | "..lastPing.."ms" end
+local frameCount,lastFpsTime,lastFps=0,tick(),60
+local function refreshInfoLabel() infoLabel.Text=lastFps.." FPS" end
 RunService.RenderStepped:Connect(function()
 	frameCount=frameCount+1; local now=tick()
 	if now-lastFpsTime>=1 then
 		lastFps=math.floor(frameCount/(now-lastFpsTime)); frameCount=0; lastFpsTime=now; refreshInfoLabel()
-	end
-end)
-task.spawn(function()
-	while mainFrame.Parent do
-		local success, ping = pcall(function()
-			local netStats=Stats:FindFirstChild("Network")
-			if not netStats then return nil end
-			local sci=netStats:FindFirstChild("ServerStatsItem")
-			if not sci then return nil end
-			local dp=sci:FindFirstChild("Data Ping")
-			if not dp then return nil end
-			return math.floor(dp:GetValue() or 0)
-		end)
-		-- Ne met à jour que si on a bien récupéré une valeur, sinon on garde
-		-- l'ancienne au lieu de retomber sur 0 (bug : reset silencieux du ping)
-		if success and ping then
-			lastPing=ping; refreshInfoLabel()
-		end
-		task.wait(0.5)
 	end
 end)
 end
