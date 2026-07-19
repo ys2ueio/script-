@@ -452,7 +452,7 @@ contentBg.Size = UDim2.new(1,0,1,-CONTENT_Y); contentBg.Position = UDim2.new(0,0
 contentBg.BackgroundTransparency = 1; contentBg.BorderSizePixel = 0
 contentBg.ClipsDescendants = true; contentBg.ZIndex = 2
 
-local TABS = {"Combat","Visual","Keybind","Optimize","Settings","Utility"}
+local TABS = {"Combat","Visual","Keybind","Optimize","Settings","Boutons","Utility"}
 local tabBar = Instance.new("Frame", contentBg)
 tabBar.Size = UDim2.new(1,-16,0,26); tabBar.Position = UDim2.new(0,8,0,6)
 tabBar.BackgroundTransparency = 1; tabBar.ZIndex = 4
@@ -1841,7 +1841,7 @@ local _floatDefs      = {}   -- id -> {label, onClick, isActive, momentary}
 local _floatBtns      = {}   -- id -> {frame, setActive}
 local _floatPositions = {}   -- id -> {xs,xo,ys,yo}
 local _floatLocked    = false
-local FLOAT_SZ = 54
+local FLOAT_SZ = 38
 
 buildPage("Visual", function()
 	-- ── SCALE des boutons flottants ───────────────────────────────────
@@ -1894,8 +1894,8 @@ buildPage("Visual", function()
 		thumb.Position = UDim2.new(0, 14 + t * math.max(_trackAbsW - 1, 1), 0.5, 0)
 		scaleValLbl.Text = "Scale: " .. _scaleVal .. " / 10"
 
-		-- Range : 40px (scale 1) → 74px (scale 10) — taille des boutons flottants
-		local newSz = 40 + math.floor((_scaleVal - 1) * (74 - 40) / 9)
+		-- Range : 28px (scale 1) → 60px (scale 10) — taille des boutons flottants
+		local newSz = 28 + math.floor((_scaleVal - 1) * (60 - 28) / 9)
 		FLOAT_SZ = newSz
 		for _, entry in pairs(_floatBtns) do
 			if entry.frame and entry.frame.Parent then
@@ -2636,13 +2636,17 @@ local function stopSp()
 	State.speedType="normal"
 	proxyStop()
 end
-stClk.MouseButton1Click:Connect(function()
+local function toggleSp()
 	_spActive=not _spActive
 	stPill.BackgroundColor3=_spActive and C_MOON or C_OFF_BG
 	stPillLbl.Text=_spActive and "ON" or "OFF"
 	stPillLbl.TextColor3=_spActive and Color3.fromRGB(0,10,20) or C_DIM
 	if _spActive then startSp() else stopSp() end
-end)
+	if _G._MH_setSpeedBoosterFloatVisual then _G._MH_setSpeedBoosterFloatVisual(_spActive) end
+end
+stClk.MouseButton1Click:Connect(toggleSp)
+_G._MH_speedBoosterToggle = toggleSp
+_G._MH_speedBoosterIsActive = function() return _spActive end
 local function switchTab(lag)
 	_spLagger=lag
 	if _spActive then startSp() end
@@ -2975,6 +2979,15 @@ _floatDefs.speedbypass = {
 	onClick = function() if _G._MH_speedBypassToggle then _G._MH_speedBypassToggle() end end,
 	isActive = function() return _G._MH_speedBypassIsActive and _G._MH_speedBypassIsActive() or false end,
 }
+_floatDefs.speedbooster = {
+	label = "SPEED\nBOOSTER",
+	onClick = function() if _G._MH_speedBoosterToggle then _G._MH_speedBoosterToggle() end end,
+	isActive = function() return _G._MH_speedBoosterIsActive and _G._MH_speedBoosterIsActive() or false end,
+}
+_G._MH_setSpeedBoosterFloatVisual = function(on)
+	local entry = _floatBtns.speedbooster
+	if entry then entry.setActive(on) end
+end
 
 _G._MH_makeFloatButton   = makeFloatButton
 _G._MH_removeFloatButton = removeFloatButton
@@ -3371,7 +3384,7 @@ end
 
 local _floatRowSetters = {}
 local _floatLockRowSetter = nil
-buildPage("Settings", function()
+buildPage("Boutons", function()
 	UIB.makeSectionLabel("Boutons flottants")
 	_floatLockRowSetter = UIB.makeToggleRow("Verrouiller (Lock)", false, function(on) setFloatLocked(on) end)
 	UIB.makeGap(2)
@@ -3387,6 +3400,7 @@ buildPage("Settings", function()
 		{id="battp",       name="Bat TP"},
 		{id="instareset",  name="Instant Reset"},
 		{id="speedbypass", name="Speed Bypass"},
+		{id="speedbooster",name="Speed Booster"},
 	}
 	for _, entry in ipairs(FLOAT_LABELS) do
 		_floatRowSetters[entry.id] = UIB.makeToggleRow(entry.name, false, function(on)
@@ -3394,9 +3408,9 @@ buildPage("Settings", function()
 			if _G._MH_autoSave then _G._MH_autoSave() end
 		end)
 	end
-	UIB.makeGap(4)
+end)
 
-	UIB.makeGap(4)
+buildPage("Settings", function()
 	UIB.makeSectionLabel("Auto Play")
 	do
 		local apModes={"Full","Half","Semi"}
