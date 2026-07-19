@@ -1843,6 +1843,13 @@ local _floatPositions = {}   -- id -> {xs,xo,ys,yo}
 local _floatLocked    = false
 local FLOAT_SZ = 46
 
+-- Déclarés ici (avant buildPage Settings) pour que les toggles Speed
+-- Bypass / Lagger puissent référencer les widgets construits plus loin
+-- dans le fichier — sinon la closure capture un global nil (même piège
+-- que le bug mainFrame corrigé précédemment).
+local _sbBypassWidget  = nil
+local _lgrBypassWidget = nil
+
 buildPage("Visual", function()
 	-- ── SCALE des boutons flottants ───────────────────────────────────
 	-- Taille des boutons spawnables. Echelle 1=min(40px) → 10=max(74px).
@@ -3647,14 +3654,13 @@ buildPage("Settings", function()
 			end
 		end)
 	end
-end)
+end);  -- point-virgule obligatoire (sinon fusion ambigüe avec (function() suivant)
 
 -- ===================================================================
 -- ===================================================================
 -- ===================================================================
 -- SPEED BYPASS (style Moon Hub — bleu, +/- power, logique lag Cz exacte)
 -- ===================================================================
-local _sbBypassWidget = nil
 (function()
 local activated = false
 local keybind = Enum.KeyCode.E
@@ -3839,11 +3845,10 @@ LP.CharacterAdded:Connect(function()
 	task.wait(1)
 	if activated then stopLag(); activated = true; startLag() end
 end)
-end)()
+end)();  -- point-virgule obligatoire (sinon fusion ambigüe avec (function() suivant)
 
 -- MOON LAGGER (source moon_lgr.txt — intégrée telle quelle)
 -- ===================================================================
-local _lgrBypassWidget = nil
 (function()
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
