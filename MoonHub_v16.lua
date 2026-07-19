@@ -1851,7 +1851,7 @@ local _floatPositions = {}   -- id -> {xs,xo,ys,yo}
 -- Bump this whenever the default layout changes: saved positions from an
 -- older version get discarded on load instead of restoring stale/overlapping
 -- coordinates, so everyone gets the current clean column layout by default.
-local _FLOAT_POS_VERSION = 4
+local _FLOAT_POS_VERSION = 5
 local _floatLocked    = false
 local FLOAT_SZ = 46
 
@@ -2857,18 +2857,17 @@ end
 -- own floating square button. "Lock" freezes the drag once placed.
 -- ===================================================================
 -- Stable order (independent of activation order) so buttons always line
--- up in the same place: Anti Bat Aimbot is a wide standalone button at
--- the very top; the other 8 split into two columns of 4 (right/left).
-local _FLOAT_COL_ORDER = {
+-- up in the same compact block: Anti Bat Aimbot wide on top, the other
+-- 8 packed right below it in a tight 2-wide grid (4 rows).
+local _FLOAT_GRID_ORDER = {
 	"aimbot","aimv2","dropbr","autoleft",
 	"autoright","tpdown","battp","instareset",
 }
-local _FLOAT_COL_COUNT = 4
-local function _floatColIndex(id)
-	for i, fid in ipairs(_FLOAT_COL_ORDER) do
+local function _floatGridIndex(id)
+	for i, fid in ipairs(_FLOAT_GRID_ORDER) do
 		if fid == id then return i end
 	end
-	return #_FLOAT_COL_ORDER + 1
+	return #_FLOAT_GRID_ORDER + 1
 end
 
 local function makeFloatButton(id)
@@ -2878,29 +2877,27 @@ local function makeFloatButton(id)
 	local btn = Instance.new("TextButton", gui)
 	btn.Name = "Float_"..id
 	local saved = _floatPositions[id]
+	local blockX = 1  -- block anchored near the right edge of the screen
+	local blockW = FLOAT_SZ * 2 + 8
 	if id == "antibat" then
-		-- Wide standalone button, top of the screen, centered.
-		btn.Size = UDim2.new(0, FLOAT_SZ * 2 + 8, 0, FLOAT_SZ)
+		-- Wide standalone button, top of the block.
+		btn.Size = UDim2.new(0, blockW, 0, FLOAT_SZ)
 		if saved then
 			btn.Position = UDim2.new(saved[1], saved[2], saved[3], saved[4])
 		else
-			btn.Position = UDim2.new(0.5, -(FLOAT_SZ + 4), 0, 40)
+			btn.Position = UDim2.new(blockX, -(blockW + 12), 0, 40)
 		end
 	else
 		btn.Size = UDim2.new(0, FLOAT_SZ, 0, FLOAT_SZ)
 		if saved then
 			btn.Position = UDim2.new(saved[1], saved[2], saved[3], saved[4])
 		else
-			-- First 4 (in the order above): column on the right.
-			-- Last 4: column on the left. Both start below the top Anti Bat bar.
-			local idx = _floatColIndex(id) - 1
-			local topOffset = 40 + FLOAT_SZ + 16
-			if idx < _FLOAT_COL_COUNT then
-				btn.Position = UDim2.new(1, -(FLOAT_SZ + 12), 0, topOffset + idx * (FLOAT_SZ + 8))
-			else
-				local rowIdx = idx - _FLOAT_COL_COUNT
-				btn.Position = UDim2.new(0, 12, 0, topOffset + rowIdx * (FLOAT_SZ + 8))
-			end
+			-- Tight 2-wide grid right under the Anti Bat bar, same block.
+			local idx = _floatGridIndex(id) - 1
+			local col = idx % 2
+			local row = math.floor(idx / 2)
+			local topOffset = 40 + FLOAT_SZ + 8
+			btn.Position = UDim2.new(blockX, -(blockW + 12) + col * (FLOAT_SZ + 8), 0, topOffset + row * (FLOAT_SZ + 8))
 		end
 	end
 	btn.BackgroundColor3 = C_ROW; btn.BackgroundTransparency = 0; btn.BorderSizePixel = 0
