@@ -452,7 +452,7 @@ contentBg.Size = UDim2.new(1,0,1,-CONTENT_Y); contentBg.Position = UDim2.new(0,0
 contentBg.BackgroundTransparency = 1; contentBg.BorderSizePixel = 0
 contentBg.ClipsDescendants = true; contentBg.ZIndex = 2
 
-local TABS = {"Combat","Visual","Keybind","Optimize","Settings","Boutons","Utility"}
+local TABS = {"Combat","Visual","Keybind","Optimize","Settings","Boutons"}
 local tabBar = Instance.new("Frame", contentBg)
 tabBar.Size = UDim2.new(1,-16,0,26); tabBar.Position = UDim2.new(0,8,0,6)
 tabBar.BackgroundTransparency = 1; tabBar.ZIndex = 4
@@ -1841,7 +1841,7 @@ local _floatDefs      = {}   -- id -> {label, onClick, isActive, momentary}
 local _floatBtns      = {}   -- id -> {frame, setActive}
 local _floatPositions = {}   -- id -> {xs,xo,ys,yo}
 local _floatLocked    = false
-local FLOAT_SZ = 38
+local FLOAT_SZ = 46
 
 buildPage("Visual", function()
 	-- ── SCALE des boutons flottants ───────────────────────────────────
@@ -1894,8 +1894,8 @@ buildPage("Visual", function()
 		thumb.Position = UDim2.new(0, 14 + t * math.max(_trackAbsW - 1, 1), 0.5, 0)
 		scaleValLbl.Text = "Scale: " .. _scaleVal .. " / 10"
 
-		-- Range : 28px (scale 1) → 60px (scale 10) — taille des boutons flottants
-		local newSz = 28 + math.floor((_scaleVal - 1) * (60 - 28) / 9)
+		-- Range : 34px (scale 1) → 70px (scale 10) — taille des boutons flottants
+		local newSz = 34 + math.floor((_scaleVal - 1) * (70 - 34) / 9)
 		FLOAT_SZ = newSz
 		for _, entry in pairs(_floatBtns) do
 			if entry.frame and entry.frame.Parent then
@@ -2997,13 +2997,6 @@ _floatDefs.aimv2 = {
 	end,
 	isActive = function() return ABP.active end,
 }
--- Speed Booster : ouvre/affiche le widget existant, ne fait pas doublon
--- avec un contrôle indépendant.
-_floatDefs.speedbooster = {
-	label = "SPEED\nBOOSTER",
-	onClick = function() if _G._MH_spW then _G._MH_spW.Visible = not _G._MH_spW.Visible end end,
-}
-
 _G._MH_makeFloatButton   = makeFloatButton
 _G._MH_removeFloatButton = removeFloatButton
 _G._MH_setFloatLocked    = setFloatLocked
@@ -3400,6 +3393,17 @@ end
 local _floatRowSetters = {}
 local _floatLockRowSetter = nil
 buildPage("Boutons", function()
+	-- Tout en haut : toggle direct qui spawn le widget Speed Booster
+	-- lui-même (pas un bouton flottant intermédiaire), affiché au premier plan.
+	UIB.makeSectionLabel("Speed Booster")
+	UIB.makeToggleRow("Speed Booster", false, function(on)
+		if _G._MH_spW then
+			_G._MH_spW.Visible = on
+			if on then _G._MH_spW.ZIndex = 1000 end
+		end
+	end)
+	UIB.makeGap(4)
+
 	UIB.makeSectionLabel("Boutons flottants")
 	_floatLockRowSetter = UIB.makeToggleRow("Verrouiller (Lock)", false, function(on) setFloatLocked(on) end)
 	UIB.makeGap(2)
@@ -3414,7 +3418,6 @@ buildPage("Boutons", function()
 		{id="tpdown",      name="TP Down"},
 		{id="battp",       name="Bat TP"},
 		{id="instareset",  name="Instant Reset"},
-		{id="speedbooster",name="Speed Booster"},
 	}
 	for _, entry in ipairs(FLOAT_LABELS) do
 		_floatRowSetters[entry.id] = UIB.makeToggleRow(entry.name, false, function(on)
@@ -3484,6 +3487,165 @@ buildPage("Settings", function()
 				btn2.BackgroundTransparency = 0.05; btn2.TextColor3 = C_WHITE
 			end)
 		end
+	end
+
+	UIB.makeGap(4)
+	UIB.makeSectionLabel("Bypass")
+	UIB.makeToggleRow("Speed Bypass", false, function(on)
+		if _sbBypassWidget then _sbBypassWidget.Visible = on end
+		-- Déclenche réellement le bypass (pas juste l'affichage du panneau)
+		if _G._MH_speedBypassToggle then
+			local isActive = _G._MH_speedBypassIsActive and _G._MH_speedBypassIsActive() or false
+			if isActive ~= on then _G._MH_speedBypassToggle() end
+		end
+	end)
+	UIB.makeToggleRow("Lagger", false, function(on)
+		if _lgrBypassWidget then _lgrBypassWidget.Visible = on end
+	end)
+
+	-- ── ANIMATION CHANGER (22 packs, navigation ◀ ▶) ──────────────
+	UIB.makeGap(4)
+	UIB.makeSectionLabel("Animation Changer")
+	do
+		local ANIM_PACKS = {
+			["Robot"]       = {WalkAnim=616013216,RunAnim=616010382,JumpAnim=616008936,FallAnim=616005863,SwimIdle=616012453,Swim=616011509,Animation1=616006778,Animation2=616008087,ClimbAnim=616003713},
+			["Vampire"]     = {WalkAnim=1083178339,RunAnim=1083216690,JumpAnim=1083218792,FallAnim=1083189019,SwimIdle=1083222527,Swim=1083225406,Animation1=1083445855,Animation2=1083450167,ClimbAnim=1083182000},
+			["Superhero"]   = {WalkAnim=616013216,RunAnim=616111765,JumpAnim=616111876,FallAnim=616108001,SwimIdle=616112625,Swim=616112437,Animation1=616111295,Animation2=616111295,ClimbAnim=616110833},
+			["Cartoony"]    = {WalkAnim=742640026,RunAnim=742638842,JumpAnim=742637942,FallAnim=742637151,SwimIdle=742639220,Swim=742639812,Animation1=742635424,Animation2=742636889,ClimbAnim=742636889},
+			["Ninja"]       = {WalkAnim=656118852,RunAnim=656118852,JumpAnim=656117878,FallAnim=656115606,SwimIdle=656119721,Swim=656119721,Animation1=656117878,Animation2=656118341,ClimbAnim=656114359},
+			["Adidas Sports"]={WalkAnim=18537392113,RunAnim=18537384940,JumpAnim=18537380791,FallAnim=18537367238,SwimIdle=18537387180,Swim=18537389531,Animation1=18537376492,Animation2=18537371272,ClimbAnim=18537363391},
+			["Stylish"]     = {WalkAnim=616122287,RunAnim=616117076,JumpAnim=616119360,FallAnim=616115533,SwimIdle=616120448,Swim=616121235,Animation1=616117076,Animation2=616120861,ClimbAnim=616115533},
+			["Levitation"]  = {WalkAnim=616013216,RunAnim=616006778,JumpAnim=616008936,FallAnim=616005863,SwimIdle=616011509,Swim=616012453,Animation1=616006778,Animation2=616008087,ClimbAnim=616003713},
+			["Astronaut"]   = {WalkAnim=891667138,RunAnim=891636393,JumpAnim=891627522,FallAnim=891617961,SwimIdle=891639666,Swim=891663592,Animation1=891621366,Animation2=891633237,ClimbAnim=891609353},
+			["Werewolf"]    = {WalkAnim=1083195517,RunAnim=1083194401,JumpAnim=1083218792,FallAnim=1083189019,SwimIdle=1083222527,Swim=1083225406,Animation1=1083462077,Animation2=1083450167,ClimbAnim=1083182000},
+			["Knight"]      = {WalkAnim=658831042,RunAnim=658831794,JumpAnim=658832070,FallAnim=658831500,SwimIdle=658832437,Swim=658832807,Animation1=657595757,Animation2=657600338,ClimbAnim=658830056},
+			["Pirate"]      = {WalkAnim=750785693,RunAnim=750783738,JumpAnim=750782230,FallAnim=750781874,SwimIdle=750785579,Swim=750784579,Animation1=750781874,Animation2=750782770,ClimbAnim=750779899},
+			["Toy"]         = {WalkAnim=782841498,RunAnim=782843345,JumpAnim=782847020,FallAnim=782846423,SwimIdle=782844582,Swim=782844235,Animation1=782842708,Animation2=782845736,ClimbAnim=782843869},
+			["Elder"]       = {WalkAnim=1092112116,RunAnim=1092114823,JumpAnim=1092114571,FallAnim=1092114319,SwimIdle=1092113582,Swim=1092113478,Animation1=1092110164,Animation2=1092110049,ClimbAnim=1092113209},
+			["Bubbly"]      = {WalkAnim=910034870,RunAnim=910025107,JumpAnim=910016857,FallAnim=910001910,SwimIdle=910030921,Swim=910028158,Animation1=910004836,Animation2=910009958,ClimbAnim=910019264},
+			["Zombie"]      = {WalkAnim=616163682,RunAnim=616163682,JumpAnim=616161682,FallAnim=616157476,SwimIdle=616165109,Swim=616164682,Animation1=616158929,Animation2=616160636,ClimbAnim=616156119},
+			["Sneaky"]      = {WalkAnim=1132510133,RunAnim=1132494274,JumpAnim=1132489853,FallAnim=1132469004,SwimIdle=1132506407,Swim=1132500520,Animation1=1132473842,Animation2=1132477671,ClimbAnim=1132461372},
+			["Patrol"]      = {WalkAnim=1151231493,RunAnim=1150967949,JumpAnim=1150944216,FallAnim=1148863382,SwimIdle=1151221899,Swim=1151204998,Animation1=1149612882,Animation2=1150842221,ClimbAnim=1148811837},
+			["Popstar"]     = {WalkAnim=1212980338,RunAnim=1212980348,JumpAnim=1212954642,FallAnim=1212900995,SwimIdle=1212998578,Swim=1212852603,Animation1=1212900985,Animation2=1212954651,ClimbAnim=1213044953},
+			["Confident"]   = {WalkAnim=1070017263,RunAnim=1070001516,JumpAnim=1069984524,FallAnim=1069973677,SwimIdle=1070012133,Swim=1070009914,Animation1=1069977950,Animation2=1069987858,ClimbAnim=1069946257},
+			["Princess"]    = {WalkAnim=941028902,RunAnim=941015281,JumpAnim=941008832,FallAnim=941000007,SwimIdle=941025398,Swim=941018893,Animation1=941003647,Animation2=941013098,ClimbAnim=940996062},
+			["Cowboy"]      = {WalkAnim=1014421541,RunAnim=1014401683,JumpAnim=1014394726,FallAnim=1014384571,SwimIdle=1014411816,Swim=1014406523,Animation1=1014390418,Animation2=1014398616,ClimbAnim=1014380606},
+		}
+		local ANIM_ORDER = {"Default","Robot","Vampire","Superhero","Cartoony","Ninja","Adidas Sports","Stylish","Levitation","Astronaut","Werewolf","Knight","Pirate","Toy","Elder","Bubbly","Zombie","Sneaky","Patrol","Popstar","Confident","Princess","Cowboy"}
+		local _animEnabled = false
+		local _animIndex = 1
+
+		-- Méthode robuste : Animator:LoadAnimation direct + boucle Heartbeat qui
+		-- réapplique en continu (contourne les cas où le jeu regénère Animate)
+		local _animTracks = {}
+		local function stopAllTracks()
+			for _, tr in ipairs(_animTracks) do pcall(function() tr:Stop(0) end) end
+			_animTracks = {}
+		end
+
+		local function applyAnimPack(packName)
+			stopAllTracks()
+			local c = LP.Character; if not c then return end
+			local hum = c:FindFirstChildOfClass("Humanoid"); if not hum then return end
+			local animator = hum:FindFirstChildOfClass("Animator")
+			if not animator then animator = Instance.new("Animator", hum) end
+			local pack = ANIM_PACKS[packName]; if not pack then return end
+			for _, tr in ipairs(hum:GetPlayingAnimationTracks()) do pcall(function() tr:Stop(0) end) end
+			local slots = {
+				{id=pack.WalkAnim, prio=Enum.AnimationPriority.Movement, loop=true},
+				{id=pack.Animation1, prio=Enum.AnimationPriority.Idle, loop=true},
+			}
+			for _, s in ipairs(slots) do
+				if s.id then
+					local anim = Instance.new("Animation")
+					anim.AnimationId = "rbxassetid://"..tostring(s.id)
+					local ok, track = pcall(function() return animator:LoadAnimation(anim) end)
+					if ok and track then
+						track.Priority = s.prio
+						track.Looped = s.loop
+						track:Play(0)
+						table.insert(_animTracks, track)
+					end
+				end
+			end
+			-- Aussi appliquer via Animate script (fallback pour walk/run/jump réels)
+			local animate = c:FindFirstChild("Animate")
+			if animate then
+				local function setAnim(folder,slot,id)
+					if not id then return end
+					local f=animate:FindFirstChild(folder); if not f then return end
+					local a=f:FindFirstChild(slot)
+					if a and a:IsA("StringValue") then a.Value="rbxassetid://"..tostring(id) end
+				end
+				setAnim("walk","WalkAnim",pack.WalkAnim)
+				setAnim("run","RunAnim",pack.RunAnim)
+				setAnim("jump","JumpAnim",pack.JumpAnim)
+				setAnim("fall","FallAnim",pack.FallAnim)
+				setAnim("idle","Animation1",pack.Animation1)
+				setAnim("idle","Animation2",pack.Animation2)
+				setAnim("climb","ClimbAnim",pack.ClimbAnim)
+			end
+		end
+
+		local function clearAnimPack()
+			stopAllTracks()
+		end
+
+		-- Row navigation : ◀  [Nom]  ▶
+		local animRow = Instance.new("Frame", currentPage)
+		animRow.Size=UDim2.new(1,0,0,36); animRow.BackgroundColor3=C_ROW
+		animRow.BackgroundTransparency=0.35; animRow.BorderSizePixel=0; animRow.LayoutOrder=LO()
+		addCorner(animRow,10); addLivingStroke(animRow,1)
+
+		local animPrevBtn = Instance.new("TextButton", animRow)
+		animPrevBtn.Size=UDim2.new(0,36,1,0); animPrevBtn.Position=UDim2.new(0,0,0,0)
+		animPrevBtn.BackgroundTransparency=1; animPrevBtn.Text="◀"
+		animPrevBtn.TextColor3=C_MOON2; animPrevBtn.Font=Enum.Font.GothamBlack; animPrevBtn.TextSize=16
+		animPrevBtn.AutoButtonColor=false
+
+		local animNameLbl = Instance.new("TextLabel", animRow)
+		animNameLbl.Size=UDim2.new(1,-72,1,0); animNameLbl.Position=UDim2.new(0,36,0,0)
+		animNameLbl.BackgroundTransparency=1; animNameLbl.Text="Default"
+		animNameLbl.TextColor3=C_WHITE; animNameLbl.Font=Enum.Font.GothamBlack; animNameLbl.TextSize=12
+		animNameLbl.TextXAlignment=Enum.TextXAlignment.Center
+		addLivingTextGradient(animNameLbl)
+
+		local animNextBtn = Instance.new("TextButton", animRow)
+		animNextBtn.Size=UDim2.new(0,36,1,0); animNextBtn.Position=UDim2.new(1,-36,0,0)
+		animNextBtn.BackgroundTransparency=1; animNextBtn.Text="▶"
+		animNextBtn.TextColor3=C_MOON2; animNextBtn.Font=Enum.Font.GothamBlack; animNextBtn.TextSize=16
+		animNextBtn.AutoButtonColor=false
+
+		local function selectAnim(idx)
+			_animIndex = ((idx - 1) % #ANIM_ORDER) + 1
+			local name = ANIM_ORDER[_animIndex]
+			animNameLbl.Text = name
+			if _animEnabled then
+				if name == "Default" then clearAnimPack() else applyAnimPack(name) end
+			end
+		end
+
+		animPrevBtn.MouseButton1Click:Connect(function() selectAnim(_animIndex - 1) end)
+		animNextBtn.MouseButton1Click:Connect(function() selectAnim(_animIndex + 1) end)
+
+		UIB.makeToggleRow("Animation Changer", false, function(on)
+			_animEnabled = on
+			local name = ANIM_ORDER[_animIndex]
+			if on then
+				if name == "Default" then clearAnimPack() else applyAnimPack(name) end
+			else
+				clearAnimPack()
+			end
+		end)
+
+		LP.CharacterAdded:Connect(function()
+			task.wait(1)
+			_animTracks = {}
+			if _animEnabled then
+				local name = ANIM_ORDER[_animIndex]
+				if name ~= "Default" then applyAnimPack(name) end
+			end
+		end)
 	end
 end)
 
@@ -4232,165 +4394,6 @@ actualizarBotonesNivel()
 actualizarSwitch()
 end)()
 
-buildPage("Utility", function()
-	UIB.makeSectionLabel("Utility")
-	UIB.makeToggleRow("Speed Bypass", false, function(on)
-		if _sbBypassWidget then _sbBypassWidget.Visible = on end
-		-- Déclenche réellement le bypass (pas juste l'affichage du panneau)
-		if _G._MH_speedBypassToggle then
-			local isActive = _G._MH_speedBypassIsActive and _G._MH_speedBypassIsActive() or false
-			if isActive ~= on then _G._MH_speedBypassToggle() end
-		end
-	end)
-	UIB.makeToggleRow("Lagger", false, function(on)
-		if _lgrBypassWidget then _lgrBypassWidget.Visible = on end
-	end)
-
-	-- ── ANIMATION CHANGER (22 packs, navigation ◀ ▶) ──────────────
-	UIB.makeGap(4)
-	UIB.makeSectionLabel("Animation Changer")
-	do
-		local ANIM_PACKS = {
-			["Robot"]       = {WalkAnim=616013216,RunAnim=616010382,JumpAnim=616008936,FallAnim=616005863,SwimIdle=616012453,Swim=616011509,Animation1=616006778,Animation2=616008087,ClimbAnim=616003713},
-			["Vampire"]     = {WalkAnim=1083178339,RunAnim=1083216690,JumpAnim=1083218792,FallAnim=1083189019,SwimIdle=1083222527,Swim=1083225406,Animation1=1083445855,Animation2=1083450167,ClimbAnim=1083182000},
-			["Superhero"]   = {WalkAnim=616013216,RunAnim=616111765,JumpAnim=616111876,FallAnim=616108001,SwimIdle=616112625,Swim=616112437,Animation1=616111295,Animation2=616111295,ClimbAnim=616110833},
-			["Cartoony"]    = {WalkAnim=742640026,RunAnim=742638842,JumpAnim=742637942,FallAnim=742637151,SwimIdle=742639220,Swim=742639812,Animation1=742635424,Animation2=742636889,ClimbAnim=742636889},
-			["Ninja"]       = {WalkAnim=656118852,RunAnim=656118852,JumpAnim=656117878,FallAnim=656115606,SwimIdle=656119721,Swim=656119721,Animation1=656117878,Animation2=656118341,ClimbAnim=656114359},
-			["Adidas Sports"]={WalkAnim=18537392113,RunAnim=18537384940,JumpAnim=18537380791,FallAnim=18537367238,SwimIdle=18537387180,Swim=18537389531,Animation1=18537376492,Animation2=18537371272,ClimbAnim=18537363391},
-			["Stylish"]     = {WalkAnim=616122287,RunAnim=616117076,JumpAnim=616119360,FallAnim=616115533,SwimIdle=616120448,Swim=616121235,Animation1=616117076,Animation2=616120861,ClimbAnim=616115533},
-			["Levitation"]  = {WalkAnim=616013216,RunAnim=616006778,JumpAnim=616008936,FallAnim=616005863,SwimIdle=616011509,Swim=616012453,Animation1=616006778,Animation2=616008087,ClimbAnim=616003713},
-			["Astronaut"]   = {WalkAnim=891667138,RunAnim=891636393,JumpAnim=891627522,FallAnim=891617961,SwimIdle=891639666,Swim=891663592,Animation1=891621366,Animation2=891633237,ClimbAnim=891609353},
-			["Werewolf"]    = {WalkAnim=1083195517,RunAnim=1083194401,JumpAnim=1083218792,FallAnim=1083189019,SwimIdle=1083222527,Swim=1083225406,Animation1=1083462077,Animation2=1083450167,ClimbAnim=1083182000},
-			["Knight"]      = {WalkAnim=658831042,RunAnim=658831794,JumpAnim=658832070,FallAnim=658831500,SwimIdle=658832437,Swim=658832807,Animation1=657595757,Animation2=657600338,ClimbAnim=658830056},
-			["Pirate"]      = {WalkAnim=750785693,RunAnim=750783738,JumpAnim=750782230,FallAnim=750781874,SwimIdle=750785579,Swim=750784579,Animation1=750781874,Animation2=750782770,ClimbAnim=750779899},
-			["Toy"]         = {WalkAnim=782841498,RunAnim=782843345,JumpAnim=782847020,FallAnim=782846423,SwimIdle=782844582,Swim=782844235,Animation1=782842708,Animation2=782845736,ClimbAnim=782843869},
-			["Elder"]       = {WalkAnim=1092112116,RunAnim=1092114823,JumpAnim=1092114571,FallAnim=1092114319,SwimIdle=1092113582,Swim=1092113478,Animation1=1092110164,Animation2=1092110049,ClimbAnim=1092113209},
-			["Bubbly"]      = {WalkAnim=910034870,RunAnim=910025107,JumpAnim=910016857,FallAnim=910001910,SwimIdle=910030921,Swim=910028158,Animation1=910004836,Animation2=910009958,ClimbAnim=910019264},
-			["Zombie"]      = {WalkAnim=616163682,RunAnim=616163682,JumpAnim=616161682,FallAnim=616157476,SwimIdle=616165109,Swim=616164682,Animation1=616158929,Animation2=616160636,ClimbAnim=616156119},
-			["Sneaky"]      = {WalkAnim=1132510133,RunAnim=1132494274,JumpAnim=1132489853,FallAnim=1132469004,SwimIdle=1132506407,Swim=1132500520,Animation1=1132473842,Animation2=1132477671,ClimbAnim=1132461372},
-			["Patrol"]      = {WalkAnim=1151231493,RunAnim=1150967949,JumpAnim=1150944216,FallAnim=1148863382,SwimIdle=1151221899,Swim=1151204998,Animation1=1149612882,Animation2=1150842221,ClimbAnim=1148811837},
-			["Popstar"]     = {WalkAnim=1212980338,RunAnim=1212980348,JumpAnim=1212954642,FallAnim=1212900995,SwimIdle=1212998578,Swim=1212852603,Animation1=1212900985,Animation2=1212954651,ClimbAnim=1213044953},
-			["Confident"]   = {WalkAnim=1070017263,RunAnim=1070001516,JumpAnim=1069984524,FallAnim=1069973677,SwimIdle=1070012133,Swim=1070009914,Animation1=1069977950,Animation2=1069987858,ClimbAnim=1069946257},
-			["Princess"]    = {WalkAnim=941028902,RunAnim=941015281,JumpAnim=941008832,FallAnim=941000007,SwimIdle=941025398,Swim=941018893,Animation1=941003647,Animation2=941013098,ClimbAnim=940996062},
-			["Cowboy"]      = {WalkAnim=1014421541,RunAnim=1014401683,JumpAnim=1014394726,FallAnim=1014384571,SwimIdle=1014411816,Swim=1014406523,Animation1=1014390418,Animation2=1014398616,ClimbAnim=1014380606},
-		}
-		local ANIM_ORDER = {"Default","Robot","Vampire","Superhero","Cartoony","Ninja","Adidas Sports","Stylish","Levitation","Astronaut","Werewolf","Knight","Pirate","Toy","Elder","Bubbly","Zombie","Sneaky","Patrol","Popstar","Confident","Princess","Cowboy"}
-		local _animEnabled = false
-		local _animIndex = 1
-
-		-- Méthode robuste : Animator:LoadAnimation direct + boucle Heartbeat qui
-		-- réapplique en continu (contourne les cas où le jeu regénère Animate)
-		local _animTracks = {}
-		local function stopAllTracks()
-			for _, tr in ipairs(_animTracks) do pcall(function() tr:Stop(0) end) end
-			_animTracks = {}
-		end
-
-		local function applyAnimPack(packName)
-			stopAllTracks()
-			local c = LP.Character; if not c then return end
-			local hum = c:FindFirstChildOfClass("Humanoid"); if not hum then return end
-			local animator = hum:FindFirstChildOfClass("Animator")
-			if not animator then animator = Instance.new("Animator", hum) end
-			local pack = ANIM_PACKS[packName]; if not pack then return end
-			for _, tr in ipairs(hum:GetPlayingAnimationTracks()) do pcall(function() tr:Stop(0) end) end
-			local slots = {
-				{id=pack.WalkAnim, prio=Enum.AnimationPriority.Movement, loop=true},
-				{id=pack.Animation1, prio=Enum.AnimationPriority.Idle, loop=true},
-			}
-			for _, s in ipairs(slots) do
-				if s.id then
-					local anim = Instance.new("Animation")
-					anim.AnimationId = "rbxassetid://"..tostring(s.id)
-					local ok, track = pcall(function() return animator:LoadAnimation(anim) end)
-					if ok and track then
-						track.Priority = s.prio
-						track.Looped = s.loop
-						track:Play(0)
-						table.insert(_animTracks, track)
-					end
-				end
-			end
-			-- Aussi appliquer via Animate script (fallback pour walk/run/jump réels)
-			local animate = c:FindFirstChild("Animate")
-			if animate then
-				local function setAnim(folder,slot,id)
-					if not id then return end
-					local f=animate:FindFirstChild(folder); if not f then return end
-					local a=f:FindFirstChild(slot)
-					if a and a:IsA("StringValue") then a.Value="rbxassetid://"..tostring(id) end
-				end
-				setAnim("walk","WalkAnim",pack.WalkAnim)
-				setAnim("run","RunAnim",pack.RunAnim)
-				setAnim("jump","JumpAnim",pack.JumpAnim)
-				setAnim("fall","FallAnim",pack.FallAnim)
-				setAnim("idle","Animation1",pack.Animation1)
-				setAnim("idle","Animation2",pack.Animation2)
-				setAnim("climb","ClimbAnim",pack.ClimbAnim)
-			end
-		end
-
-		local function clearAnimPack()
-			stopAllTracks()
-		end
-
-		-- Row navigation : ◀  [Nom]  ▶
-		local animRow = Instance.new("Frame", currentPage)
-		animRow.Size=UDim2.new(1,0,0,36); animRow.BackgroundColor3=C_ROW
-		animRow.BackgroundTransparency=0.35; animRow.BorderSizePixel=0; animRow.LayoutOrder=LO()
-		addCorner(animRow,10); addLivingStroke(animRow,1)
-
-		local animPrevBtn = Instance.new("TextButton", animRow)
-		animPrevBtn.Size=UDim2.new(0,36,1,0); animPrevBtn.Position=UDim2.new(0,0,0,0)
-		animPrevBtn.BackgroundTransparency=1; animPrevBtn.Text="◀"
-		animPrevBtn.TextColor3=C_MOON2; animPrevBtn.Font=Enum.Font.GothamBlack; animPrevBtn.TextSize=16
-		animPrevBtn.AutoButtonColor=false
-
-		local animNameLbl = Instance.new("TextLabel", animRow)
-		animNameLbl.Size=UDim2.new(1,-72,1,0); animNameLbl.Position=UDim2.new(0,36,0,0)
-		animNameLbl.BackgroundTransparency=1; animNameLbl.Text="Default"
-		animNameLbl.TextColor3=C_WHITE; animNameLbl.Font=Enum.Font.GothamBlack; animNameLbl.TextSize=12
-		animNameLbl.TextXAlignment=Enum.TextXAlignment.Center
-		addLivingTextGradient(animNameLbl)
-
-		local animNextBtn = Instance.new("TextButton", animRow)
-		animNextBtn.Size=UDim2.new(0,36,1,0); animNextBtn.Position=UDim2.new(1,-36,0,0)
-		animNextBtn.BackgroundTransparency=1; animNextBtn.Text="▶"
-		animNextBtn.TextColor3=C_MOON2; animNextBtn.Font=Enum.Font.GothamBlack; animNextBtn.TextSize=16
-		animNextBtn.AutoButtonColor=false
-
-		local function selectAnim(idx)
-			_animIndex = ((idx - 1) % #ANIM_ORDER) + 1
-			local name = ANIM_ORDER[_animIndex]
-			animNameLbl.Text = name
-			if _animEnabled then
-				if name == "Default" then clearAnimPack() else applyAnimPack(name) end
-			end
-		end
-
-		animPrevBtn.MouseButton1Click:Connect(function() selectAnim(_animIndex - 1) end)
-		animNextBtn.MouseButton1Click:Connect(function() selectAnim(_animIndex + 1) end)
-
-		UIB.makeToggleRow("Animation Changer", false, function(on)
-			_animEnabled = on
-			local name = ANIM_ORDER[_animIndex]
-			if on then
-				if name == "Default" then clearAnimPack() else applyAnimPack(name) end
-			else
-				clearAnimPack()
-			end
-		end)
-
-		LP.CharacterAdded:Connect(function()
-			task.wait(1)
-			_animTracks = {}
-			if _animEnabled then
-				local name = ANIM_ORDER[_animIndex]
-				if name ~= "Default" then applyAnimPack(name) end
-			end
-		end)
-	end
-end)
 
 -- ===================================================================
 -- INITIALISATION
