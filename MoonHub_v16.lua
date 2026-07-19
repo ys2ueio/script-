@@ -534,7 +534,12 @@ function UIB.makeInputRow(label, default, onChange)
 	box.ClearTextOnFocus = false; box.TextXAlignment = Enum.TextXAlignment.Center
 	box.FocusLost:Connect(function()
 		local n = tonumber(box.Text)
-		if n then onChange(n) else box.Text = tostring(default) end
+		if n then
+			onChange(n)
+			if _G._MH_autoSave then _G._MH_autoSave() end
+		else
+			box.Text = tostring(default)
+		end
 	end)
 	makeDivider()
 	return box
@@ -575,6 +580,7 @@ function UIB.makeToggleRow(label, defaultOn, onToggle)
 	clk.MouseButton1Click:Connect(function()
 		isOn = not isOn; setV(isOn)
 		if onToggle then onToggle(isOn) end
+		if _G._MH_autoSave then _G._MH_autoSave() end
 	end)
 	makeDivider()
 	return setV
@@ -1780,8 +1786,8 @@ buildPage("Combat", function()
 			if IJ.active then IJ.stop(); IJ.start() end
 		end
 		updM() -- apply initial state
-		manB.MouseButton1Click:Connect(function() IJ.mode="manual"; updM() end)
-		holB.MouseButton1Click:Connect(function() IJ.mode="hold"; updM() end)
+		manB.MouseButton1Click:Connect(function() IJ.mode="manual"; updM(); if _G._MH_autoSave then _G._MH_autoSave() end end)
+		holB.MouseButton1Click:Connect(function() IJ.mode="hold"; updM(); if _G._MH_autoSave then _G._MH_autoSave() end end)
 		makeDivider()
 	end
 	setAutoStealRowVisual=UIB.makeToggleRow("Auto Steal",false,function(on)
@@ -1845,7 +1851,7 @@ local _floatPositions = {}   -- id -> {xs,xo,ys,yo}
 -- Bump this whenever the default layout changes: saved positions from an
 -- older version get discarded on load instead of restoring stale/overlapping
 -- coordinates, so everyone gets the current clean column layout by default.
-local _FLOAT_POS_VERSION = 2
+local _FLOAT_POS_VERSION = 3
 local _floatLocked    = false
 local FLOAT_SZ = 46
 
@@ -2257,6 +2263,7 @@ buildPage("Keybind", function()
 					entry.key = inp.KeyCode; entry.gp = nil
 				end
 				stopListening(keyName(inp.KeyCode))
+				if _G._MH_autoSave then _G._MH_autoSave() end
 			end)
 
 			-- 6s timeout if no key is pressed
@@ -2275,6 +2282,7 @@ buildPage("Keybind", function()
 		clrBtn.MouseButton1Click:Connect(function()
 			entry.key = nil; entry.gp = nil
 			kbBtn.Text = "—"; kbBtn.TextColor3 = C_DIM
+			if _G._MH_autoSave then _G._MH_autoSave() end
 		end)
 
 		local div = Instance.new("Frame", currentPage)
@@ -2844,12 +2852,14 @@ end
 -- Each action has a toggle in Settings that spawns/despawns its
 -- own floating square button. "Lock" freezes the drag once placed.
 -- ===================================================================
--- Stable order (independent of activation order) so buttons
--- always line up in the same place, on the right of the screen, in a column.
+-- Stable order (independent of activation order) so buttons always line
+-- up in the same place: the first 5 in a column on the right, the
+-- remaining 4 in a 2x2 grid on the left.
 local _FLOAT_ID_ORDER = {
 	"antibat","aimbot","aimv2","dropbr","autoleft",
 	"autoright","tpdown","battp","instareset",
 }
+local _FLOAT_RIGHT_COUNT = 5
 local function _floatIdIndex(id)
 	for i, fid in ipairs(_FLOAT_ID_ORDER) do
 		if fid == id then return i end
@@ -2868,9 +2878,17 @@ local function makeFloatButton(id)
 	if saved then
 		btn.Position = UDim2.new(saved[1], saved[2], saved[3], saved[4])
 	else
-		-- Column lined up on the right of the screen, in the order defined above
+		-- First 5 (in the order defined above): column on the right.
+		-- Remaining 4: 2x2 grid on the left.
 		local idx = _floatIdIndex(id) - 1
-		btn.Position = UDim2.new(1, -(FLOAT_SZ + 12), 0, 40 + idx * (FLOAT_SZ + 8))
+		if idx < _FLOAT_RIGHT_COUNT then
+			btn.Position = UDim2.new(1, -(FLOAT_SZ + 12), 0, 40 + idx * (FLOAT_SZ + 8))
+		else
+			local gridIdx = idx - _FLOAT_RIGHT_COUNT
+			local col = gridIdx % 2
+			local row = math.floor(gridIdx / 2)
+			btn.Position = UDim2.new(0, 12 + col * (FLOAT_SZ + 8), 0, 40 + row * (FLOAT_SZ + 8))
+		end
 	end
 	btn.BackgroundColor3 = C_ROW; btn.BackgroundTransparency = 0; btn.BorderSizePixel = 0
 	btn.Text = def.label; btn.TextColor3 = C_WHITE; btn.Font = Enum.Font.GothamBold
@@ -3346,60 +3364,14 @@ local function MH_load()
 			if _G._mhInputBoxesRef.laggerCarrySpeed then _G._mhInputBoxesRef.laggerCarrySpeed.Text=tostring(data.laggerCarrySpeed) end end
 		if data.speedType=="normal" or data.speedType=="carry" then State.speedType=data.speedType end
 
-		if type(data.laggerActive)=="boolean" then State.laggerActive=data.laggerActive end
-		if type(data.laggerCarryActive)=="boolean" then State.laggerCarryActive=data.laggerCarryActive end
-		if type(data.autoLeftEnabled)=="boolean" and data.autoLeftEnabled then
-			State.autoLeftEnabled=true; if startAutoLeft then startAutoLeft() end
-		end
-		if type(data.autoRightEnabled)=="boolean" and data.autoRightEnabled then
-			State.autoRightEnabled=true; if startAutoRight then startAutoRight() end
-		end
-
-		if type(data.antiRagdollEnabled)=="boolean" then
-			if data.antiRagdollEnabled then
-				State.antiRagdollEnabled=true; if startAntiRagdoll then startAntiRagdoll() end
-				if setAntiRagdollRowVisual then setAntiRagdollRowVisual(true) end
-			else
-				State.antiRagdollEnabled=false
-				if setAntiRagdollRowVisual then setAntiRagdollRowVisual(false) end
-			end
-		end
-		if type(data.medusaCounterEnabled)=="boolean" and data.medusaCounterEnabled then
-			State.medusaCounterEnabled=true
-		end
-		if type(data.antiBatEnabled)=="boolean" and data.antiBatEnabled then
-			if applyAntiBatState then applyAntiBatState(true) end
-		end
-		if type(data.batCounterEnabled)=="boolean" and data.batCounterEnabled then
-			BatCounter.active=true; BatCounter.start()
-			if setBatCounterRowVisual then setBatCounterRowVisual(true) end
-		end
+		-- Only config VALUES are restored here (speeds, keybinds, radius,
+		-- mode...) — ON/OFF feature states are never auto-restarted, to
+		-- match the "everything OFF at execution" policy. The user
+		-- re-enables whichever features they want each session.
 		if data.aimSpeed then AB.SPEED=data.aimSpeed end
-		if type(data.aimbotEnabled)=="boolean" and data.aimbotEnabled then
-			AB.start()
-			if setAimbotRowVisual then setAimbotRowVisual(true) end
-		end
-		if type(data.aimbotV2Enabled)=="boolean" and data.aimbotV2Enabled then
-			ABP.start()
-			if setAimbotV2RowVisual then setAimbotV2RowVisual(true) end
-		end
 		if data.infJumpMode=="manual" or data.infJumpMode=="hold" then IJ.mode=data.infJumpMode end
-		if type(data.infJumpEnabled)=="boolean" and data.infJumpEnabled then
-			IJ.active=true; IJ.start()
-			if setInfJumpRowVisual then setInfJumpRowVisual(true) end
-		end
 		if data.grabRadius then AutoSteal.Radius=data.grabRadius end
 		if data.grabDuration then AutoSteal.Duration=data.grabDuration end
-		if type(data.autoGrabEnabled)=="boolean" then
-			if data.autoGrabEnabled then
-				AutoSteal.Enabled=true
-				if startAutoSteal then startAutoSteal() end
-				if setAutoStealRowVisual then setAutoStealRowVisual(true) end
-			else
-				AutoSteal.Enabled=false
-				if setAutoStealRowVisual then setAutoStealRowVisual(false) end
-			end
-		end
 
 		if data.kb then
 			local kb = _G.MH_KB
@@ -3421,12 +3393,10 @@ local function MH_load()
 				_floatPositions[id] = pos
 			end
 		end
-		if type(data.floatSpawned) == "table" then
-			for _, id in ipairs(data.floatSpawned) do
-				makeFloatButton(id)
-				if _floatRowSetters[id] then _floatRowSetters[id](true) end
-			end
-		end
+		-- Floating buttons never auto-spawn from a saved session — matches
+		-- the "everything OFF at execution" policy. The user re-toggles
+		-- whichever ones they want each time (positions are still remembered
+		-- once they do, via floatPositions above).
 		if type(data.uiLocked) == "boolean" and data.uiLocked then
 			setDragLock(true)
 			lockTitleBtn.Text = "🔒"; lockTitleBtn.TextColor3 = C_RED
