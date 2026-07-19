@@ -1842,6 +1842,10 @@ end)
 local _floatDefs      = {}   -- id -> {label, onClick, isActive, momentary}
 local _floatBtns      = {}   -- id -> {frame, setActive}
 local _floatPositions = {}   -- id -> {xs,xo,ys,yo}
+-- Bump this whenever the default layout changes: saved positions from an
+-- older version get discarded on load instead of restoring stale/overlapping
+-- coordinates, so everyone gets the current clean column layout by default.
+local _FLOAT_POS_VERSION = 2
 local _floatLocked    = false
 local FLOAT_SZ = 46
 
@@ -2866,7 +2870,7 @@ local function makeFloatButton(id)
 	else
 		-- Column lined up on the right of the screen, in the order defined above
 		local idx = _floatIdIndex(id) - 1
-		btn.Position = UDim2.new(1, -(FLOAT_SZ + 12), 0, 80 + idx * (FLOAT_SZ + 8))
+		btn.Position = UDim2.new(1, -(FLOAT_SZ + 12), 0, 40 + idx * (FLOAT_SZ + 8))
 	end
 	btn.BackgroundColor3 = C_ROW; btn.BackgroundTransparency = 0; btn.BorderSizePixel = 0
 	btn.Text = def.label; btn.TextColor3 = C_WHITE; btn.Font = Enum.Font.GothamBold
@@ -3280,6 +3284,7 @@ local function MH_save()
 					return ids
 				end)(),
 				floatPositions = _floatPositions,
+				floatPosV = _FLOAT_POS_VERSION,
 				uiLocked = _uiLocked,
 				kb = {
 					AntiBatAimbot = ks(kb.AntiBatAimbot),
@@ -3408,8 +3413,10 @@ local function MH_load()
 			end
 		end
 
-		-- Floating buttons: positions first, then spawn, then lock
-		if type(data.floatPositions) == "table" then
+		-- Floating buttons: positions first, then spawn, then lock.
+		-- Positions saved under an older layout version are discarded so
+		-- buttons don't restore to stale/overlapping coordinates.
+		if type(data.floatPositions) == "table" and data.floatPosV == _FLOAT_POS_VERSION then
 			for id, pos in pairs(data.floatPositions) do
 				_floatPositions[id] = pos
 			end
