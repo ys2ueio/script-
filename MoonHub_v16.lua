@@ -2786,21 +2786,20 @@ RunService.RenderStepped:Connect(function()
 		lastFps=math.floor(frameCount/(now-lastFpsTime)); frameCount=0; lastFpsTime=now; refreshInfoLabel()
 	end
 end)
--- Ping : un vrai ping en jeu n'est jamais exactement 0ms, donc une lecture
--- à 0 est toujours traitée comme un échec de fetch (Network pas encore prêt),
--- jamais affichée — évite l'affichage bloqué à "0ms".
+-- Ne met à jour lastPing que si le fetch a réussi, sinon on garde la
+-- dernière valeur connue au lieu de retomber sur 0 (bug affichage bloqué à "0ms").
 task.spawn(function()
 	while mainFrame.Parent do
 		local success, ping = pcall(function()
-			local netStats = Stats:WaitForChild("Network", 5)
+			local netStats = Stats:FindFirstChild("Network")
 			if not netStats then return nil end
-			local sci = netStats:WaitForChild("ServerStatsItem", 5)
+			local sci = netStats:FindFirstChild("ServerStatsItem")
 			if not sci then return nil end
 			local dp = sci:FindFirstChild("Data Ping")
 			if not dp then return nil end
 			return math.floor(dp:GetValue() or 0)
 		end)
-		if success and type(ping) == "number" and ping > 0 then
+		if success and type(ping) == "number" then
 			lastPing = ping
 			refreshInfoLabel()
 		end
