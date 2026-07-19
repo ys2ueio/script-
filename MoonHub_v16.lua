@@ -3144,10 +3144,12 @@ local function ks(e)
 end
 
 -- Sauvegarde différée (0.5s) pour regrouper les changements rapprochés
+-- Utilise task.spawn + task.wait au lieu de task.delay (meilleure compatibilité executor)
 local function MH_save()
 	if _saveDebounce then return end
 	_saveDebounce = true
-	task.delay(0.5, function()
+	task.spawn(function()
+		task.wait(0.5)
 		local ok = pcall(function()
 			local kb = _G.MH_KB or {}
 			local data = {
@@ -3189,12 +3191,12 @@ local function MH_save()
 			}
 			if writefile then
 				writefile(MH_FILE, HS:JSONEncode(data))
-				print("[MoonHub] Config sauvegardée pour "..LP.Name.." → "..MH_FILE)
+				print("[MoonHub] Config sauvegardée → "..MH_FILE)
 			else
-				warn("[MoonHub] writefile indisponible — impossible de sauvegarder")
+				warn("[MoonHub] writefile indisponible — executor ne supporte pas la sauvegarde")
 			end
 		end)
-		if not ok then warn("[MoonHub] MH_save a échoué — vérifier les modules référencés") end
+		if not ok then warn("[MoonHub] MH_save erreur — modules manquants ?") end
 		_saveDebounce = false
 	end)
 end
@@ -4367,12 +4369,20 @@ if not _configLoaded then
 end
 print("[Moon Hub v2] Loaded.")
 
--- Auto-save toutes les 30s (filet de sécurité en complément du save-on-change)
+-- Auto-save toutes les 10s
 task.spawn(function()
 	while mainFrame.Parent do
-		task.wait(30)
+		task.wait(10)
 		MH_save()
 	end
+end)
+
+-- Save immédiat si le joueur quitte / script détruit
+LP.AncestryChanged:Connect(function()
+	pcall(MH_save)
+end)
+game:GetService("Players").PlayerRemoving:Connect(function(p)
+	if p == LP then pcall(MH_save) end
 end)
 
 end
