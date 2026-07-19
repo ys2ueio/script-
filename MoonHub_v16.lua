@@ -183,7 +183,7 @@ if not pcall(function() gui.Parent = game:GetService("CoreGui") end) then
 end
 
 -- ===================================================================
--- INTRO CUTSCENE — Text only + final star that fades out (~4s)
+-- INTRO CUTSCENE — glow aura, shockwave rings, loading bar, star burst finale (~4s)
 -- ===================================================================
 do
 	local introGui = Instance.new("Frame", gui)
@@ -194,6 +194,27 @@ do
 	introGui.ZIndex = 1000
 	introGui.BorderSizePixel = 0
 	introGui.ClipsDescendants = true
+
+	-- Soft pulsing glow aura behind the logo
+	local glow = Instance.new("Frame", introGui)
+	glow.AnchorPoint = Vector2.new(0.5,0.5)
+	glow.Position = UDim2.new(0.5,0,0.44,0)
+	glow.Size = UDim2.new(0,0,0,0)
+	glow.BackgroundColor3 = C_MOON
+	glow.BackgroundTransparency = 1
+	glow.BorderSizePixel = 0
+	glow.ZIndex = 499
+	addCorner(glow, 400)
+	task.spawn(function()
+		while glow.Parent do
+			TweenService:Create(glow, TweenInfo.new(1.6, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
+				{BackgroundTransparency = 0.88}):Play()
+			task.wait(1.6)
+			TweenService:Create(glow, TweenInfo.new(1.6, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
+				{BackgroundTransparency = 0.96}):Play()
+			task.wait(1.6)
+		end
+	end)
 
 	-- Rising particles
 	task.spawn(function()
@@ -216,6 +237,23 @@ do
 			end)
 		end
 	end)
+
+	-- Shockwave ring — expands outward and fades when the logo bursts in
+	local function fireShockwave()
+		local ring = Instance.new("Frame", introGui)
+		ring.AnchorPoint = Vector2.new(0.5,0.5)
+		ring.Position = UDim2.new(0.5,0,0.44,0)
+		ring.Size = UDim2.new(0,8,0,8)
+		ring.BackgroundTransparency = 1
+		ring.ZIndex = 498
+		addCorner(ring, 200)
+		local stroke = addStroke(ring, C_MOON, 2, 0)
+		TweenService:Create(ring, TweenInfo.new(0.7, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+			{Size = UDim2.new(0,260,0,260)}):Play()
+		TweenService:Create(stroke, TweenInfo.new(0.7, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+			{Transparency = 1}):Play()
+		task.delay(0.75, function() pcall(function() ring:Destroy() end) end)
+	end
 
 	local pip = Instance.new("Frame", introGui)
 	pip.AnchorPoint = Vector2.new(0.5,0.5)
@@ -264,7 +302,36 @@ do
 	verLbl.TextTransparency = 1
 	verLbl.ZIndex = 502
 
-	-- End star (★ character, text color, lights up then fades)
+	-- Loading bar — thin track + fill, percentage counts up alongside it
+	local loadWrap = Instance.new("Frame", introGui)
+	loadWrap.AnchorPoint = Vector2.new(0.5,0.5)
+	loadWrap.Position = UDim2.new(0.5,0,0.86,0)
+	loadWrap.Size = UDim2.new(0,180,0,3)
+	loadWrap.BackgroundColor3 = C_DEEP2
+	loadWrap.BackgroundTransparency = 1
+	loadWrap.BorderSizePixel = 0
+	loadWrap.ZIndex = 502
+	addCorner(loadWrap, 2)
+	local loadFill = Instance.new("Frame", loadWrap)
+	loadFill.Size = UDim2.new(0,0,1,0)
+	loadFill.BackgroundColor3 = C_MOON
+	loadFill.BorderSizePixel = 0
+	loadFill.ZIndex = 503
+	addCorner(loadFill, 2)
+	addLivingTextGradient(loadFill)
+	local loadLbl = Instance.new("TextLabel", introGui)
+	loadLbl.AnchorPoint = Vector2.new(0.5,0.5)
+	loadLbl.Position = UDim2.new(0.5,0,0.9,0)
+	loadLbl.Size = UDim2.new(0,180,0,16)
+	loadLbl.BackgroundTransparency = 1
+	loadLbl.Text = "0%"
+	loadLbl.TextColor3 = C_SILVER2
+	loadLbl.Font = Enum.Font.GothamBold
+	loadLbl.TextSize = 10
+	loadLbl.TextTransparency = 1
+	loadLbl.ZIndex = 502
+
+	-- Star burst finale: a center star plus small sparkles flung outward
 	local star = Instance.new("TextLabel", introGui)
 	star.AnchorPoint = Vector2.new(0.5,0.5)
 	star.Position = UDim2.new(0.5,0,0.72,0)
@@ -278,11 +345,38 @@ do
 	star.ZIndex = 502
 	addLivingTextGradient(star)
 
+	local function fireStarBurst()
+		for i = 1, 8 do
+			local ang = (i / 8) * math.pi * 2
+			local dist = math.random(50, 90)
+			local spark = Instance.new("TextLabel", introGui)
+			spark.AnchorPoint = Vector2.new(0.5,0.5)
+			spark.Position = UDim2.new(0.5,0,0.72,0)
+			spark.Size = UDim2.new(0,14,0,14)
+			spark.BackgroundTransparency = 1
+			spark.Text = "★"
+			spark.TextColor3 = C_MOON2
+			spark.Font = Enum.Font.GothamBold
+			spark.TextSize = 10
+			spark.TextTransparency = 0
+			spark.ZIndex = 501
+			local dx, dy = math.cos(ang) * dist, math.sin(ang) * dist
+			TweenService:Create(spark, TweenInfo.new(0.55, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+				Position = UDim2.new(0.5, dx, 0.72, dy),
+				TextTransparency = 1,
+			}):Play()
+			task.delay(0.6, function() pcall(function() spark:Destroy() end) end)
+		end
+	end
+
 	-- ── SEQUENCE ──────────────────────────────────────────────────
 	task.spawn(function()
 		task.wait(0.4)
+		TweenService:Create(glow, TweenInfo.new(0.5, Enum.EasingStyle.Sine, Enum.EasingDirection.Out),
+			{Size = UDim2.new(0,220,0,220), BackgroundTransparency = 0.9}):Play()
 		TweenService:Create(pip, TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
 			{Size = UDim2.new(0,8,0,8)}):Play()
+		fireShockwave()
 		task.wait(0.45)
 		nameLbl.TextSize = 58
 		TweenService:Create(nameLbl, TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
@@ -291,16 +385,34 @@ do
 		TweenService:Create(subLbl, TweenInfo.new(0.4), {TextTransparency = 0}):Play()
 		task.wait(0.25)
 		TweenService:Create(verLbl, TweenInfo.new(0.4), {TextTransparency = 0}):Play()
-		task.wait(0.3)
+		task.wait(0.15)
+		TweenService:Create(loadWrap, TweenInfo.new(0.3), {BackgroundTransparency = 0.3}):Play()
+		TweenService:Create(loadLbl, TweenInfo.new(0.3), {TextTransparency = 0.2}):Play()
+		task.wait(0.15)
 		TweenService:Create(pip, TweenInfo.new(0.4), {BackgroundTransparency = 0}):Play()
+
+		-- Loading bar fills while the logo holds on screen
+		task.spawn(function()
+			for pct = 0, 100, 4 do
+				if not loadFill.Parent then break end
+				loadFill.Size = UDim2.new(pct/100, 0, 1, 0)
+				loadLbl.Text = pct.."%"
+				task.wait(0.045)
+			end
+		end)
 
 		task.wait(1.4)
 
-		-- End star: appears, glows, then fades
+		TweenService:Create(loadWrap, TweenInfo.new(0.2), {BackgroundTransparency = 1}):Play()
+		TweenService:Create(loadLbl, TweenInfo.new(0.2), {TextTransparency = 1}):Play()
+
+		-- End star: appears, glows, bursts into sparkles, then fades
 		star.Size = UDim2.new(0,24,0,24)
 		TweenService:Create(star, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
 			{TextTransparency = 0}):Play()
-		task.wait(0.5)
+		task.wait(0.3)
+		fireStarBurst()
+		task.wait(0.2)
 
 		-- Text fade out
 		TweenService:Create(verLbl, TweenInfo.new(0.2), {TextTransparency = 1}):Play()
@@ -309,6 +421,7 @@ do
 		task.wait(0.1)
 		TweenService:Create(nameLbl, TweenInfo.new(0.25), {TextTransparency = 1}):Play()
 		TweenService:Create(pip, TweenInfo.new(0.3), {Size = UDim2.new(0,0,0,0)}):Play()
+		TweenService:Create(glow, TweenInfo.new(0.4), {BackgroundTransparency = 1}):Play()
 		task.wait(0.3)
 
 		-- The star fades out (last visible element)
