@@ -3569,6 +3569,8 @@ local function toggle()
 	end
 end
 toggleBtn.MouseButton1Click:Connect(toggle)
+_G._MH_speedBypassToggle = toggle
+_G._MH_speedBypassIsActive = function() return activated end
 
 local bindRow = Instance.new("Frame", sbW)
 bindRow.Size = UDim2.new(1,-16,0,26); bindRow.Position = UDim2.new(0,8,0,64)
@@ -4220,6 +4222,11 @@ buildPage("Utility", function()
 	UIB.makeSectionLabel("Utility")
 	UIB.makeToggleRow("Speed Bypass", false, function(on)
 		if _sbBypassWidget then _sbBypassWidget.Visible = on end
+		-- Déclenche réellement le bypass (pas juste l'affichage du panneau)
+		if _G._MH_speedBypassToggle then
+			local isActive = _G._MH_speedBypassIsActive and _G._MH_speedBypassIsActive() or false
+			if isActive ~= on then _G._MH_speedBypassToggle() end
+		end
 	end)
 	UIB.makeToggleRow("Lagger", false, function(on)
 		if _lgrBypassWidget then _lgrBypassWidget.Visible = on end
