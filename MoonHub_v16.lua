@@ -84,7 +84,7 @@ local function addGradient(inst, c1, c2, rot)
 end
 
 -- ===================================================================
--- DÉGRADÉS VIVANTS
+-- LIVING GRADIENTS
 -- ===================================================================
 local C_DEEP1 = Color3.fromRGB(4,7,16)
 local C_DEEP2 = Color3.fromRGB(14,28,58)
@@ -183,7 +183,7 @@ if not pcall(function() gui.Parent = game:GetService("CoreGui") end) then
 end
 
 -- ===================================================================
--- INTRO CUTSCENE — Texte seul + étoile finale qui s'éteint (~4s)
+-- INTRO CUTSCENE — Text only + final star that fades out (~4s)
 -- ===================================================================
 do
 	local introGui = Instance.new("Frame", gui)
@@ -195,7 +195,7 @@ do
 	introGui.BorderSizePixel = 0
 	introGui.ClipsDescendants = true
 
-	-- Particules qui montent
+	-- Rising particles
 	task.spawn(function()
 		while introGui.Parent do
 			task.wait(math.random(6,16)/100)
@@ -264,7 +264,7 @@ do
 	verLbl.TextTransparency = 1
 	verLbl.ZIndex = 502
 
-	-- Étoile de fin (caractère ★, couleur des textes, s'allume puis s'éteint)
+	-- End star (★ character, text color, lights up then fades)
 	local star = Instance.new("TextLabel", introGui)
 	star.AnchorPoint = Vector2.new(0.5,0.5)
 	star.Position = UDim2.new(0.5,0,0.72,0)
@@ -278,7 +278,7 @@ do
 	star.ZIndex = 502
 	addLivingTextGradient(star)
 
-	-- ── SÉQUENCE ──────────────────────────────────────────────────
+	-- ── SEQUENCE ──────────────────────────────────────────────────
 	task.spawn(function()
 		task.wait(0.4)
 		TweenService:Create(pip, TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
@@ -296,13 +296,13 @@ do
 
 		task.wait(1.4)
 
-		-- Étoile de fin : apparaît, brille, puis s'éteint
+		-- End star: appears, glows, then fades
 		star.Size = UDim2.new(0,24,0,24)
 		TweenService:Create(star, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
 			{TextTransparency = 0}):Play()
 		task.wait(0.5)
 
-		-- Fade out du texte
+		-- Text fade out
 		TweenService:Create(verLbl, TweenInfo.new(0.2), {TextTransparency = 1}):Play()
 		task.wait(0.1)
 		TweenService:Create(subLbl, TweenInfo.new(0.2), {TextTransparency = 1}):Play()
@@ -311,7 +311,7 @@ do
 		TweenService:Create(pip, TweenInfo.new(0.3), {Size = UDim2.new(0,0,0,0)}):Play()
 		task.wait(0.3)
 
-		-- L'étoile s'éteint (dernier élément visible)
+		-- The star fades out (last visible element)
 		TweenService:Create(star, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
 			{TextTransparency = 1}):Play()
 		task.wait(0.55)
@@ -325,10 +325,10 @@ end
 
 
 -- ===================================================================
--- DRAG SYSTEM — sans dragPosLabel (label vert Y: supprimé)
+-- DRAG SYSTEM — no dragPosLabel (green Y: label removed)
 -- ===================================================================
 local _uiLocked = false          -- LOCK : quand true, aucun drag ne fonctionne
-local _dragStates = {}           -- registre de tous les états drag créés
+local _dragStates = {}           -- registry of all created drag states
 local _activeDrag = nil
 
 UIS.InputChanged:Connect(function(inp)
@@ -346,7 +346,7 @@ local function makeDraggable(frame, handle)
 	local state = { frame=frame, dragging=false, dragInput=nil, dragStart=nil, startPos=nil }
 	_dragStates[#_dragStates+1] = state
 	src.InputBegan:Connect(function(inp)
-		if _uiLocked then return end   -- LOCK : bloque le démarrage du drag
+		if _uiLocked then return end   -- LOCK: blocks drag from starting
 		if inp.UserInputType == Enum.UserInputType.MouseButton1
 			or inp.UserInputType == Enum.UserInputType.Touch then
 			state.dragging = true
@@ -369,14 +369,16 @@ local function makeDraggable(frame, handle)
 	end)
 end
 
--- Bascule le lock drag (appelé par le bouton 🔓/🔒 dans la barre de titre)
+-- Toggle drag lock (called by the 🔓/🔒 button in the title bar)
+-- Locks EVERYTHING: main menu, widgets, and floating buttons.
 local function setDragLock(on)
 	_uiLocked = on
 	if on then
-		-- Coupe tout drag en cours
+		-- Cancel any drag in progress
 		for _, st in ipairs(_dragStates) do st.dragging = false end
 		_activeDrag = nil
 	end
+	if _G._MH_setFloatLocked then _G._MH_setFloatLocked(on) end
 end
 
 -- ===================================================================
@@ -415,7 +417,7 @@ titleLbl.TextColor3 = C_WHITE; titleLbl.Font = Enum.Font.GothamBlack; titleLbl.T
 titleLbl.TextXAlignment = Enum.TextXAlignment.Left; titleLbl.ZIndex = 6
 addLivingTextGradient(titleLbl)
 
--- Bouton LOCK dans la barre de titre (gèle/dégèle le drag)
+-- LOCK button in the title bar (freezes/unfreezes drag)
 local lockTitleBtn = Instance.new("TextButton", titleBar)
 lockTitleBtn.Size = UDim2.new(0,22,0,22); lockTitleBtn.Position = UDim2.new(1,-56,0.5,-11)
 lockTitleBtn.BackgroundColor3 = Color3.fromRGB(0,0,0); lockTitleBtn.BorderSizePixel = 0
@@ -452,7 +454,7 @@ contentBg.Size = UDim2.new(1,0,1,-CONTENT_Y); contentBg.Position = UDim2.new(0,0
 contentBg.BackgroundTransparency = 1; contentBg.BorderSizePixel = 0
 contentBg.ClipsDescendants = true; contentBg.ZIndex = 2
 
-local TABS = {"Combat","Visual","Keybind","Optimize","Settings","Boutons"}
+local TABS = {"Combat","Visual","Keybind","Optimize","Settings","Buttons"}
 local tabBar = Instance.new("Frame", contentBg)
 tabBar.Size = UDim2.new(1,-16,0,26); tabBar.Position = UDim2.new(0,8,0,6)
 tabBar.BackgroundTransparency = 1; tabBar.ZIndex = 4
@@ -688,8 +690,8 @@ closeBtn.MouseButton1Click:Connect(hideGui)
 miniBtn.MouseButton1Click:Connect(showGui)
 
 -- ===================================================================
--- Le drag-lock est géré uniquement par lockTitleBtn (bouton titre).
--- Aucun widget supplémentaire.
+-- Drag-lock is handled only by lockTitleBtn (title button).
+-- No additional widget.
 
 -- ===================================================================
 -- MOVEMENT LOGIC
@@ -725,7 +727,7 @@ end
 local function getCurrentSpeed()
 	local char = LP.Character
 	local hum = char and char:FindFirstChildOfClass("Humanoid")
-	-- Détection steal via WalkSpeed < 25 (logique jxsh)
+	-- Steal detection via WalkSpeed < 25 (jxsh logic)
 	local isSteal = hum and hum.WalkSpeed < 25
 	-- Auto Carry On Grab
 	if State.autoCarryOnGrab and isSteal and State.speedType ~= "carry" then
@@ -748,7 +750,7 @@ end
 LP.CharacterAdded:Connect(setupChar)
 if LP.Character then setupChar(LP.Character) end
 
-local _speedBoosterActive = false  -- contrôlé par le Speed Booster widget
+local _speedBoosterActive = false  -- controlled by the Speed Booster widget
 RunService.Stepped:Connect(function()
 	if not _speedBoosterActive then return end
 	if not (h and hrp) then return end
@@ -779,7 +781,7 @@ local function startAutoSteal()
 	_autoStealStarted = true
 	task.spawn(function()
 	-- LOGIQUE IRISH HUB
-	-- ===================================================================
+	-- IRISH HUB LOGIC
 	local IrishSync = { caches={}, connections={} }
 	local _animalsCache = {}
 	local _promptCache  = {}
@@ -944,7 +946,7 @@ local function startAutoSteal()
 					local prog = math.clamp((tick()-_stealStart)/CFG.HOLD_MAX, 0, 1)
 					if AutoSteal.ProgressFill then AutoSteal.ProgressFill.Size=UDim2.new(prog,0,1,0) end
 					if AutoSteal.ProgressText then AutoSteal.ProgressText.Text=math.floor(prog*100).."%" end
-					-- Passer en READY à 60% (40% restant)
+					-- Switch to READY at 60% (40% remaining)
 					if prog >= 0.6 and _stealState ~= "READY" then
 						_stealState = "READY"
 						if AutoSteal.StatusLabel then AutoSteal.StatusLabel.Text = "READY" end
@@ -1034,7 +1036,7 @@ local function tpToGround()
 	local char = LP.Character; if not char then return end
 	local root = char:FindFirstChild("HumanoidRootPart"); if not root then return end
 	local hum2 = char:FindFirstChildOfClass("Humanoid"); if not hum2 then return end
-	-- Logique Amir Hub : TP direct à Y fixe sol (-7.00) en conservant la rotation Y
+	-- Amir Hub logic: direct TP to fixed ground Y (-7.00), keeping Y rotation
 	root.CFrame = CFrame.new(root.Position.X, -7.00, root.Position.Z)
 		* CFrame.Angles(0, select(2, root.CFrame:ToEulerAnglesYXZ()), 0)
 	root.AssemblyLinearVelocity = Vector3.zero
@@ -1059,7 +1061,7 @@ local function runDropBrainrot()
 		if not r then dc:Disconnect(); _dropActive = false; return end
 		if tick() - t0 >= DROP_ASCEND_DURATION then
 			dc:Disconnect()
-			-- Raycast vers le sol
+			-- Raycast to the ground
 			local rp = RaycastParams.new()
 			rp.FilterDescendantsInstances = {char}
 			rp.FilterType = Enum.RaycastFilterType.Exclude
@@ -1073,7 +1075,7 @@ local function runDropBrainrot()
 			_dropActive = false
 			return
 		end
-		-- Phase ascension rapide
+		-- Fast ascent phase
 		r.AssemblyLinearVelocity = Vector3.new(r.AssemblyLinearVelocity.X, DROP_ASCEND_SPEED, r.AssemblyLinearVelocity.Z)
 	end)
 end
@@ -1123,7 +1125,7 @@ local function runPatrol(waypoints, enabledKey)
 		if dist < arriveDist then
 			if patrolIndex==2 then
 				patrolFrozen=true; patrolFreezeUntil=tick()+0.1; proxyStop()
-				-- Mode Half : reste au point 2, ne continue pas
+				-- Half mode: stays at point 2, does not continue
 				if State.autoPlayMode == "Half" then
 					State[enabledKey]=false
 					if patrolConnection then patrolConnection:Disconnect(); patrolConnection=nil end
@@ -1132,7 +1134,7 @@ local function runPatrol(waypoints, enabledKey)
 				return
 			end
 			patrolIndex = patrolIndex + 1
-			-- Mode Semi : s'arrête après waypoint 1
+			-- Semi mode: stops after waypoint 1
 			if State.autoPlayMode == "Semi" and patrolIndex > 1 then
 				proxyStop(); State[enabledKey]=false
 				if patrolConnection then patrolConnection:Disconnect(); patrolConnection=nil end
@@ -1228,10 +1230,10 @@ local function stopUnwalk()
 	local c=LP.Character
 	if c and savedAnimate then savedAnimate.Parent=c; savedAnimate.Disabled=false; savedAnimate=nil end
 end
--- Relance Unwalk après chaque respawn si actif
+-- Restart Unwalk after every respawn if active
 LP.CharacterAdded:Connect(function(char)
 	if State.unwalkEnabled then
-		State.unwalkEnabled = false  -- reset pour que startUnwalk accepte
+		State.unwalkEnabled = false  -- reset so startUnwalk accepts
 		savedAnimate = nil
 		task.wait(0.5)               -- laisser le character se charger
 		startUnwalk()
@@ -1344,7 +1346,7 @@ end
 -- ===================================================================
 -- ===================================================================
 -- MEDUSA COUNTER (logique raw__59_)
--- ===================================================================
+-- MEDUSA COUNTER (raw__59_ logic)
 local _medLastUsed = 0
 local _medDebounce = false
 local _medConns = {}
@@ -1399,7 +1401,7 @@ end
 LP.CharacterAdded:Connect(function(char) if State.medusaCounterEnabled then task.wait(0.5); setupMedusaCounter(char) end end)
 
 -- ANTI BAT (logique Envy — spike 1000 + restore XZ)
--- ===================================================================
+-- ANTI BAT (Envy logic — 1000 spike + XZ restore)
 local BC = {active=false, conn=nil}
 
 function BC.start()
@@ -1424,7 +1426,7 @@ end
 
 -- ===================================================================
 -- BAT AIMBOT + AIM BYPASS (logique raw__59_)
--- ===================================================================
+-- BAT AIMBOT + AIM BYPASS (raw__59_ logic)
 local VYSE_HIT_DIST = 5
 local AB_SPEED      = 58
 local AB_HIT_CD     = false
@@ -1464,7 +1466,7 @@ local function getClosestPlayerAim()
 	return closest,minDist
 end
 
--- Aimbot (prédiction + lerp 0.8)
+	-- Aimbot (prediction + 0.8 lerp)
 local AB = {active=false, conn=nil, SPEED=AB_SPEED, HEIGHT=3.7}
 function AB.start()
 	AB.active=true
@@ -1512,17 +1514,17 @@ end
 -- Aim Bypass (face tracking)
 -- ===================================================================
 -- AIM V3 (anti-desync + TP ennemi + frappe)
--- ===================================================================
+-- AIM V3 (anti-desync + enemy TP + strike)
 local AimV3 = {active=false, conn=nil}
 local _av3HitCD = false
 
 local function _av3GetBat()
 	local char=LP.Character; if not char then return nil end
-	-- Cherche "Bat" uniquement comme dans aimv3.txt (getBat simple)
+	-- Looks for "Bat" only, like in aimv3.txt (simple getBat)
 	local tool=char:FindFirstChild("Bat"); if tool then return tool end
 	local bp=LP:FindFirstChildOfClass("Backpack")
 	if bp then tool=bp:FindFirstChild("Bat"); if tool then tool.Parent=char; return tool end end
-	-- Fallback sur tous les outils de type batte (BAT_NAMES inclut déjà "Bat")
+	-- Fallback to all bat-type tools (BAT_NAMES already includes "Bat")
 	for _,n in ipairs(BAT_NAMES) do
 		local t=char:FindFirstChild(n); if t then return t end
 		if bp then t=bp:FindFirstChild(n); if t then t.Parent=char; return t end end
@@ -1562,19 +1564,19 @@ function AimV3.start()
 		local hum=char:FindFirstChildOfClass("Humanoid"); if not hum then return end
 		local target=_av3Nearest(root); if not target or not target.Character then return end
 		local tr=target.Character:FindFirstChild("HumanoidRootPart"); if not tr then return end
-		-- Anti-desync exact (sethiddenproperty PhysicsRepRootPart)
+		-- Exact anti-desync (sethiddenproperty PhysicsRepRootPart)
 		if sethiddenproperty then
 			pcall(function() sethiddenproperty(root,"PhysicsRepRootPart",tr) end)
 		end
-		-- TP sur l'ennemi si distance > 8
+		-- TP to enemy if distance > 8
 		local targetPos=tr.Position+Vector3.new(0,0.9,0)
 		if (root.Position-targetPos).Magnitude>8 then
 			root.CFrame=CFrame.new(targetPos)
 		end
-		-- Orienter caméra vers l'ennemi
+		-- Aim camera at enemy
 		local cam=workspace.CurrentCamera
 		if cam then cam.CFrame=CFrame.new(cam.CFrame.Position,tr.Position) end
-		-- Frapper
+		-- Strike
 		_av3Hit()
 	end)
 end
@@ -1582,7 +1584,7 @@ function AimV3.stop()
 	if AimV3.conn then AimV3.conn:Disconnect(); AimV3.conn=nil end; AimV3.active=false
 end
 
--- Aim V2 (logique Amir Hub — BAT_SPEED + HIT_DISTANCE)
+-- Aim V2 (Amir Hub logic — BAT_SPEED + HIT_DISTANCE)
 local ABP = {active=false, conn=nil}
 local ABP_BAT_SPEED    = 56.5
 local ABP_HIT_DISTANCE = 6.5
@@ -1699,7 +1701,7 @@ local setAimbotRowVisual
 local setAimbotV2RowVisual
 local setInfJumpRowVisual
 
--- Bat Counter (contre-attaque automatique quand ragdoll détecté) — table manquante, causait le crash du save
+	-- Bat Counter (automatic counter-attack when ragdoll detected) — missing table, was causing save crash
 local BatCounter = {active=false, conn=nil}
 local _bcDebounce = false
 function BatCounter.findBat()
@@ -1777,7 +1779,7 @@ buildPage("Combat", function()
 			holB.TextColor3 = IJ.mode=="hold" and Color3.fromRGB(0,10,20) or C_DIM
 			if IJ.active then IJ.stop(); IJ.start() end
 		end
-		updM() -- appliquer l'état initial
+		updM() -- apply initial state
 		manB.MouseButton1Click:Connect(function() IJ.mode="manual"; updM() end)
 		holB.MouseButton1Click:Connect(function() IJ.mode="hold"; updM() end)
 		makeDivider()
@@ -1832,32 +1834,38 @@ buildPage("Combat", function()
 	addLivingTextGradient(dropClk); dropClk.MouseButton1Click:Connect(runDropBrainrot)
 end)
 
--- Déclarés ici (avant buildPage Visual) pour être visibles dans applyScale.
--- Système de boutons flottants "spawnables" (remplace le Quick Panel fixe +
--- l'attach/detach) : chaque action a un toggle dans Settings qui fait
--- apparaître/disparaître son bouton flottant. "Lock" gèle le drag de tous
--- les boutons actuellement affichés.
+-- Declared here (before buildPage Visual) to be visible in applyScale.
+-- "Spawnable" floating button system (replaces the fixed Quick Panel +
+-- attach/detach): each action has a toggle in Settings that shows/hides
+-- its floating button. "Lock" freezes the drag of all
+-- currently displayed buttons.
 local _floatDefs      = {}   -- id -> {label, onClick, isActive, momentary}
 local _floatBtns      = {}   -- id -> {frame, setActive}
 local _floatPositions = {}   -- id -> {xs,xo,ys,yo}
 local _floatLocked    = false
 local FLOAT_SZ = 46
 
--- Déclarés ici (avant buildPage Settings) pour que les toggles Speed
--- Bypass / Lagger puissent référencer les widgets construits plus loin
--- dans le fichier — sinon la closure capture un global nil (même piège
--- que le bug mainFrame corrigé précédemment).
+-- Declared here (before buildPage Settings) so the Speed
+-- Bypass / Lagger toggles can reference the widgets built further
+-- down in the file — otherwise the closure captures a nil global (same
+-- trap as the mainFrame bug fixed earlier).
 local _sbBypassWidget  = nil
 local _lgrBypassWidget = nil
 
+-- Speed Booster "edited" size (via the Visual tab's Scale slider)
+-- — shared with the widget's "-" button so it doesn't revert
+-- to a hardcoded default size when shrinking/expanding.
+local _spExpandedSize = {w = 150, h = 160}
+local _spCollapsed    = false
+
 buildPage("Visual", function()
-	-- ── SCALE des boutons flottants ───────────────────────────────────
-	-- Taille des boutons spawnables. Echelle 1=min(40px) → 10=max(74px).
-	-- On stocke la valeur courante pour que le slider reflète l'état réel.
+	-- ── FLOATING BUTTON SCALE ─────────────────────────────────────────
+	-- Size of spawnable buttons. Scale 1=min(40px) → 10=max(74px).
+	-- Stores the current value so the slider reflects the real state.
 	UIB.makeSectionLabel("Button Size")
 	UIB.makeGap(2)
 
-	-- Affichage de la valeur courante
+	-- Display the current value
 	local scaleValLbl = Instance.new("TextLabel", currentPage)
 	scaleValLbl.Size = UDim2.new(1,0,0,18); scaleValLbl.BackgroundTransparency = 1
 	scaleValLbl.Text = "Scale: 5 / 10"
@@ -1865,7 +1873,7 @@ buildPage("Visual", function()
 	scaleValLbl.TextXAlignment = Enum.TextXAlignment.Left; scaleValLbl.LayoutOrder = LO()
 	addLivingTextGradient(scaleValLbl)
 
-	-- Piste du slider
+	-- Slider track
 	local trackWrap = Instance.new("Frame", currentPage)
 	trackWrap.Size = UDim2.new(1,0,0,32); trackWrap.BackgroundColor3 = C_ROW
 	trackWrap.BackgroundTransparency = 0.35; trackWrap.BorderSizePixel = 0; trackWrap.LayoutOrder = LO()
@@ -1877,20 +1885,20 @@ buildPage("Visual", function()
 	addCorner(track, 2)
 
 	local trackFill = Instance.new("Frame", track)
-	trackFill.Size = UDim2.new(0.4,0,1,0)   -- 0.4 = position initiale (scale 5 sur 10)
+	trackFill.Size = UDim2.new(0.4,0,1,0)   -- 0.4 = initial position (scale 5 of 10)
 	trackFill.BackgroundColor3 = C_MOON; trackFill.BorderSizePixel = 0
 	addCorner(trackFill, 2)
 	addLivingTextGradient(trackFill)
 
 	local thumb = Instance.new("TextButton", trackWrap)
 	thumb.Size = UDim2.new(0,16,0,16); thumb.AnchorPoint = Vector2.new(0.5,0.5)
-	thumb.Position = UDim2.new(0.4,14,0.5,0)   -- position initiale synchro fill
+	thumb.Position = UDim2.new(0.4,14,0.5,0)   -- initial position synced with fill
 	thumb.BackgroundColor3 = C_WHITE; thumb.BorderSizePixel = 0; thumb.Text = ""
 	thumb.AutoButtonColor = false; thumb.ZIndex = 5
 	addCorner(thumb, 8); addLivingStroke(thumb, 1)
 
-	-- Logique drag du slider (sans dragPosLabel)
-	local _scaleVal = 5     -- valeur courante 1–10
+	-- Slider drag logic (no dragPosLabel)
+	local _scaleVal = 5     -- current value 1-10
 	local _thumbDrag = false
 	local _trackAbsX, _trackAbsW = 0, 1
 
@@ -1901,7 +1909,7 @@ buildPage("Visual", function()
 		thumb.Position = UDim2.new(0, 14 + t * math.max(_trackAbsW - 1, 1), 0.5, 0)
 		scaleValLbl.Text = "Scale: " .. _scaleVal .. " / 10"
 
-		-- Range : 34px (scale 1) → 70px (scale 10) — taille des boutons flottants
+		-- Range: 34px (scale 1) → 70px (scale 10) — floating button size
 		local newSz = 34 + math.floor((_scaleVal - 1) * (70 - 34) / 9)
 		FLOAT_SZ = newSz
 		for _, entry in pairs(_floatBtns) do
@@ -1933,7 +1941,7 @@ buildPage("Visual", function()
 			_thumbDrag = false
 		end
 	end)
-	-- Clic direct sur la piste
+	-- Direct click on the track
 	local trackBtn = Instance.new("TextButton", trackWrap)
 	trackBtn.Size = UDim2.new(1,0,1,0); trackBtn.BackgroundTransparency = 1; trackBtn.Text = ""
 	trackBtn.ZIndex = 4
@@ -1945,7 +1953,7 @@ buildPage("Visual", function()
 		applyScale(1 + rel * 9)
 	end)
 
-	-- ── UI SCALE (taille du hub principal) ───────────────────────────
+	-- ── UI SCALE (main hub size) ──────────────────────────────────────
 	UIB.makeGap(6)
 	UIB.makeSectionLabel("UI Scale")
 
@@ -1994,15 +2002,15 @@ buildPage("Visual", function()
 		uiScaleValLbl.Text  = "Scale: " .. _uiScaleVal .. " / 10"
 		local factor = 0.6 + t * 0.8
 		if mainOuter and mainOuter.Parent then
-			-- UIScale redimensionne tout proportionnellement (texte, rows, espacement)
-			-- au lieu de juste réduire la taille du cadre — plus rien n'est coupé
-			-- par ClipsDescendants, contrairement à l'ancien redimensionnement direct.
+			-- UIScale resizes everything proportionally (text, rows, spacing)
+			-- instead of just shrinking the frame — nothing gets cut off
+			-- by ClipsDescendants, unlike the old direct resize.
 			mainUIScale.Scale = factor
 			local scaledW = WIN_W * factor
 			mainOuter.Position = UDim2.new(0.5, -scaledW/2, 0.5, -137)
 		end
 	end
-	_G._MH_applyUIScale = applyUIScale  -- exposé une fois, pas seulement au 1er appel
+	_G._MH_applyUIScale = applyUIScale  -- exposed once, not only on the 1st call
 
 	uiThumb.InputBegan:Connect(function(inp)
 		if inp.UserInputType == Enum.UserInputType.MouseButton1
@@ -2105,7 +2113,13 @@ buildPage("Visual", function()
 			local aw=spScTrk.AbsoluteSize.X; if aw>2 then spScThumb.Position=UDim2.new(0,14+t*aw,0.5,0) end
 			spScaleValLbl.Text="Scale: ".._sv.." / 10"
 			local f=0.6+t*0.8
-			if _G._MH_spW then _G._MH_spW.Size=UDim2.new(0,math.floor(SP_W*f),0,math.floor(SP_H*f)) end
+			_spExpandedSize.w = math.floor(SP_W*f)
+			_spExpandedSize.h = math.floor(SP_H*f)
+			-- Only resize visually if the widget isn't collapsed
+			-- ("-"), otherwise the edited size is just remembered for later.
+			if _G._MH_spW and not _spCollapsed then
+				_G._MH_spW.Size=UDim2.new(0,_spExpandedSize.w,0,_spExpandedSize.h)
+			end
 		end
 		spScThumb.InputBegan:Connect(function(inp)
 			if inp.UserInputType==Enum.UserInputType.MouseButton1 or inp.UserInputType==Enum.UserInputType.Touch then _sd=true end
@@ -2125,12 +2139,12 @@ end)
 
 buildPage("Keybind", function()
 	-- ================================================================
-	-- Système de keybind : clavier PC + manette PlayStation/Xbox
-	-- Inspiré d'Amir Hub — un bouton "..." par action, clic → écoute
-	-- la prochaine touche pressée (clavier ou gamepad)
+	-- Keybind system: PC keyboard + PlayStation/Xbox controller
+	-- Inspired by Amir Hub — one "..." button per action, click → listens
+	-- for the next key pressed (keyboard or gamepad)
 	-- ================================================================
 
-	-- Table centrale des bindings (exposée pour sauvegarde)
+	-- Central bindings table (exposed for saving)
 	local KB = _G.MH_KB or {
 		AntiBatAimbot = {key=nil, gp=nil},
 		DropBR        = {key=nil, gp=nil},
@@ -2158,7 +2172,7 @@ buildPage("Keybind", function()
 		[Enum.KeyCode.DPadLeft]=true,[Enum.KeyCode.DPadRight]=true,
 	}
 
-	-- Noms courts lisibles pour affichage dans le bouton
+	-- Short readable names for display on the button
 	local function keyName(kc)
 		if not kc then return "—" end
 		local n = tostring(kc):gsub("Enum.KeyCode.", "")
@@ -2176,7 +2190,7 @@ buildPage("Keybind", function()
 		return map[n] or n:sub(1,6)
 	end
 
-	local _currentListeningBtn = nil  -- référence au bouton en écoute, un seul à la fois
+	local _currentListeningBtn = nil  -- reference to the listening button, only one at a time
 
 	local function makeKBRow(labelTxt, entry)
 		local row = Instance.new("Frame", currentPage)
@@ -2216,13 +2230,13 @@ buildPage("Keybind", function()
 		end
 
 		kbBtn.MouseButton1Click:Connect(function()
-			-- Si ce bouton écoute déjà → annule
+			-- If this button is already listening → cancel
 			if _currentListeningBtn == kbBtn then
 				stopListening(); return
 			end
-			-- Si un autre bouton écoute → l'annule d'abord (via son propre conn)
+			-- If another button is listening → cancel it first (via its own conn)
 			if _currentListeningBtn then
-				-- le bouton précédent se nettoyera via son timeout ou son prochain clic
+				-- the previous button will clean itself up via its timeout or next click
 				_currentListeningBtn = nil
 			end
 			_currentListeningBtn = kbBtn
@@ -2241,13 +2255,13 @@ buildPage("Keybind", function()
 				stopListening(keyName(inp.KeyCode))
 			end)
 
-			-- Timeout 6s si aucune touche pressée
+			-- 6s timeout if no key is pressed
 			timeoutThread = task.delay(6, function()
 				stopListening(prev)
 			end)
 		end)
 
-		-- ✕ efface
+		-- ✕ clears
 		local clrBtn = Instance.new("TextButton", row)
 		clrBtn.Size = UDim2.new(0,14,0,14); clrBtn.Position = UDim2.new(1,-158,0.5,-7)
 		clrBtn.BackgroundColor3 = C_RED; clrBtn.BackgroundTransparency = 0.4
@@ -2286,12 +2300,12 @@ buildPage("Keybind", function()
 	UIB.makeGap(6)
 	local hint = Instance.new("TextLabel", currentPage)
 	hint.Size = UDim2.new(1,0,0,28); hint.BackgroundTransparency = 1; hint.LayoutOrder = LO()
-	hint.Text = "Clic → écoute   |   ✕ → effacer   |   PC & PS/Xbox"
+	hint.Text = "Click → listen   |   ✕ → clear   |   PC & PS/Xbox"
 	hint.TextColor3 = C_DIM; hint.Font = Enum.Font.Gotham; hint.TextSize = 9
 	addLivingTextGradient(hint)
 
 	-- ================================================================
-	-- Boucle globale UIS.InputBegan — déclenche les actions bindées
+	-- Global UIS.InputBegan loop — triggers the bound actions
 	-- ================================================================
 	UIS.InputBegan:Connect(function(inp, gpe)
 		if gpe then return end
@@ -2334,7 +2348,7 @@ buildPage("Keybind", function()
 end)
 
 -- ===================================================================
--- REVUL ANTI LAGGER — moteur (snapshot + restore, DescendantAdded hook)
+-- REVUL ANTI LAGGER — engine (snapshot + restore, DescendantAdded hook)
 -- ===================================================================
 local RevulAL = {active=false, conn=nil}
 local _ralOrigLighting = {
@@ -2347,7 +2361,7 @@ local _ralOrigLighting = {
 local _ralOrigPostFX = {}
 local _ralOrigParts  = {}
 
--- Snapshot initial de tous les descendants workspace
+-- Initial snapshot of all workspace descendants
 local function _ralSnapshot()
 	_ralOrigPostFX = {}
 	for _, fx in ipairs(Lighting:GetChildren()) do
@@ -2367,7 +2381,7 @@ end
 
 local function _ralApplyObj(obj)
 	if not _ralOrigParts[obj] then
-		-- snapshot pour les nouveaux objets streamés
+		-- snapshot for newly streamed objects
 		if obj:IsA("ParticleEmitter") or obj:IsA("Smoke") or obj:IsA("Fire") or obj:IsA("Sparkles") then
 			_ralOrigParts[obj] = {Enabled=obj.Enabled}
 		elseif obj:IsA("Decal") or obj:IsA("Texture") then
@@ -2433,7 +2447,7 @@ buildPage("Optimize", function()
 	UIB.makeToggleRow("Anti-Lag Booster",false,function(on) if on then ralStart() else ralStop() end end)
 	UIB.makeToggleRow("Ultra Mode",false,function(on)
 		if on then
-			-- Logique raw__59_ : plastifie tout, désactive decals/particles
+			-- raw__59_ logic: plastic-coats everything, disables decals/particles
 			Lighting.GlobalShadows=false; Lighting.FogEnd=1e10; Lighting.Brightness=1
 			Lighting.EnvironmentDiffuseScale=0; Lighting.EnvironmentSpecularScale=0
 			for _,e in pairs(Lighting:GetChildren()) do pcall(function()
@@ -2513,7 +2527,7 @@ end)
 -- ===================================================================
 -- ANTI BAT WIDGET
 -- ===================================================================
--- Logique Anti Bat + Infinite Jump (sans widget — via bouton QP uniquement)
+-- Anti Bat + Infinite Jump logic (no widget — via QP button only)
 applyAntiBatState=function(on)
 	BC.active=on; if on then BC.start() else BC.stop() end
 	if on then
@@ -2524,7 +2538,7 @@ applyAntiBatState=function(on)
 end
 
 -- ===================================================================
--- SPEED WIDGET (jxsh — style Anti Bat)
+-- SPEED WIDGET (jxsh — Anti Bat style)
 -- ===================================================================
 local function _buildSpeedWidget()
 local spW=Instance.new("Frame",gui)
@@ -2543,17 +2557,17 @@ spTitleLbl.Size=UDim2.new(1,-46,1,0); spTitleLbl.Position=UDim2.new(0,16,0,0)
 spTitleLbl.BackgroundTransparency=1; spTitleLbl.Text="SPEED BOOSTER"
 spTitleLbl.TextColor3=C_WHITE; spTitleLbl.Font=Enum.Font.GothamBlack; spTitleLbl.TextSize=9
 spTitleLbl.TextXAlignment=Enum.TextXAlignment.Left; addLivingTextGradient(spTitleLbl)
--- Bouton minimize : replié par défaut = déplié (Normal/Lagger visibles),
--- l'utilisateur peut cliquer "-" pour replier s'il le souhaite
-local spCollapsed=false; local spFullH=160; local spCollapsedH=64
+-- Minimize button: collapsed by default = expanded (Normal/Lagger visible),
+-- the user can click "-" to collapse it if they want
+local spCollapsedH=64
 local spMinBtn=Instance.new("TextButton",spH)
 spMinBtn.Size=UDim2.new(0,18,0,18); spMinBtn.Position=UDim2.new(1,-24,0.5,-9)
 spMinBtn.BackgroundColor3=Color3.fromRGB(30,30,34); spMinBtn.BorderSizePixel=0
 spMinBtn.Text="-"; spMinBtn.TextColor3=C_WHITE; spMinBtn.Font=Enum.Font.GothamBlack; spMinBtn.TextSize=15
 addCorner(spMinBtn,6); addLivingStroke(spMinBtn,1)
--- Le clic est connecté plus bas (après stRow/spNorm/spLag/_spLagger)
--- pour garder NORMAL/LAGGER visibles et utilisables même replié.
--- Tabs NORMAL / LAGGER
+-- The click is connected further down (after stRow/spNorm/spLag/_spLagger)
+-- to keep NORMAL/LAGGER visible and usable even when collapsed.
+-- NORMAL / LAGGER Tabs
 local tabRow=Instance.new("Frame",spW)
 tabRow.Size=UDim2.new(1,-16,0,26); tabRow.Position=UDim2.new(0,8,0,32)
 tabRow.BackgroundColor3=C_ROW; tabRow.BackgroundTransparency=0.35
@@ -2622,7 +2636,7 @@ local function mkInput(parent,yPos,lbl,val,cb,stateKey)
 	end)
 	if stateKey then _mhInputBoxes[stateKey] = box end
 end
--- Panneaux Normal / Lagger
+-- Normal / Lagger panels
 local spNorm=Instance.new("Frame",spW)
 spNorm.Size=UDim2.new(1,0,0,68); spNorm.Position=UDim2.new(0,0,0,96)
 spNorm.BackgroundTransparency=1; spNorm.BorderSizePixel=0
@@ -2633,11 +2647,11 @@ spLag.Size=UDim2.new(1,0,0,68); spLag.Position=UDim2.new(0,0,0,96)
 spLag.BackgroundTransparency=1; spLag.BorderSizePixel=0; spLag.Visible=false
 mkInput(spLag,0,  "Lagger",    State.laggerSpeed,     function(n) State.laggerSpeed=n end, "laggerSpeed")
 mkInput(spLag,40, "Lag Steal", State.laggerCarrySpeed, function(n) State.laggerCarrySpeed=n end, "laggerCarrySpeed")
--- Logique jxsh exacte — utilise proxyMove + State comme le hub
+-- Exact jxsh logic — uses proxyMove + State like the hub
 local _spActive=false; local _spLagger=false
 local function startSp()
 	_speedBoosterActive = true
-	-- Active le mode lagger ou normal via State (proxyMove l'utilise automatiquement)
+	-- Activates lagger or normal mode via State (proxyMove uses it automatically)
 	if _spLagger then
 		State.laggerActive=true; State.laggerCarryActive=false
 	else
@@ -2647,7 +2661,7 @@ local function startSp()
 end
 local function stopSp()
 	_speedBoosterActive = false
-	-- Désactive tout et arrête le proxy
+	-- Disables everything and stops the proxy
 	State.laggerActive=false; State.laggerCarryActive=false
 	State.speedType="normal"
 	proxyStop()
@@ -2677,21 +2691,27 @@ end
 spTabN.MouseButton1Click:Connect(function() switchTab(false) end)
 spTabL.MouseButton1Click:Connect(function() switchTab(true) end)
 
--- Replié ("-") : NORMAL/LAGGER restent visibles et utilisables, seuls le
--- Status et les champs de vitesse sont masqués.
+-- Collapsed ("-"): NORMAL/LAGGER stay visible and usable, only
+-- Status and the speed fields are hidden.
 spMinBtn.MouseButton1Click:Connect(function()
-	spCollapsed=not spCollapsed
-	spW.Size=UDim2.new(0,150,0,spCollapsed and spCollapsedH or spFullH)
-	spMinBtn.Text=spCollapsed and "+" or "-"
-	stRow.Visible = not spCollapsed
-	if spCollapsed then
+	_spCollapsed = not _spCollapsed
+	if _spCollapsed then
+		spW.Size=UDim2.new(0,_spExpandedSize.w,0,spCollapsedH)
+	else
+		-- Restores the size edited via the Scale slider (Visual), not a
+		-- hardcoded default size.
+		spW.Size=UDim2.new(0,_spExpandedSize.w,0,_spExpandedSize.h)
+	end
+	spMinBtn.Text=_spCollapsed and "+" or "-"
+	stRow.Visible = not _spCollapsed
+	if _spCollapsed then
 		spNorm.Visible=false; spLag.Visible=false
 	else
 		spNorm.Visible = not _spLagger; spLag.Visible = _spLagger
 	end
 end)
 
--- Scale slider (même style que UIScale dans Visual)
+-- Scale slider (same style as UIScale in Visual)
 
 end
 _buildSpeedWidget()
@@ -2767,7 +2787,7 @@ local function _setReadyColor(state)
 	local isReady = (state == "READY")
 	local col = isReady and C_MOON or C_RED
 	lbl.TextColor3 = col
-	-- Changer le gradient animé du label
+	-- Change the label's animated gradient
 	local g = lbl:FindFirstChildOfClass("UIGradient")
 	if g then
 		local c1 = isReady and Color3.fromRGB(20,70,140)  or Color3.fromRGB(120,20,20)
@@ -2793,8 +2813,8 @@ RunService.RenderStepped:Connect(function()
 		lastFps=math.floor(frameCount/(now-lastFpsTime)); frameCount=0; lastFpsTime=now; refreshInfoLabel()
 	end
 end)
--- Ne met à jour lastPing que si le fetch a réussi, sinon on garde la
--- dernière valeur connue au lieu de retomber sur 0 (bug affichage bloqué à "0ms").
+-- Only update lastPing if the fetch succeeded, otherwise keep the
+-- last known value instead of falling back to 0 (bug: display stuck at "0ms").
 task.spawn(function()
 	while stealWidget.Parent do
 		local success, ping = pcall(function()
@@ -2816,10 +2836,23 @@ end)
 end
 
 -- ===================================================================
--- FLOATING BUTTONS — remplace le Quick Panel fixe + l'attach/detach.
--- Chaque action a un toggle dans Settings qui fait spawn/despawn son
--- propre bouton flottant carré. "Lock" gèle le drag une fois placés.
+-- FLOATING BUTTONS — replaces the fixed Quick Panel + attach/detach.
+-- Each action has a toggle in Settings that spawns/despawns its
+-- own floating square button. "Lock" freezes the drag once placed.
 -- ===================================================================
+-- Stable order (independent of activation order) so buttons
+-- always line up in the same place, on the right of the screen, in a column.
+local _FLOAT_ID_ORDER = {
+	"antibat","aimbot","aimv2","dropbr","autoleft",
+	"autoright","tpdown","battp","instareset",
+}
+local function _floatIdIndex(id)
+	for i, fid in ipairs(_FLOAT_ID_ORDER) do
+		if fid == id then return i end
+	end
+	return #_FLOAT_ID_ORDER + 1
+end
+
 local function makeFloatButton(id)
 	if _floatBtns[id] then return _floatBtns[id] end
 	local def = _floatDefs[id]; if not def then return nil end
@@ -2831,9 +2864,9 @@ local function makeFloatButton(id)
 	if saved then
 		btn.Position = UDim2.new(saved[1], saved[2], saved[3], saved[4])
 	else
-		local n = 0
-		for _ in pairs(_floatBtns) do n = n + 1 end
-		btn.Position = UDim2.new(0, 30 + (n % 5) * (FLOAT_SZ + 8), 0, 220 + math.floor(n / 5) * (FLOAT_SZ + 8))
+		-- Column lined up on the right of the screen, in the order defined above
+		local idx = _floatIdIndex(id) - 1
+		btn.Position = UDim2.new(1, -(FLOAT_SZ + 12), 0, 80 + idx * (FLOAT_SZ + 8))
 	end
 	btn.BackgroundColor3 = C_ROW; btn.BackgroundTransparency = 0; btn.BorderSizePixel = 0
 	btn.Text = def.label; btn.TextColor3 = C_WHITE; btn.Font = Enum.Font.GothamBold
@@ -2849,7 +2882,7 @@ local function makeFloatButton(id)
 		TweenService:Create(btn, TweenInfo.new(0.15), {BackgroundTransparency = 0}):Play()
 	end
 
-	-- Drag (désactivé quand verrouillé)
+	-- Drag (disabled when locked)
 	local drag, ds, dp = false, nil, nil
 	btn.InputBegan:Connect(function(inp)
 		if _floatLocked then return end
@@ -2897,8 +2930,8 @@ local function setFloatLocked(on)
 	_floatLocked = on
 end
 
--- Sync périodique des visuels (état ON/OFF réel, peu importe d'où vient
--- le changement — clic sur le bouton, keybind, ou autre toggle)
+-- Periodic visual sync (real ON/OFF state, no matter where
+-- the change came from — clicking the button, a keybind, or another toggle)
 task.spawn(function()
 	while gui.Parent do
 		for id, entry in pairs(_floatBtns) do
@@ -2911,7 +2944,7 @@ task.spawn(function()
 	end
 end)
 
--- ── Enregistrement des actions ──────────────────────────────────────
+-- ── Action registration ──────────────────────────────────────
 _floatDefs.antibat = {
 	label = "ANTIBAT\nAIMBOT",
 	onClick = function() applyAntiBatState(not BC.active) end,
@@ -2961,7 +2994,7 @@ _floatDefs.battp = {
 }
 
 -- ===================================================================
--- INSTA RESET — logique intégrée depuis InstaReset script
+-- INSTA RESET — logic integrated from the InstaReset script
 -- ===================================================================
 do
 	local IR_GUID        = "f888ee6e-c86d-46e1-93d7-0639d6635d42"
@@ -2987,7 +3020,7 @@ do
 			end
 		end)
 	end
-	_G.MH_instareset = function() instareset("balloon") end  -- exposé au keybind
+	_G.MH_instareset = function() instareset("balloon") end  -- exposed to the keybind
 
 	_floatDefs.instareset = {
 		label = "INSTANT\nRESET",
@@ -3012,8 +3045,8 @@ _G._MH_floatPositions    = _floatPositions
 
 -- ===================================================================
 -- STUN TIMER BILLBOARD (au-dessus du personnage)
--- 3 → rouge | 2 → jaune | 1 → cyan | 0 → "GO" vert
--- ===================================================================
+-- STUN TIMER BILLBOARD (above the character)
+-- 3 → red | 2 → yellow | 1 → cyan | 0 → "GO" green
 do
 	local STUN_DURATION   = 3.0
 	local stunActive      = false
@@ -3035,7 +3068,7 @@ do
 		bbGui.Size = UDim2.new(0,130,0,52)
 		bbGui.StudsOffset = Vector3.new(0,3.5,0)
 		bbGui.AlwaysOnTop = true
-		-- Label "speed" (au-dessus) — style dégradé vivant Moon Hub
+		-- "speed" label (above) — Moon Hub living-gradient style
 		speedLbl = Instance.new("TextLabel", bbGui)
 		speedLbl.Size = UDim2.new(1,0,0,22)
 		speedLbl.Position = UDim2.new(0,0,0,0)
@@ -3047,7 +3080,7 @@ do
 		speedLbl.TextStrokeTransparency = 0.35
 		speedLbl.TextStrokeColor3 = Color3.fromRGB(0,0,0)
 		addLivingTextGradient(speedLbl)
-		-- Label READY!! / timer (en dessous)
+		-- READY!! / timer label (below)
 		timerLbl = Instance.new("TextLabel", bbGui)
 		timerLbl.Size = UDim2.new(1,0,0,28)
 		timerLbl.Position = UDim2.new(0,0,0,24)
@@ -3112,7 +3145,7 @@ do
 	end)
 	if LP.Character then task.wait(0.1); createBB(); setupDetection(LP.Character) end
 
-	-- Mise à jour vitesse — calcul delta position/temps (vraie vitesse mesurée, pas la propriété)
+	-- Speed update — delta position/time calculation (real measured speed, not the property)
 	local _lastPos, _lastT = nil, tick()
 	RunService.RenderStepped:Connect(function()
 		if not speedLbl or not speedLbl.Parent then return end
@@ -3131,8 +3164,8 @@ do
 		_lastPos, _lastT = pos, now
 	end)
 
-	-- Vitesse des autres joueurs (billboard au-dessus de leur tête)
-	-- Vitesse des autres joueurs — un seul Heartbeat global
+	-- Other players' speed (billboard above their head)
+	-- Other players' speed — a single global Heartbeat
 	local _playerSpeedBBs = {}  -- plr → {bb, lbl, char}
 	_G._MH_playerSpeedBBs = _playerSpeedBBs
 
@@ -3159,7 +3192,7 @@ do
 		plr.CharacterAdded:Connect(function(char) task.spawn(function() attachBB(char) end) end)
 	end
 
-	-- Un seul Heartbeat pour tous les joueurs — delta position/temps
+	-- A single Heartbeat for all players — delta position/time
 	RunService.Heartbeat:Connect(function()
 		local now = tick()
 		for plr, data in pairs(_playerSpeedBBs) do
@@ -3196,12 +3229,12 @@ do
 end
 
 -- ===================================================================
--- SYSTÈME AUTO-SAVE (debounce + états complets, façon raw__72_)
+-- AUTO-SAVE SYSTEM (debounce + full states, raw__72_ style)
 -- ===================================================================
 local HS      = game:GetService("HttpService")
 local MH_FILE = "rbxdata_mhv3x_" .. tostring(LP.UserId) .. ".json"
 local _saveDebounce = false
-print("[MoonHub] Save file pour "..LP.Name.." (UserId "..tostring(LP.UserId).."): "..MH_FILE)
+print("[MoonHub] Save file for "..LP.Name.." (UserId "..tostring(LP.UserId).."): "..MH_FILE)
 
 local function ks(e)
 	return {
@@ -3210,8 +3243,8 @@ local function ks(e)
 	}
 end
 
--- Sauvegarde différée (0.5s) pour regrouper les changements rapprochés
--- Utilise task.spawn + task.wait au lieu de task.delay (meilleure compatibilité executor)
+-- Deferred save (0.5s) to batch fast successive changes
+-- Uses task.spawn + task.wait instead of task.delay (better executor compatibility)
 local function MH_save()
 	if _saveDebounce then return end
 	_saveDebounce = true
@@ -3247,7 +3280,7 @@ local function MH_save()
 					return ids
 				end)(),
 				floatPositions = _floatPositions,
-				floatLocked = _floatLocked,
+				uiLocked = _uiLocked,
 				kb = {
 					AntiBatAimbot = ks(kb.AntiBatAimbot),
 					DropBR        = ks(kb.DropBR),
@@ -3265,37 +3298,37 @@ local function MH_save()
 			}
 			if writefile then
 				writefile(MH_FILE, HS:JSONEncode(data))
-				print("[MoonHub] Config sauvegardée → "..MH_FILE)
+				print("[MoonHub] Config saved → "..MH_FILE)
 			else
-				warn("[MoonHub] writefile indisponible — executor ne supporte pas la sauvegarde")
+				warn("[MoonHub] writefile unavailable — executor does not support saving")
 			end
 		end)
-		if not ok then warn("[MoonHub] MH_save erreur — modules manquants ?") end
+		if not ok then warn("[MoonHub] MH_save error — missing modules?") end
 		_saveDebounce = false
 	end)
 end
 _G._MH_autoSave = MH_save
 
--- Chargement : pousse direct les valeurs dans State, les widgets ET redémarre les modules actifs
+-- Loading: pushes values straight into State, the widgets, AND restarts active modules
 local function MH_load()
 	local ok, data = pcall(function()
-		if type(readfile) ~= "function" then warn("[MoonHub] readfile absent sur cet executor"); return nil end
-		if type(isfile) ~= "function" then warn("[MoonHub] isfile absent sur cet executor"); return nil end
+		if type(readfile) ~= "function" then warn("[MoonHub] readfile missing on this executor"); return nil end
+		if type(isfile) ~= "function" then warn("[MoonHub] isfile missing on this executor"); return nil end
 		local fileExists = false
 		local fOk, fErr = pcall(function() fileExists = isfile(MH_FILE) end)
-		if not fOk then warn("[MoonHub] isfile a levé une erreur: "..tostring(fErr)); return nil end
+		if not fOk then warn("[MoonHub] isfile raised an error: "..tostring(fErr)); return nil end
 		if not fileExists then return nil end
 		local rOk, rContent = pcall(function() return readfile(MH_FILE) end)
-		if not rOk then warn("[MoonHub] readfile a levé une erreur: "..tostring(rContent)); return nil end
+		if not rOk then warn("[MoonHub] readfile raised an error: "..tostring(rContent)); return nil end
 		local dOk, decoded = pcall(function() return HS:JSONDecode(rContent) end)
-		if not dOk then warn("[MoonHub] JSONDecode a échoué: "..tostring(decoded)); return nil end
+		if not dOk then warn("[MoonHub] JSONDecode failed: "..tostring(decoded)); return nil end
 		return decoded
 	end)
 	if not ok or not data then
-		print("[MoonHub] Aucune config trouvée pour "..LP.Name.." ("..MH_FILE..") — valeurs par défaut")
+		print("[MoonHub] No config found for "..LP.Name.." ("..MH_FILE..") — using defaults")
 		return false
 	end
-	print("[MoonHub] Config chargée pour "..LP.Name.." ← "..MH_FILE)
+	print("[MoonHub] Config loaded for "..LP.Name.." ← "..MH_FILE)
 
 	local loadOk = pcall(function()
 		if data.normalSpeed then State.normalSpeed=data.normalSpeed
@@ -3375,7 +3408,7 @@ local function MH_load()
 			end
 		end
 
-		-- Boutons flottants : positions d'abord, puis spawn, puis lock
+		-- Floating buttons: positions first, then spawn, then lock
 		if type(data.floatPositions) == "table" then
 			for id, pos in pairs(data.floatPositions) do
 				_floatPositions[id] = pos
@@ -3387,21 +3420,20 @@ local function MH_load()
 				if _floatRowSetters[id] then _floatRowSetters[id](true) end
 			end
 		end
-		if type(data.floatLocked) == "boolean" then
-			setFloatLocked(data.floatLocked)
-			if _floatLockRowSetter then _floatLockRowSetter(data.floatLocked) end
+		if type(data.uiLocked) == "boolean" and data.uiLocked then
+			setDragLock(true)
+			lockTitleBtn.Text = "🔒"; lockTitleBtn.TextColor3 = C_RED
 		end
 	end)
-	if not loadOk then warn("[MoonHub] MH_load a échoué en cours de route — vérifier les modules référencés") end
+	if not loadOk then warn("[MoonHub] MH_load failed partway through — check referenced modules") end
 
 	return true
 end
 
 local _floatRowSetters = {}
-local _floatLockRowSetter = nil
-buildPage("Boutons", function()
-	-- Tout en haut : toggle direct qui spawn le widget Speed Booster
-	-- lui-même (pas un bouton flottant intermédiaire), affiché au premier plan.
+buildPage("Buttons", function()
+	-- Right at the top: direct toggle that spawns the Speed Booster widget
+	-- itself (not an intermediary floating button), shown in front.
 	UIB.makeSectionLabel("Speed Booster")
 	UIB.makeToggleRow("Speed Booster", false, function(on)
 		if _G._MH_spW then
@@ -3411,8 +3443,7 @@ buildPage("Boutons", function()
 	end)
 	UIB.makeGap(4)
 
-	UIB.makeSectionLabel("Boutons flottants")
-	_floatLockRowSetter = UIB.makeToggleRow("Verrouiller (Lock)", false, function(on) setFloatLocked(on) end)
+	UIB.makeSectionLabel("Floating Buttons")
 	UIB.makeGap(2)
 
 	local FLOAT_LABELS = {
@@ -3464,7 +3495,7 @@ buildPage("Settings", function()
 	UIB.makeSectionLabel("UI Scale")
 	UIB.makeGap(2)
 	do
-		-- S=1, M=4, L=7, XL=10 (sur échelle 1-10 de applyUIScale)
+		-- S=1, M=4, L=7, XL=10 (on applyUIScale's 1-10 scale)
 		local presets = {{"S",1},{"M",4},{"L",7},{"XL",10}}
 		local scRow = Instance.new("Frame", currentPage)
 		scRow.Size = UDim2.new(1,0,0,34); scRow.BackgroundColor3 = C_ROW
@@ -3500,7 +3531,7 @@ buildPage("Settings", function()
 	UIB.makeSectionLabel("Bypass")
 	UIB.makeToggleRow("Speed Bypass", false, function(on)
 		if _sbBypassWidget then _sbBypassWidget.Visible = on end
-		-- Déclenche réellement le bypass (pas juste l'affichage du panneau)
+		-- Actually triggers the bypass (not just showing the panel)
 		if _G._MH_speedBypassToggle then
 			local isActive = _G._MH_speedBypassIsActive and _G._MH_speedBypassIsActive() or false
 			if isActive ~= on then _G._MH_speedBypassToggle() end
@@ -3510,7 +3541,7 @@ buildPage("Settings", function()
 		if _lgrBypassWidget then _lgrBypassWidget.Visible = on end
 	end)
 
-	-- ── ANIMATION CHANGER (22 packs, navigation ◀ ▶) ──────────────
+	-- ── ANIMATION CHANGER (22 packs, ◀ ▶ navigation) ──────────────
 	UIB.makeGap(4)
 	UIB.makeSectionLabel("Animation Changer")
 	do
@@ -3542,8 +3573,8 @@ buildPage("Settings", function()
 		local _animEnabled = false
 		local _animIndex = 1
 
-		-- Méthode robuste : Animator:LoadAnimation direct + boucle Heartbeat qui
-		-- réapplique en continu (contourne les cas où le jeu regénère Animate)
+		-- Robust method: direct Animator:LoadAnimation + Heartbeat loop that
+		-- keeps reapplying (handles cases where the game regenerates Animate)
 		local _animTracks = {}
 		local function stopAllTracks()
 			for _, tr in ipairs(_animTracks) do pcall(function() tr:Stop(0) end) end
@@ -3575,7 +3606,7 @@ buildPage("Settings", function()
 					end
 				end
 			end
-			-- Aussi appliquer via Animate script (fallback pour walk/run/jump réels)
+			-- Also apply via Animate script (fallback for real walk/run/jump)
 			local animate = c:FindFirstChild("Animate")
 			if animate then
 				local function setAnim(folder,slot,id)
@@ -3598,7 +3629,7 @@ buildPage("Settings", function()
 			stopAllTracks()
 		end
 
-		-- Row navigation : ◀  [Nom]  ▶
+		-- Navigation row: ◀  [Name]  ▶
 		local animRow = Instance.new("Frame", currentPage)
 		animRow.Size=UDim2.new(1,0,0,36); animRow.BackgroundColor3=C_ROW
 		animRow.BackgroundTransparency=0.35; animRow.BorderSizePixel=0; animRow.LayoutOrder=LO()
@@ -3654,12 +3685,12 @@ buildPage("Settings", function()
 			end
 		end)
 	end
-end);  -- point-virgule obligatoire (sinon fusion ambigüe avec (function() suivant)
+end);  -- required semicolon (otherwise ambiguous merge with the (function() below)
 
 -- ===================================================================
 -- ===================================================================
 -- ===================================================================
--- SPEED BYPASS (style Moon Hub — bleu, +/- power, logique lag Cz exacte)
+-- SPEED BYPASS (Moon Hub style — blue, +/- power, exact Cz lag logic)
 -- ===================================================================
 (function()
 local activated = false
@@ -3845,9 +3876,10 @@ LP.CharacterAdded:Connect(function()
 	task.wait(1)
 	if activated then stopLag(); activated = true; startLag() end
 end)
-end)();  -- point-virgule obligatoire (sinon fusion ambigüe avec (function() suivant)
+end)();  -- required semicolon (otherwise ambiguous merge with the (function() below)
 
--- MOON LAGGER (source moon_lgr.txt — intégrée telle quelle)
+-- ===================================================================
+-- MOON LAGGER (source moon_lgr.txt — integrated as-is)
 -- ===================================================================
 (function()
 local Players = game:GetService("Players")
@@ -3930,7 +3962,7 @@ _lgrBypassWidget = mainFrame
 mainFrame.ClipsDescendants = true
 Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 10)
 
--- Bouton MINIMIZE
+-- MINIMIZE Button
 
 -- STROKE
 local mainStroke = Instance.new("UIStroke", mainFrame)
@@ -3938,7 +3970,7 @@ mainStroke.Color = Color3.fromRGB(60, 60, 60)
 mainStroke.Thickness = 1.2
 mainStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 
--- Glow animé sur le bord
+-- Animated glow on the edge
 task.spawn(function()
 	while mainStroke.Parent do
 		TweenService:Create(mainStroke, TweenInfo.new(2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {
@@ -3953,7 +3985,7 @@ task.spawn(function()
 end)
 
 -- ══════════════════════════════════════
--- BULLES NOIR & BLANC QUI MONTENT
+-- RISING BLACK & WHITE BUBBLES
 -- ══════════════════════════════════════
 local bubbleColors = {
 	Color3.fromRGB(255, 255, 255),
@@ -3991,7 +4023,7 @@ task.spawn(function()
 end)
 
 -- ══════════════════════════════════════
--- CERCLE AVEC IMAGE (moon icon)
+-- CIRCLE WITH IMAGE (moon icon)
 -- ══════════════════════════════════════
 local iconCircle = Instance.new("ImageLabel", mainFrame)
 iconCircle.Name = "IconCircle"
@@ -4008,7 +4040,7 @@ iconCircleStroke.Color = Color3.fromRGB(70, 70, 70)
 iconCircleStroke.Thickness = 1
 
 -- ══════════════════════════════════════
--- TITRE "MOON LAGGER"
+-- "MOON LAGGER" TITLE
 -- ══════════════════════════════════════
 local titleLabel = Instance.new("TextLabel", mainFrame)
 titleLabel.BackgroundTransparency = 1
@@ -4024,7 +4056,7 @@ titleLabel.ZIndex = 3
 titleLabel.TextStrokeTransparency = 0
 titleLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
 
--- Shimmer animé sur le titre
+-- Animated shimmer on the title
 local shimmerLbl = Instance.new("TextLabel", mainFrame)
 shimmerLbl.BackgroundTransparency = 1
 shimmerLbl.Position = UDim2.new(0, 30, 0, 0)
@@ -4059,7 +4091,7 @@ task.spawn(function()
 end)
 
 -- ══════════════════════════════════════
--- BOUTONS KEY & LOCK (haut droite)
+-- KEY & LOCK BUTTONS (top right)
 -- ══════════════════════════════════════
 local keybindButton = Instance.new("TextButton", mainFrame)
 keybindButton.BackgroundColor3 = Color3.fromRGB(22, 22, 22)
@@ -4088,7 +4120,7 @@ Instance.new("UICorner", lockButton).CornerRadius = UDim.new(0, 5)
 Instance.new("UIStroke", lockButton).Color = Color3.fromRGB(55, 55, 55)
 
 -- ══════════════════════════════════════
--- LABEL "📈" (anciennement "LAGGER")
+-- "📈" LABEL (formerly "LAGGER")
 -- ══════════════════════════════════════
 local textLagger = Instance.new("TextLabel", mainFrame)
 textLagger.BackgroundTransparency = 1
@@ -4136,7 +4168,7 @@ toggleClick.AutoButtonColor = false
 Instance.new("UICorner", toggleClick).CornerRadius = UDim.new(1, 0)
 
 -- ══════════════════════════════════════
--- SÉPARATEUR
+-- SEPARATOR
 -- ══════════════════════════════════════
 local sep = Instance.new("Frame", mainFrame)
 sep.Size = UDim2.new(1, -16, 0, 1)
@@ -4146,9 +4178,9 @@ sep.BorderSizePixel = 0
 sep.ZIndex = 3
 
 -- ══════════════════════════════════════
--- SÉLECTEUR NIVEAU — STYLE PILLS GLISSANTES
+-- LEVEL SELECTOR — SLIDING PILLS STYLE
 -- ══════════════════════════════════════
--- Conteneur sélecteur
+-- Selector container
 local selectorFrame = Instance.new("Frame", mainFrame)
 selectorFrame.Size = UDim2.new(1, -16, 0, 24)
 selectorFrame.Position = UDim2.new(0, 8, 0, 52)
@@ -4158,7 +4190,7 @@ selectorFrame.ZIndex = 3
 Instance.new("UICorner", selectorFrame).CornerRadius = UDim.new(0, 8)
 Instance.new("UIStroke", selectorFrame).Color = Color3.fromRGB(45, 45, 45)
 
--- Pill active (glisse sous la sélection)
+-- Active pill (slides under the selection)
 local activePill = Instance.new("Frame", selectorFrame)
 activePill.Size = UDim2.new(0.25, -2, 1, -4)
 activePill.Position = UDim2.new(0, 1, 0, 2)
@@ -4167,7 +4199,7 @@ activePill.BorderSizePixel = 0
 activePill.ZIndex = 4
 Instance.new("UICorner", activePill).CornerRadius = UDim.new(0, 6)
 
--- Stroke animé sur la pill active
+-- Animated stroke on the active pill
 local pillStroke = Instance.new("UIStroke", activePill)
 pillStroke.Color = Color3.fromRGB(200, 200, 200)
 pillStroke.Thickness = 1
@@ -4214,7 +4246,7 @@ tryhardText.TextStrokeTransparency = 0.5
 tryhardText.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
 
 -- ══════════════════════════════════════
--- FONCTIONS DE MISE À JOUR
+-- UPDATE FUNCTIONS
 -- ══════════════════════════════════════
 local function getPillXPos(levelName)
 	for i, name in ipairs(LEVELS) do
@@ -4226,18 +4258,18 @@ local function getPillXPos(levelName)
 end
 
 local function actualizarBotonesNivel()
-	-- Anime la pill vers la sélection
+	-- Animate the pill toward the selection
 	TweenService:Create(activePill, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
 		Position = getPillXPos(nivelActual)
 	}):Play()
-	-- Couleur de la pill = couleur du niveau
+	-- Pill color = level color
 	TweenService:Create(activePill, TweenInfo.new(0.15), {
 		BackgroundColor3 = Color3.fromRGB(35, 35, 35)
 	}):Play()
 	TweenService:Create(pillStroke, TweenInfo.new(0.15), {
 		Color = LEVEL_COLORS[nivelActual]
 	}):Play()
-	-- Textes
+	-- Texts
 	for name, btn in pairs(levelBtns) do
 		if name == nivelActual then
 			TweenService:Create(btn, TweenInfo.new(0.15), {
@@ -4312,7 +4344,7 @@ local function toggleLagger()
 end
 
 -- ══════════════════════════════════════
--- CONNEXIONS BOUTONS NIVEAUX
+-- LEVEL BUTTON CONNECTIONS
 -- ══════════════════════════════════════
 for _, name in ipairs(LEVELS) do
 	local btn = levelBtns[name]
@@ -4401,15 +4433,15 @@ end)()
 
 
 -- ===================================================================
--- INITIALISATION
+-- INITIALIZATION
 -- ===================================================================
-local _configLoaded = MH_load()   -- charge la config au démarrage
+local _configLoaded = MH_load()   -- loads the config at startup
 selectTab("Combat")
--- Tous les settings démarrent OFF par défaut (pas d'activation automatique
--- au premier lancement) — seul un config sauvegardé peut les réactiver.
+-- All settings start OFF by default (no automatic activation
+-- on first launch) — only a saved config can re-enable them.
 print("[Moon Hub v2] Loaded.")
 
--- Auto-save toutes les 10s
+-- Auto-save every 10s
 task.spawn(function()
 	while gui.Parent do
 		task.wait(10)
@@ -4417,7 +4449,7 @@ task.spawn(function()
 	end
 end)
 
--- Save immédiat si le joueur quitte / script détruit
+-- Immediate save if the player leaves / script is destroyed
 LP.AncestryChanged:Connect(function()
 	pcall(MH_save)
 end)
