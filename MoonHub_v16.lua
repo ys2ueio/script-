@@ -1782,7 +1782,7 @@ buildPage("Combat", function()
 		holB.MouseButton1Click:Connect(function() IJ.mode="hold"; updM() end)
 		makeDivider()
 	end
-	setAutoStealRowVisual=UIB.makeToggleRow("Auto Steal",true,function(on)
+	setAutoStealRowVisual=UIB.makeToggleRow("Auto Steal",false,function(on)
 		AutoSteal.Enabled=on; if on then startAutoSteal() else stopAutoSteal() end
 	end)
 	UIB.makeInputRow("Steal Radius",AutoSteal.Radius,function(n) if n and n>=1 and n<=500 then AutoSteal.Radius=n end end)
@@ -2523,7 +2523,7 @@ local function _buildSpeedWidget()
 local spW=Instance.new("Frame",gui)
 spW.Name="SpeedWidget"; spW.Size=UDim2.new(0,150,0,160); _G._MH_spW=spW
 spW.Position=UDim2.new(1,-256,0,210); spW.BackgroundColor3=C_BG
-spW.BorderSizePixel=0; spW.ClipsDescendants=true; spW.Active=true
+spW.BorderSizePixel=0; spW.ClipsDescendants=true; spW.Active=true; spW.Visible=false
 addCorner(spW,12); addLivingStroke(spW,1.5)
 local spH=Instance.new("Frame",spW)
 spH.Size=UDim2.new(1,0,0,26); spH.BackgroundColor3=C_HEADER; spH.BorderSizePixel=0
@@ -2538,17 +2538,14 @@ spTitleLbl.TextColor3=C_WHITE; spTitleLbl.Font=Enum.Font.GothamBlack; spTitleLbl
 spTitleLbl.TextXAlignment=Enum.TextXAlignment.Left; addLivingTextGradient(spTitleLbl)
 -- Bouton minimize : replié par défaut = déplié (Normal/Lagger visibles),
 -- l'utilisateur peut cliquer "-" pour replier s'il le souhaite
-local spCollapsed=false; local spFullH=160
+local spCollapsed=false; local spFullH=160; local spCollapsedH=64
 local spMinBtn=Instance.new("TextButton",spH)
 spMinBtn.Size=UDim2.new(0,18,0,18); spMinBtn.Position=UDim2.new(1,-24,0.5,-9)
 spMinBtn.BackgroundColor3=Color3.fromRGB(30,30,34); spMinBtn.BorderSizePixel=0
 spMinBtn.Text="-"; spMinBtn.TextColor3=C_WHITE; spMinBtn.Font=Enum.Font.GothamBlack; spMinBtn.TextSize=15
 addCorner(spMinBtn,6); addLivingStroke(spMinBtn,1)
-spMinBtn.MouseButton1Click:Connect(function()
-	spCollapsed=not spCollapsed
-	spW.Size=UDim2.new(0,150,0,spCollapsed and 28 or spFullH)
-	spMinBtn.Text=spCollapsed and "+" or "-"
-end)
+-- Le clic est connecté plus bas (après stRow/spNorm/spLag/_spLagger)
+-- pour garder NORMAL/LAGGER visibles et utilisables même replié.
 -- Tabs NORMAL / LAGGER
 local tabRow=Instance.new("Frame",spW)
 tabRow.Size=UDim2.new(1,-16,0,26); tabRow.Position=UDim2.new(0,8,0,32)
@@ -2672,6 +2669,20 @@ local function switchTab(lag)
 end
 spTabN.MouseButton1Click:Connect(function() switchTab(false) end)
 spTabL.MouseButton1Click:Connect(function() switchTab(true) end)
+
+-- Replié ("-") : NORMAL/LAGGER restent visibles et utilisables, seuls le
+-- Status et les champs de vitesse sont masqués.
+spMinBtn.MouseButton1Click:Connect(function()
+	spCollapsed=not spCollapsed
+	spW.Size=UDim2.new(0,150,0,spCollapsed and spCollapsedH or spFullH)
+	spMinBtn.Text=spCollapsed and "+" or "-"
+	stRow.Visible = not spCollapsed
+	if spCollapsed then
+		spNorm.Visible=false; spLag.Visible=false
+	else
+		spNorm.Visible = not _spLagger; spLag.Visible = _spLagger
+	end
+end)
 
 -- Scale slider (même style que UIScale dans Visual)
 
@@ -2819,7 +2830,7 @@ local function makeFloatButton(id)
 	end
 	btn.BackgroundColor3 = C_ROW; btn.BackgroundTransparency = 0.2; btn.BorderSizePixel = 0
 	btn.Text = def.label; btn.TextColor3 = C_WHITE; btn.Font = Enum.Font.GothamBold
-	btn.TextScaled = true; btn.TextWrapped = true; btn.AutoButtonColor = false
+	btn.TextScaled = false; btn.TextSize = 9; btn.TextWrapped = true; btn.AutoButtonColor = false
 	btn.ZIndex = 500; btn.Active = true
 	addCorner(btn, 14); addLivingStroke(btn, 1); addLivingTextGradient(btn)
 	local pad = Instance.new("UIPadding", btn)
@@ -2986,20 +2997,12 @@ _floatDefs.aimv2 = {
 	end,
 	isActive = function() return ABP.active end,
 }
-_floatDefs.speedbypass = {
-	label = "SPEED\nBYPASS",
-	onClick = function() if _G._MH_speedBypassToggle then _G._MH_speedBypassToggle() end end,
-	isActive = function() return _G._MH_speedBypassIsActive and _G._MH_speedBypassIsActive() or false end,
-}
+-- Speed Booster : ouvre/affiche le widget existant, ne fait pas doublon
+-- avec un contrôle indépendant.
 _floatDefs.speedbooster = {
 	label = "SPEED\nBOOSTER",
-	onClick = function() if _G._MH_speedBoosterToggle then _G._MH_speedBoosterToggle() end end,
-	isActive = function() return _G._MH_speedBoosterIsActive and _G._MH_speedBoosterIsActive() or false end,
+	onClick = function() if _G._MH_spW then _G._MH_spW.Visible = not _G._MH_spW.Visible end end,
 }
-_G._MH_setSpeedBoosterFloatVisual = function(on)
-	local entry = _floatBtns.speedbooster
-	if entry then entry.setActive(on) end
-end
 
 _G._MH_makeFloatButton   = makeFloatButton
 _G._MH_removeFloatButton = removeFloatButton
@@ -3411,7 +3414,6 @@ buildPage("Boutons", function()
 		{id="tpdown",      name="TP Down"},
 		{id="battp",       name="Bat TP"},
 		{id="instareset",  name="Instant Reset"},
-		{id="speedbypass", name="Speed Bypass"},
 		{id="speedbooster",name="Speed Booster"},
 	}
 	for _, entry in ipairs(FLOAT_LABELS) do
@@ -4395,12 +4397,8 @@ end)
 -- ===================================================================
 local _configLoaded = MH_load()   -- charge la config au démarrage
 selectTab("Combat")
-if not _configLoaded then
-	-- Pas de config sauvegardée : valeurs par défaut habituelles
-	task.spawn(function() task.wait(0.5); AutoSteal.Enabled=true; startAutoSteal() end)
-	State.antiRagdollEnabled=true; startAntiRagdoll()
-	if setAntiRagdollRowVisual then setAntiRagdollRowVisual(true) end
-end
+-- Tous les settings démarrent OFF par défaut (pas d'activation automatique
+-- au premier lancement) — seul un config sauvegardé peut les réactiver.
 print("[Moon Hub v2] Loaded.")
 
 -- Auto-save toutes les 10s
