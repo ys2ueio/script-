@@ -1851,7 +1851,7 @@ local _floatPositions = {}   -- id -> {xs,xo,ys,yo}
 -- Bump this whenever the default layout changes: saved positions from an
 -- older version get discarded on load instead of restoring stale/overlapping
 -- coordinates, so everyone gets the current clean column layout by default.
-local _FLOAT_POS_VERSION = 5
+local _FLOAT_POS_VERSION = 6
 local _floatLocked    = false
 local FLOAT_SZ = 46
 
@@ -2877,8 +2877,9 @@ local function makeFloatButton(id)
 	local btn = Instance.new("TextButton", gui)
 	btn.Name = "Float_"..id
 	local saved = _floatPositions[id]
+	local GAP = 3
 	local blockX = 1  -- block anchored near the right edge of the screen
-	local blockW = FLOAT_SZ * 2 + 8
+	local blockW = FLOAT_SZ * 2 + GAP
 	if id == "antibat" then
 		-- Wide standalone button, top of the block.
 		btn.Size = UDim2.new(0, blockW, 0, FLOAT_SZ)
@@ -2896,8 +2897,8 @@ local function makeFloatButton(id)
 			local idx = _floatGridIndex(id) - 1
 			local col = idx % 2
 			local row = math.floor(idx / 2)
-			local topOffset = 40 + FLOAT_SZ + 8
-			btn.Position = UDim2.new(blockX, -(blockW + 12) + col * (FLOAT_SZ + 8), 0, topOffset + row * (FLOAT_SZ + 8))
+			local topOffset = 40 + FLOAT_SZ + GAP
+			btn.Position = UDim2.new(blockX, -(blockW + 12) + col * (FLOAT_SZ + GAP), 0, topOffset + row * (FLOAT_SZ + GAP))
 		end
 	end
 	btn.BackgroundColor3 = C_ROW; btn.BackgroundTransparency = 0; btn.BorderSizePixel = 0
