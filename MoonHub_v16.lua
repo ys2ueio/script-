@@ -183,7 +183,7 @@ if not pcall(function() gui.Parent = game:GetService("CoreGui") end) then
 end
 
 -- ===================================================================
--- INTRO CUTSCENE — glow aura, shockwave rings, loading bar, star burst finale (~4s)
+-- INTRO CUTSCENE — shockwave ring, shine sweep, star burst finale (~4s)
 -- ===================================================================
 do
 	local introGui = Instance.new("Frame", gui)
@@ -194,27 +194,6 @@ do
 	introGui.ZIndex = 1000
 	introGui.BorderSizePixel = 0
 	introGui.ClipsDescendants = true
-
-	-- Soft pulsing glow aura behind the logo
-	local glow = Instance.new("Frame", introGui)
-	glow.AnchorPoint = Vector2.new(0.5,0.5)
-	glow.Position = UDim2.new(0.5,0,0.44,0)
-	glow.Size = UDim2.new(0,0,0,0)
-	glow.BackgroundColor3 = C_MOON
-	glow.BackgroundTransparency = 1
-	glow.BorderSizePixel = 0
-	glow.ZIndex = 499
-	addCorner(glow, 400)
-	task.spawn(function()
-		while glow.Parent do
-			TweenService:Create(glow, TweenInfo.new(1.6, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
-				{BackgroundTransparency = 0.88}):Play()
-			task.wait(1.6)
-			TweenService:Create(glow, TweenInfo.new(1.6, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
-				{BackgroundTransparency = 0.96}):Play()
-			task.wait(1.6)
-		end
-	end)
 
 	-- Rising particles
 	task.spawn(function()
@@ -302,34 +281,41 @@ do
 	verLbl.TextTransparency = 1
 	verLbl.ZIndex = 502
 
-	-- Loading bar — thin track + fill, percentage counts up alongside it
-	local loadWrap = Instance.new("Frame", introGui)
-	loadWrap.AnchorPoint = Vector2.new(0.5,0.5)
-	loadWrap.Position = UDim2.new(0.5,0,0.86,0)
-	loadWrap.Size = UDim2.new(0,180,0,3)
-	loadWrap.BackgroundColor3 = C_DEEP2
-	loadWrap.BackgroundTransparency = 1
-	loadWrap.BorderSizePixel = 0
-	loadWrap.ZIndex = 502
-	addCorner(loadWrap, 2)
-	local loadFill = Instance.new("Frame", loadWrap)
-	loadFill.Size = UDim2.new(0,0,1,0)
-	loadFill.BackgroundColor3 = C_MOON
-	loadFill.BorderSizePixel = 0
-	loadFill.ZIndex = 503
-	addCorner(loadFill, 2)
-	addLivingTextGradient(loadFill)
-	local loadLbl = Instance.new("TextLabel", introGui)
-	loadLbl.AnchorPoint = Vector2.new(0.5,0.5)
-	loadLbl.Position = UDim2.new(0.5,0,0.9,0)
-	loadLbl.Size = UDim2.new(0,180,0,16)
-	loadLbl.BackgroundTransparency = 1
-	loadLbl.Text = "0%"
-	loadLbl.TextColor3 = C_SILVER2
-	loadLbl.Font = Enum.Font.GothamBold
-	loadLbl.TextSize = 10
-	loadLbl.TextTransparency = 1
-	loadLbl.ZIndex = 502
+	-- Shine sweep — a soft diagonal glint that passes across the title once
+	local shineWrap = Instance.new("Frame", introGui)
+	shineWrap.AnchorPoint = Vector2.new(0.5,0.5)
+	shineWrap.Position = UDim2.new(0.5,0,0.44,0)
+	shineWrap.Size = UDim2.new(1,-40,0,50)
+	shineWrap.BackgroundTransparency = 1
+	shineWrap.ClipsDescendants = true
+	shineWrap.ZIndex = 503
+	local shine = Instance.new("Frame", shineWrap)
+	shine.AnchorPoint = Vector2.new(0.5,0.5)
+	shine.Size = UDim2.new(0,26,4,0)
+	shine.Position = UDim2.new(-0.25,0,0.5,0)
+	shine.Rotation = 18
+	shine.BackgroundColor3 = C_WHITE
+	shine.BorderSizePixel = 0
+	shine.ZIndex = 503
+	local shineGrad = Instance.new("UIGradient", shine)
+	shineGrad.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0,   1),
+		NumberSequenceKeypoint.new(0.5, 0.25),
+		NumberSequenceKeypoint.new(1,   1),
+	})
+
+	-- Credit line
+	local creditLbl = Instance.new("TextLabel", introGui)
+	creditLbl.AnchorPoint = Vector2.new(0.5,0.5)
+	creditLbl.Position = UDim2.new(0.5,0,0.665,0)
+	creditLbl.Size = UDim2.new(1,-40,0,14)
+	creditLbl.BackgroundTransparency = 1
+	creditLbl.Text = "made by 1200_unknown"
+	creditLbl.TextColor3 = C_SILVER2
+	creditLbl.Font = Enum.Font.Gotham
+	creditLbl.TextSize = 9
+	creditLbl.TextTransparency = 1
+	creditLbl.ZIndex = 502
 
 	-- Star burst finale: a center star plus small sparkles flung outward
 	local star = Instance.new("TextLabel", introGui)
@@ -391,20 +377,12 @@ do
 		task.wait(0.15)
 		TweenService:Create(pip, TweenInfo.new(0.4), {BackgroundTransparency = 0}):Play()
 
-		-- Loading bar fills while the logo holds on screen
-		task.spawn(function()
-			for pct = 0, 100, 4 do
-				if not loadFill.Parent then break end
-				loadFill.Size = UDim2.new(pct/100, 0, 1, 0)
-				loadLbl.Text = pct.."%"
-				task.wait(0.045)
-			end
-		end)
+		-- Shine sweep passes across the title once it's fully visible
+		TweenService:Create(shine, TweenInfo.new(0.6, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
+			{Position = UDim2.new(1.25,0,0.5,0)}):Play()
+		TweenService:Create(creditLbl, TweenInfo.new(0.4), {TextTransparency = 0.15}):Play()
 
 		task.wait(1.4)
-
-		TweenService:Create(loadWrap, TweenInfo.new(0.2), {BackgroundTransparency = 1}):Play()
-		TweenService:Create(loadLbl, TweenInfo.new(0.2), {TextTransparency = 1}):Play()
 
 		-- End star: appears, glows, bursts into sparkles, then fades
 		star.Size = UDim2.new(0,24,0,24)
@@ -416,12 +394,12 @@ do
 
 		-- Text fade out
 		TweenService:Create(verLbl, TweenInfo.new(0.2), {TextTransparency = 1}):Play()
+		TweenService:Create(creditLbl, TweenInfo.new(0.2), {TextTransparency = 1}):Play()
 		task.wait(0.1)
 		TweenService:Create(subLbl, TweenInfo.new(0.2), {TextTransparency = 1}):Play()
 		task.wait(0.1)
 		TweenService:Create(nameLbl, TweenInfo.new(0.25), {TextTransparency = 1}):Play()
 		TweenService:Create(pip, TweenInfo.new(0.3), {Size = UDim2.new(0,0,0,0)}):Play()
-		TweenService:Create(glow, TweenInfo.new(0.4), {BackgroundTransparency = 1}):Play()
 		task.wait(0.3)
 
 		-- The star fades out (last visible element)
@@ -3786,6 +3764,16 @@ buildPage("Settings", function()
 			end
 		end)
 	end
+
+	UIB.makeGap(6)
+	UIB.makeSectionLabel("Credits")
+	local creditRow = Instance.new("Frame", currentPage)
+	creditRow.Size = UDim2.new(1,0,0,30); creditRow.BackgroundTransparency = 1; creditRow.LayoutOrder = LO()
+	local creditFooter = Instance.new("TextLabel", creditRow)
+	creditFooter.Size = UDim2.new(1,0,1,0); creditFooter.BackgroundTransparency = 1
+	creditFooter.Text = "ALN x YSLEM  •  made by 1200_unknown"
+	creditFooter.TextColor3 = C_SILVER2; creditFooter.Font = Enum.Font.Gotham; creditFooter.TextSize = 10
+	addLivingTextGradient(creditFooter)
 end);  -- required semicolon (otherwise ambiguous merge with the (function() below)
 
 -- ===================================================================
