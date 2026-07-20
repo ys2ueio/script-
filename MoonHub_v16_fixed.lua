@@ -1497,79 +1497,29 @@ LP.CharacterAdded:Connect(function(char)
 end)
 
 -- ===================================================================
--- AUTO CARRY ON GRAB
+-- AUTO CARRY ON GRAB — logique EXACTE "Auto Carry On Grab" du hub :
+-- bascule State.speedType en "carry" UNIQUEMENT quand l'animal est
+-- réellement dans les mains (signal serveur réel : WalkSpeed ≤ 25),
+-- pas pendant la simple tentative de vol (READY/UNREADY d'Auto Steal
+-- qui reste séparé et purement informatif).
+-- Edge-triggered : une seule mise à jour par changement d'état, pas
+-- à chaque frame. N'écrase pas un choix manuel du joueur pendant
+-- State._carryManualUntil. Suspendu quand le lagger est actif car
+-- le lagger gère lui-même les vitesses de port.
 -- ===================================================================
--- Détecte le port d'animal via WalkSpeed ≤ 25 (signal serveur réel,
--- identique à la logique Irish Hub / test_speed.lua).
--- Bascule speedType "carry"/"normal" de façon edge-triggered (une seule
--- mise à jour par changement d'état, pas à chaque frame).
--- N'écrase pas un choix manuel pendant _carryManualUntil.
--- Compatible avec le lagger : suspendu quand laggerActive est actif
--- car le lagger gère lui-même les vitesses de port.
--- ===================================================================
-local ACOG = {
-	active          = true,   -- ON par défaut
-	threshold       = 25,     -- WalkSpeed ≤ seuil => animal porté
-	_lastCarry      = false,  -- état détecté au tick précédent
-	_conn           = nil,    -- connexion Heartbeat active
-}
+local autoGrabOn        = true   -- actif par défaut
+local lastCarryDetected = false  -- état détecté au Heartbeat précédent
 
-local _setACOGRowVisual  -- référence vers le setter UI (assignée plus bas)
-
-local function acogStart()
-	if ACOG._conn then return end  -- déjà actif
-	ACOG._lastCarry = false
-	ACOG._conn = RunService.Heartbeat:Connect(function()
-		if not ACOG.active then return end
-		if State.laggerActive or State.laggerCarryActive then return end
-		if tick() < (State._carryManualUntil or 0) then return end
-		local char = LP.Character
-		local hum  = char and char:FindFirstChildOfClass("Humanoid")
-		if not hum then return end
-		local carrying = (hum.WalkSpeed <= ACOG.threshold)
-		if carrying == ACOG._lastCarry then return end   -- edge-triggered
-		ACOG._lastCarry = carrying
-		State.speedType = carrying and "carry" or "normal"
-		-- Applique immédiatement si Speed Booster actif
-		if _speedBoosterActive and h then
-			h.WalkSpeed = getCurrentSpeed()
-		end
-	end)
-end
-
-local function acogStop()
-	if ACOG._conn then
-		ACOG._conn:Disconnect()
-		ACOG._conn = nil
-	end
-	ACOG._lastCarry = false
-end
-
-local function acogSetEnabled(on)
-	ACOG.active = on
-	State.autoCarryOnGrab = on
-	if on then
-		acogStart()
-	else
-		acogStop()
-		-- Repasse en normal quand on désactive
-		if State.speedType == "carry" then
-			State.speedType = "normal"
-			if _speedBoosterActive and h then h.WalkSpeed = getCurrentSpeed() end
-		end
-	end
-	if _setACOGRowVisual then _setACOGRowVisual(on) end
-	if _G._MH_autoSave then _G._MH_autoSave() end
-end
-
--- Démarre immédiatement (actif par défaut)
-acogStart()
-
--- Reprend après respawn si actif
-LP.CharacterAdded:Connect(function()
-	if ACOG.active then
-		ACOG._lastCarry = false   -- reset état détecté
-	end
+RunService.Heartbeat:Connect(function()
+	if not autoGrabOn then return end
+	if State.laggerActive or State.laggerCarryActive then return end
+	local hum = LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
+	if not hum then return end
+	if tick() < (State._carryManualUntil or 0) then return end
+	local carrying = hum.WalkSpeed <= 25
+	if carrying == lastCarryDetected then return end
+	lastCarryDetected = carrying
+	State.speedType = carrying and "carry" or "normal"
 end)
 
 -- ===================================================================
@@ -2108,13 +2058,6 @@ buildPage("Combat", function()
 	end)
 	UIB.makeInputRow("Steal Radius",AutoSteal.Radius,function(n) if n and n>=1 and n<=500 then AutoSteal.Radius=n end end)
 	UIB.makeInputRow("Steal Duration",AutoSteal.Duration,function(n) if n and n>=0.05 and n<=10 then AutoSteal.Duration=n end end)
-	UIB.makeGap(4)
-	_setACOGRowVisual = UIB.makeToggleRow("Auto Carry On Grab",ACOG.active,function(on)
-		acogSetEnabled(on)
-	end)
-	UIB.makeInputRow("Carry Threshold",ACOG.threshold,function(n)
-		if n and n>=1 and n<=100 then ACOG.threshold=n end
-	end)
 	local _autoTPEnabled = false
 	local _autoTPConn    = nil
 	local _autoTPHeight  = 20
@@ -3630,11 +3573,9 @@ local function MH_save()
 				aimSpeed         = AB and AB.SPEED or nil,
 				infJumpEnabled   = IJ and IJ.active or false,
 				infJumpMode      = IJ and IJ.mode or nil,
-				autoGrabEnabled   = AutoSteal and AutoSteal.Enabled or false,
-				grabRadius        = AutoSteal and AutoSteal.Radius or nil,
-				grabDuration      = AutoSteal and AutoSteal.Duration or nil,
-				acogEnabled       = ACOG.active,
-				acogThreshold     = ACOG.threshold,
+				autoGrabEnabled  = AutoSteal and AutoSteal.Enabled or false,
+				grabRadius       = AutoSteal and AutoSteal.Radius or nil,
+				grabDuration     = AutoSteal and AutoSteal.Duration or nil,
 				floatSpawned = (function()
 					local ids = {}
 					for id in pairs(_floatBtns) do ids[#ids+1] = id end
@@ -3713,15 +3654,6 @@ local function MH_load()
 		if data.grabDuration then AutoSteal.Duration=data.grabDuration end
 		-- Auto Steal ON par défaut — honorer si l'user l'avait coupé
 		if data.autoGrabEnabled == false then AutoSteal.Enabled=false end
-		-- Auto Carry On Grab : restaurer état + seuil
-		if data.acogEnabled == false then
-			ACOG.active = false
-			State.autoCarryOnGrab = false
-			acogStop()
-		end
-		if data.acogThreshold and data.acogThreshold >= 1 and data.acogThreshold <= 100 then
-			ACOG.threshold = data.acogThreshold
-		end
 
 		if data.kb then
 			local kb = _G.MH_KB
