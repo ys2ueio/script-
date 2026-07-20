@@ -1046,8 +1046,7 @@ local function startAutoSteal()
 	local _stealStart   = 0
 	local _stealState   = "READY"
 	local RADIUS = 70
-	local _dur = AutoSteal.Duration or 1.4
-	local CFG = { HOLD_MIN=_dur*0.5, HOLD_MAX=_dur, ENTRY_DELAY=0.3, COOLDOWN=0.05, STEAL_RANGE=8 }
+	local CFG = { HOLD_MIN=1.3, HOLD_MAX=2.6, ENTRY_DELAY=0.3, COOLDOWN=0.05, STEAL_RANGE=8 }
 	
 	local RS = game:GetService("ReplicatedStorage")
 	local _packages = RS:FindFirstChild("Packages")
@@ -1497,25 +1496,20 @@ LP.CharacterAdded:Connect(function(char)
 end)
 
 -- ===================================================================
--- AUTO CARRY ON GRAB — logique EXACTE "Auto Carry On Grab" du hub :
--- bascule State.speedType en "carry" UNIQUEMENT quand l'animal est
--- réellement dans les mains (signal serveur réel : WalkSpeed ≤ 25),
--- pas pendant la simple tentative de vol (READY/UNREADY d'Auto Steal
+-- AUTO GRAB — logique EXACTE "Auto Carry On Grab" du hub : bascule
+-- State.speedType en "carry" UNIQUEMENT quand l'animal est réellement
+-- dans les mains (signal serveur réel : WalkSpeed ≤ 25), pas pendant
+-- la simple tentative de vol (READY/UNREADY d'Auto Steal ci-dessous,
 -- qui reste séparé et purement informatif).
--- Edge-triggered : une seule mise à jour par changement d'état, pas
--- à chaque frame. N'écrase pas un choix manuel du joueur pendant
--- State._carryManualUntil. Suspendu quand le lagger est actif car
--- le lagger gère lui-même les vitesses de port.
 -- ===================================================================
-local autoGrabOn        = true   -- actif par défaut
-local lastCarryDetected = false  -- état détecté au Heartbeat précédent
+local autoGrabOn = true
+local lastCarryDetected = false
 
 RunService.Heartbeat:Connect(function()
 	if not autoGrabOn then return end
-	if State.laggerActive or State.laggerCarryActive then return end
 	local hum = LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
 	if not hum then return end
-	if tick() < (State._carryManualUntil or 0) then return end
+	if tick() < State._carryManualUntil then return end
 	local carrying = hum.WalkSpeed <= 25
 	if carrying == lastCarryDetected then return end
 	lastCarryDetected = carrying
