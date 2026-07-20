@@ -35,10 +35,12 @@ local C_ROW  = Color3.fromRGB(22,22,28)
 -- ===================================================================
 -- CUSTOM SPEED — WalkSpeed normal / vol (steal), même logique que le hub
 -- ===================================================================
-local customSpeed = 16
+local normalSpeed = 16
+local stealSpeed  = 16
+local stealMode    = false  -- basculé manuellement par le bouton MODE (plus d'auto-détection piégeuse)
 
 local function getCurrentSpeed()
-	return customSpeed
+	return stealMode and stealSpeed or normalSpeed
 end
 
 local h
@@ -102,7 +104,7 @@ end
 -- UI — panneau compact, en haut à gauche (ne recouvre pas l'écran)
 -- ===================================================================
 local panel = Instance.new("Frame", gui)
-panel.Size = UDim2.new(0,220,0,200)
+panel.Size = UDim2.new(0,220,0,258)
 panel.Position = UDim2.new(0,16,0,80)
 panel.BackgroundColor3 = C_BG
 panel.BorderSizePixel = 0
@@ -147,8 +149,21 @@ closeBtn.MouseButton1Click:Connect(function()
 	gui:Destroy()
 end)
 
+-- Bouton "-" pour réduire/cacher le panneau (ne garde que la barre de titre)
+local panelFullH = 258
+local minimized = false
+local minBtn = Instance.new("TextButton", panel)
+minBtn.Size = UDim2.new(0,20,0,20)
+minBtn.Position = UDim2.new(1,-50,0,4)
+minBtn.BackgroundTransparency = 1
+minBtn.Text = "-"
+minBtn.TextColor3 = Color3.new(1,1,1)
+minBtn.Font = Enum.Font.GothamBlack
+minBtn.TextSize = 16
+minBtn.ZIndex = 11
+
 local title = Instance.new("TextLabel", panel)
-title.Size = UDim2.new(1,-40,0,20)
+title.Size = UDim2.new(1,-64,0,20)
 title.Position = UDim2.new(0,10,0,6)
 title.BackgroundTransparency = 1
 title.Text = "CUSTOM SPEED"
@@ -235,11 +250,31 @@ local function makeInputRow(yPos, label, initial, min, max, step, onChange)
 	return row
 end
 
-makeInputRow(30, "Speed", customSpeed, 16, 500, 2, function(n) customSpeed = n end)
+local normalRow = makeInputRow(30, "Normal Speed", normalSpeed, 16, 500, 2, function(n) normalSpeed = n end)
+local stealRow  = makeInputRow(60, "Steal Speed", stealSpeed, 16, 500, 2, function(n) stealSpeed = n end)
+
+local modeBtn = Instance.new("TextButton", panel)
+modeBtn.Size = UDim2.new(1,-20,0,24)
+modeBtn.Position = UDim2.new(0,10,0,90)
+modeBtn.BackgroundColor3 = C_OFF
+modeBtn.Text = "MODE: NORMAL"
+modeBtn.TextColor3 = Color3.fromRGB(140,140,150)
+modeBtn.Font = Enum.Font.GothamBlack
+modeBtn.TextSize = 11
+modeBtn.BorderSizePixel = 0
+modeBtn.AutoButtonColor = false
+modeBtn.ZIndex = 11
+Instance.new("UICorner", modeBtn).CornerRadius = UDim.new(0,8)
+modeBtn.MouseButton1Click:Connect(function()
+	stealMode = not stealMode
+	modeBtn.Text = stealMode and "MODE: STEAL" or "MODE: NORMAL"
+	modeBtn.TextColor3 = stealMode and C_MOON or Color3.fromRGB(140,140,150)
+	TweenService:Create(modeBtn, TweenInfo.new(0.15), {BackgroundColor3 = stealMode and C_ON or C_OFF}):Play()
+end)
 
 local speedBtn = Instance.new("TextButton", panel)
 speedBtn.Size = UDim2.new(1,-20,0,30)
-speedBtn.Position = UDim2.new(0,10,0,64)
+speedBtn.Position = UDim2.new(0,10,0,118)
 speedBtn.BackgroundColor3 = C_OFF
 speedBtn.Text = "SPEED: DISABLED"
 speedBtn.TextColor3 = Color3.fromRGB(140,140,150)
@@ -265,7 +300,7 @@ end)
 
 local sbTitle = Instance.new("TextLabel", panel)
 sbTitle.Size = UDim2.new(1,-40,0,18)
-sbTitle.Position = UDim2.new(0,10,0,102)
+sbTitle.Position = UDim2.new(0,10,0,156)
 sbTitle.BackgroundTransparency = 1
 sbTitle.Text = "SPEED BYPASS"
 sbTitle.TextColor3 = Color3.new(1,1,1)
@@ -276,7 +311,7 @@ sbTitle.ZIndex = 11
 
 local sbBtn = Instance.new("TextButton", panel)
 sbBtn.Size = UDim2.new(1,-20,0,26)
-sbBtn.Position = UDim2.new(0,10,0,122)
+sbBtn.Position = UDim2.new(0,10,0,176)
 sbBtn.BackgroundColor3 = C_OFF
 sbBtn.Text = "BYPASS: DISABLED  (Bind: E)"
 sbBtn.TextColor3 = Color3.fromRGB(140,140,150)
@@ -299,13 +334,13 @@ local function toggleSpeedBypass()
 end
 sbBtn.MouseButton1Click:Connect(toggleSpeedBypass)
 
-local powerRow = makeInputRow(152, "Power (10k-500k)", sbPower, 10000, 500000, 5000, function(n)
+local powerRow = makeInputRow(206, "Power (10k-500k)", sbPower, 10000, 500000, 5000, function(n)
 	sbApplyPower(n)
 end)
 
 local bindHint = Instance.new("TextLabel", panel)
 bindHint.Size = UDim2.new(1,-20,0,16)
-bindHint.Position = UDim2.new(0,10,0,180)
+bindHint.Position = UDim2.new(0,10,0,234)
 bindHint.BackgroundTransparency = 1
 bindHint.Text = "Clique le bouton BYPASS pour rebind"
 bindHint.TextColor3 = Color3.fromRGB(120,120,130)
@@ -332,4 +367,12 @@ UIS.InputBegan:Connect(function(input, gpe)
 	if input.KeyCode == sbKeybind then toggleSpeedBypass() end
 end)
 
-print("[SpeedTest] Prêt — clic gauche = toggle, clic droit sur BYPASS = rebind touche.")
+local hideableElements = {normalRow, stealRow, modeBtn, speedBtn, sbTitle, sbBtn, powerRow, bindHint}
+minBtn.MouseButton1Click:Connect(function()
+	minimized = not minimized
+	minBtn.Text = minimized and "+" or "-"
+	panel.Size = minimized and UDim2.new(0,220,0,34) or UDim2.new(0,220,0,panelFullH)
+	for _, el in ipairs(hideableElements) do el.Visible = not minimized end
+end)
+
+print("[SpeedTest] Prêt — clic gauche = toggle, clic droit sur BYPASS = rebind touche, bouton - = réduire.")
