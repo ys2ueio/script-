@@ -304,19 +304,6 @@ do
 		NumberSequenceKeypoint.new(1,   1),
 	})
 
-	-- Credit line
-	local creditLbl = Instance.new("TextLabel", introGui)
-	creditLbl.AnchorPoint = Vector2.new(0.5,0.5)
-	creditLbl.Position = UDim2.new(0.5,0,0.665,0)
-	creditLbl.Size = UDim2.new(1,-40,0,14)
-	creditLbl.BackgroundTransparency = 1
-	creditLbl.Text = "made by 1200_unknown"
-	creditLbl.TextColor3 = C_SILVER2
-	creditLbl.Font = Enum.Font.Gotham
-	creditLbl.TextSize = 9
-	creditLbl.TextTransparency = 1
-	creditLbl.ZIndex = 502
-
 	-- Star burst finale: a center star plus small sparkles flung outward
 	local star = Instance.new("TextLabel", introGui)
 	star.AnchorPoint = Vector2.new(0.5,0.5)
@@ -358,8 +345,6 @@ do
 	-- ── SEQUENCE ──────────────────────────────────────────────────
 	task.spawn(function()
 		task.wait(0.4)
-		TweenService:Create(glow, TweenInfo.new(0.5, Enum.EasingStyle.Sine, Enum.EasingDirection.Out),
-			{Size = UDim2.new(0,220,0,220), BackgroundTransparency = 0.9}):Play()
 		TweenService:Create(pip, TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
 			{Size = UDim2.new(0,8,0,8)}):Play()
 		fireShockwave()
@@ -371,16 +356,12 @@ do
 		TweenService:Create(subLbl, TweenInfo.new(0.4), {TextTransparency = 0}):Play()
 		task.wait(0.25)
 		TweenService:Create(verLbl, TweenInfo.new(0.4), {TextTransparency = 0}):Play()
-		task.wait(0.15)
-		TweenService:Create(loadWrap, TweenInfo.new(0.3), {BackgroundTransparency = 0.3}):Play()
-		TweenService:Create(loadLbl, TweenInfo.new(0.3), {TextTransparency = 0.2}):Play()
-		task.wait(0.15)
+		task.wait(0.3)
 		TweenService:Create(pip, TweenInfo.new(0.4), {BackgroundTransparency = 0}):Play()
 
 		-- Shine sweep passes across the title once it's fully visible
 		TweenService:Create(shine, TweenInfo.new(0.6, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
 			{Position = UDim2.new(1.25,0,0.5,0)}):Play()
-		TweenService:Create(creditLbl, TweenInfo.new(0.4), {TextTransparency = 0.15}):Play()
 
 		task.wait(1.4)
 
@@ -394,7 +375,6 @@ do
 
 		-- Text fade out
 		TweenService:Create(verLbl, TweenInfo.new(0.2), {TextTransparency = 1}):Play()
-		TweenService:Create(creditLbl, TweenInfo.new(0.2), {TextTransparency = 1}):Play()
 		task.wait(0.1)
 		TweenService:Create(subLbl, TweenInfo.new(0.2), {TextTransparency = 1}):Play()
 		task.wait(0.1)
