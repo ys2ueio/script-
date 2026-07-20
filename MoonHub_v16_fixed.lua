@@ -2002,10 +2002,66 @@ function BatCounter.stop()
 	_bcDebounce=false
 end
 
+-- ===================================================================
+-- TP DETECT — contre le "Bat TP" (téléport-frappe) : aucun déplacement
+-- normal ne peut réduire une distance de plusieurs dizaines de studs
+-- en une seule frame Heartbeat. Si un ennemi qui était loin se retrouve
+-- soudainement à portée de bat entre deux frames, c'est la signature
+-- d'un TP-hit. On détecte l'anomalie et on réagit immédiatement
+-- (saut pour sortir de la fenêtre de frappe + contre-attaque au bat).
+-- ===================================================================
+local TPDetect = {active=false, conn=nil, lastDist={}, jumpGap=25, meleeRange=10}
+local _tpdDebounce = false
+
+function TPDetect.start()
+	if TPDetect.conn then TPDetect.conn:Disconnect() end
+	TPDetect.lastDist = {}
+	TPDetect.conn = RunService.Heartbeat:Connect(function()
+		if not TPDetect.active then return end
+		local char = LP.Character
+		local root = char and char:FindFirstChild("HumanoidRootPart")
+		if not root then return end
+		for _, p in ipairs(Players:GetPlayers()) do
+			if p ~= LP and p.Character then
+				local tr = p.Character:FindFirstChild("HumanoidRootPart")
+				if tr then
+					local d = (root.Position - tr.Position).Magnitude
+					local prev = TPDetect.lastDist[p]
+					-- Chute de distance anormale en une seule frame + arrivée à portée
+					if prev and (prev - d) >= TPDetect.jumpGap and d <= TPDetect.meleeRange and not _tpdDebounce then
+						_tpdDebounce = true
+						local hum = char:FindFirstChildOfClass("Humanoid")
+						if hum then hum.Jump = true end
+						task.spawn(function()
+							local bat = BatCounter.findBat()
+							if bat then
+								local h2 = char:FindFirstChildOfClass("Humanoid")
+								if bat.Parent ~= char and h2 then pcall(function() h2:EquipTool(bat) end); task.wait(0.05) end
+								pcall(function() bat:Activate() end)
+							end
+							task.wait(0.4); _tpdDebounce = false
+						end)
+					end
+					TPDetect.lastDist[p] = d
+				end
+			end
+		end
+	end)
+end
+
+function TPDetect.stop()
+	if TPDetect.conn then TPDetect.conn:Disconnect(); TPDetect.conn=nil end
+	TPDetect.lastDist = {}
+	_tpdDebounce = false
+end
+
 buildPage("Combat", function()
 	UIB.makeSectionLabel("Combat")
 	setBatCounterRowVisual = UIB.makeToggleRow("Bat Counter",false,function(on)
 		BatCounter.active=on; if on then BatCounter.start() else BatCounter.stop() end
+	end)
+	UIB.makeToggleRow("TP Detect",false,function(on)
+		TPDetect.active=on; if on then TPDetect.start() else TPDetect.stop() end
 	end)
 	setAimbotRowVisual = UIB.makeToggleRow("Bat Aimbot",false,function(on)
 		if on then if ABP.active then ABP.stop() end; AB.start() else AB.stop() end
