@@ -33,7 +33,9 @@ local C_OFF  = Color3.fromRGB(0,0,0)
 local C_ROW  = Color3.fromRGB(22,22,28)
 
 -- ===================================================================
--- CUSTOM SPEED — WalkSpeed normal / vol (steal), même logique que le hub
+-- CUSTOM SPEED — logique EXACTE du "Speed Booster" du hub :
+-- proxy part soudé au HRP + AssemblyLinearVelocity (pas juste WalkSpeed,
+-- qui peut être corrigé/ignoré par le serveur).
 -- ===================================================================
 local normalSpeed = 16
 local stealSpeed  = 16
@@ -43,10 +45,40 @@ local function getCurrentSpeed()
 	return stealMode and stealSpeed or normalSpeed
 end
 
-local h
+local h, hrp, proxy
+local function ensureProxy()
+	local char = LP.Character
+	if not char then return nil end
+	hrp = char:FindFirstChild("HumanoidRootPart")
+	if not hrp then return nil end
+	if proxy and proxy.Parent then return proxy end
+	proxy = Instance.new("Part")
+	proxy.Name = "SpeedProxy"
+	proxy.Size = Vector3.new(1,1,1); proxy.Transparency = 1
+	proxy.CanCollide = false; proxy.Massless = true; proxy.Parent = char
+	local weld = Instance.new("Weld")
+	weld.Part0 = hrp; weld.Part1 = proxy; weld.C0 = CFrame.new(0,0,0); weld.Parent = proxy
+	return proxy
+end
+
+local function proxyMove(dir, speed)
+	local char = LP.Character; if not char then return end
+	local hum = char:FindFirstChildOfClass("Humanoid"); local p = ensureProxy()
+	if hum then hum:Move(dir, false) end
+	if p then p.AssemblyLinearVelocity = Vector3.new(dir.X*speed, p.AssemblyLinearVelocity.Y, dir.Z*speed) end
+end
+
+local function proxyStop()
+	local hum = LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
+	if hum then hum:Move(Vector3.zero, false) end
+	if proxy then proxy.AssemblyLinearVelocity = Vector3.new(0, proxy.AssemblyLinearVelocity.Y, 0) end
+end
+
 local function setupChar(char)
 	h = char:WaitForChild("Humanoid", 5)
-	if h then h.WalkSpeed = getCurrentSpeed() end
+	hrp = char:WaitForChild("HumanoidRootPart", 5)
+	if h then h.WalkSpeed = 16 end
+	ensureProxy()
 end
 LP.CharacterAdded:Connect(setupChar)
 if LP.Character then setupChar(LP.Character) end
@@ -56,15 +88,20 @@ local speedConn = nil
 local function startCustomSpeed()
 	if speedConn then return end
 	customSpeedOn = true
-	speedConn = RunService.Heartbeat:Connect(function()
-		local char = LP.Character
-		h = char and char:FindFirstChildOfClass("Humanoid")
-		if h then h.WalkSpeed = getCurrentSpeed() end
+	speedConn = RunService.Stepped:Connect(function()
+		if not (h and hrp) then return end
+		local md = h.MoveDirection
+		if md.Magnitude > 0 then
+			proxyMove(md, getCurrentSpeed())
+		else
+			proxyStop()
+		end
 	end)
 end
 local function stopCustomSpeed()
 	customSpeedOn = false
 	if speedConn then speedConn:Disconnect(); speedConn = nil end
+	proxyStop()
 	if h then h.WalkSpeed = 16 end
 end
 
@@ -135,26 +172,12 @@ do
 	end)
 end
 
-local closeBtn = Instance.new("TextButton", panel)
-closeBtn.Size = UDim2.new(0,20,0,20)
-closeBtn.Position = UDim2.new(1,-26,0,4)
-closeBtn.BackgroundTransparency = 1
-closeBtn.Text = "X"
-closeBtn.TextColor3 = Color3.new(1,1,1)
-closeBtn.Font = Enum.Font.GothamBold
-closeBtn.TextSize = 13
-closeBtn.ZIndex = 11
-closeBtn.MouseButton1Click:Connect(function()
-	stopCustomSpeed(); stopSpeedBypass()
-	gui:Destroy()
-end)
-
 -- Bouton "-" pour réduire/cacher le panneau (ne garde que la barre de titre)
 local panelFullH = 258
 local minimized = false
 local minBtn = Instance.new("TextButton", panel)
 minBtn.Size = UDim2.new(0,20,0,20)
-minBtn.Position = UDim2.new(1,-50,0,4)
+minBtn.Position = UDim2.new(1,-26,0,4)
 minBtn.BackgroundTransparency = 1
 minBtn.Text = "-"
 minBtn.TextColor3 = Color3.new(1,1,1)
@@ -163,7 +186,7 @@ minBtn.TextSize = 16
 minBtn.ZIndex = 11
 
 local title = Instance.new("TextLabel", panel)
-title.Size = UDim2.new(1,-64,0,20)
+title.Size = UDim2.new(1,-40,0,20)
 title.Position = UDim2.new(0,10,0,6)
 title.BackgroundTransparency = 1
 title.Text = "CUSTOM SPEED"
