@@ -3001,8 +3001,8 @@ _buildSpeedWidget()
 do
 local stealWidget = Instance.new("Frame", gui)
 stealWidget.Name = "StealBarWidget"
-stealWidget.Size = UDim2.new(0, 280, 0, 40)
-stealWidget.Position = UDim2.new(0.5, -140, 0, 35)
+stealWidget.Size = UDim2.new(0, 260, 0, 36)
+stealWidget.Position = UDim2.new(0.5, -130, 0, 35)
 stealWidget.BackgroundTransparency = 1
 stealWidget.Active = true
 makeDraggable(stealWidget)
@@ -3082,9 +3082,9 @@ AutoSteal.StatusLabel   = stealLabel
 
 local function _setReadyColor(state)
 	local isReady = (state == "READY")
-	local col1 = isReady and Color3.fromRGB(30, 120, 60)  or Color3.fromRGB(120, 20, 20)
-	local col2 = isReady and C_GREEN                       or C_RED
-	local col3 = isReady and Color3.fromRGB(90, 255, 150) or Color3.fromRGB(255, 100, 100)
+	local col1 = isReady and Color3.fromRGB(20,  70, 140) or Color3.fromRGB(120, 20, 20)
+	local col2 = isReady and C_MOON                       or C_RED
+	local col3 = isReady and Color3.fromRGB(90, 180, 255) or Color3.fromRGB(255, 100, 100)
 	stealLabel.TextColor3 = col2
 	if _readyGradient then
 		_readyGradient.Color = ColorSequence.new({
