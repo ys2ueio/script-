@@ -35,17 +35,10 @@ local C_ROW  = Color3.fromRGB(22,22,28)
 -- ===================================================================
 -- CUSTOM SPEED — WalkSpeed normal / vol (steal), même logique que le hub
 -- ===================================================================
-local normalSpeed = 16
-local carrySpeed   = 16
-
-local function isStealing()
-	local char = LP.Character
-	local hum = char and char:FindFirstChildOfClass("Humanoid")
-	return hum ~= nil and hum.WalkSpeed < 25
-end
+local customSpeed = 16
 
 local function getCurrentSpeed()
-	return isStealing() and carrySpeed or normalSpeed
+	return customSpeed
 end
 
 local h
@@ -109,7 +102,7 @@ end
 -- UI — panneau compact, en haut à gauche (ne recouvre pas l'écran)
 -- ===================================================================
 local panel = Instance.new("Frame", gui)
-panel.Size = UDim2.new(0,190,0,230)
+panel.Size = UDim2.new(0,220,0,200)
 panel.Position = UDim2.new(0,16,0,80)
 panel.BackgroundColor3 = C_BG
 panel.BorderSizePixel = 0
@@ -165,8 +158,8 @@ title.TextSize = 13
 title.TextXAlignment = Enum.TextXAlignment.Left
 title.ZIndex = 11
 
--- Champs Normal / Steal speed
-local function makeInputRow(yPos, label, initial, onChange)
+-- Champ avec boutons -/+ et TextBox éditable
+local function makeInputRow(yPos, label, initial, min, max, step, onChange)
 	local row = Instance.new("Frame", panel)
 	row.Size = UDim2.new(1,-20,0,26)
 	row.Position = UDim2.new(0,10,0,yPos)
@@ -176,7 +169,7 @@ local function makeInputRow(yPos, label, initial, onChange)
 	Instance.new("UICorner", row).CornerRadius = UDim.new(0,8)
 
 	local lbl = Instance.new("TextLabel", row)
-	lbl.Size = UDim2.new(0.55,0,1,0)
+	lbl.Size = UDim2.new(0.4,0,1,0)
 	lbl.Position = UDim2.new(0,8,0,0)
 	lbl.BackgroundTransparency = 1
 	lbl.Text = label
@@ -186,31 +179,67 @@ local function makeInputRow(yPos, label, initial, onChange)
 	lbl.TextXAlignment = Enum.TextXAlignment.Left
 	lbl.ZIndex = 12
 
+	local value = initial
+
+	local minusBtn = Instance.new("TextButton", row)
+	minusBtn.Size = UDim2.new(0,20,0,20)
+	minusBtn.Position = UDim2.new(1,-92,0.5,-10)
+	minusBtn.BackgroundColor3 = C_OFF
+	minusBtn.Text = "-"
+	minusBtn.TextColor3 = C_MOON
+	minusBtn.Font = Enum.Font.GothamBlack
+	minusBtn.TextSize = 14
+	minusBtn.BorderSizePixel = 0
+	minusBtn.AutoButtonColor = false
+	minusBtn.ZIndex = 12
+	Instance.new("UICorner", minusBtn).CornerRadius = UDim.new(0,6)
+
 	local box = Instance.new("TextBox", row)
-	box.Size = UDim2.new(0.4,0,1,-6)
-	box.Position = UDim2.new(0.58,0,0,3)
+	box.Size = UDim2.new(0,44,1,-6)
+	box.Position = UDim2.new(1,-68,0,3)
 	box.BackgroundColor3 = C_OFF
 	box.BorderSizePixel = 0
-	box.Text = tostring(initial)
+	box.Text = tostring(value)
 	box.TextColor3 = C_MOON
 	box.Font = Enum.Font.GothamBold
 	box.TextSize = 11
 	box.ClearTextOnFocus = false
 	box.ZIndex = 12
 	Instance.new("UICorner", box).CornerRadius = UDim.new(0,6)
+
+	local plusBtn = Instance.new("TextButton", row)
+	plusBtn.Size = UDim2.new(0,20,0,20)
+	plusBtn.Position = UDim2.new(1,-22,0.5,-10)
+	plusBtn.BackgroundColor3 = C_OFF
+	plusBtn.Text = "+"
+	plusBtn.TextColor3 = C_MOON
+	plusBtn.Font = Enum.Font.GothamBlack
+	plusBtn.TextSize = 14
+	plusBtn.BorderSizePixel = 0
+	plusBtn.AutoButtonColor = false
+	plusBtn.ZIndex = 12
+	Instance.new("UICorner", plusBtn).CornerRadius = UDim.new(0,6)
+
+	local function setValue(n)
+		value = math.clamp(n, min, max)
+		box.Text = tostring(value)
+		onChange(value)
+	end
+
+	minusBtn.MouseButton1Click:Connect(function() setValue(value - step) end)
+	plusBtn.MouseButton1Click:Connect(function() setValue(value + step) end)
 	box.FocusLost:Connect(function()
 		local n = tonumber(box.Text)
-		if n then onChange(n) else box.Text = tostring(initial) end
+		if n then setValue(n) else box.Text = tostring(value) end
 	end)
 	return row
 end
 
-makeInputRow(30, "Normal Speed", normalSpeed, function(n) normalSpeed = n end)
-makeInputRow(60, "Steal Speed", carrySpeed, function(n) carrySpeed = n end)
+makeInputRow(30, "Speed", customSpeed, 16, 500, 2, function(n) customSpeed = n end)
 
 local speedBtn = Instance.new("TextButton", panel)
 speedBtn.Size = UDim2.new(1,-20,0,30)
-speedBtn.Position = UDim2.new(0,10,0,94)
+speedBtn.Position = UDim2.new(0,10,0,64)
 speedBtn.BackgroundColor3 = C_OFF
 speedBtn.Text = "SPEED: DISABLED"
 speedBtn.TextColor3 = Color3.fromRGB(140,140,150)
@@ -236,7 +265,7 @@ end)
 
 local sbTitle = Instance.new("TextLabel", panel)
 sbTitle.Size = UDim2.new(1,-40,0,18)
-sbTitle.Position = UDim2.new(0,10,0,132)
+sbTitle.Position = UDim2.new(0,10,0,102)
 sbTitle.BackgroundTransparency = 1
 sbTitle.Text = "SPEED BYPASS"
 sbTitle.TextColor3 = Color3.new(1,1,1)
@@ -247,7 +276,7 @@ sbTitle.ZIndex = 11
 
 local sbBtn = Instance.new("TextButton", panel)
 sbBtn.Size = UDim2.new(1,-20,0,26)
-sbBtn.Position = UDim2.new(0,10,0,152)
+sbBtn.Position = UDim2.new(0,10,0,122)
 sbBtn.BackgroundColor3 = C_OFF
 sbBtn.Text = "BYPASS: DISABLED  (Bind: E)"
 sbBtn.TextColor3 = Color3.fromRGB(140,140,150)
@@ -270,13 +299,13 @@ local function toggleSpeedBypass()
 end
 sbBtn.MouseButton1Click:Connect(toggleSpeedBypass)
 
-local powerRow = makeInputRow(182, "Power (10k-500k)", sbPower, function(n)
+local powerRow = makeInputRow(152, "Power (10k-500k)", sbPower, 10000, 500000, 5000, function(n)
 	sbApplyPower(n)
 end)
 
 local bindHint = Instance.new("TextLabel", panel)
 bindHint.Size = UDim2.new(1,-20,0,16)
-bindHint.Position = UDim2.new(0,10,0,210)
+bindHint.Position = UDim2.new(0,10,0,180)
 bindHint.BackgroundTransparency = 1
 bindHint.Text = "Clique le bouton BYPASS pour rebind"
 bindHint.TextColor3 = Color3.fromRGB(120,120,130)
