@@ -222,11 +222,20 @@ end
 -- simplement rien à détecter — ce n'est pas un bug, il n'y a pas de signal.
 -- ===================================================================
 local lastCarryDetected = false
+local _lastSeenWalkSpeed = nil
 
 RunService.Heartbeat:Connect(function()
-	if not autoGrabOn then return end
 	local hum = LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
 	if not hum then return end
+
+	-- DEBUG : montre en console chaque changement réel de WalkSpeed, pour
+	-- vérifier si ton jeu envoie un jour un signal < 25 (grab/carry).
+	if hum.WalkSpeed ~= _lastSeenWalkSpeed then
+		print("[AutoGrab][DEBUG] WalkSpeed réel = " .. tostring(hum.WalkSpeed))
+		_lastSeenWalkSpeed = hum.WalkSpeed
+	end
+
+	if not autoGrabOn then return end
 	if tick() < _carryManualUntil then return end
 	local carrying = hum.WalkSpeed <= 25
 	if carrying == lastCarryDetected then return end
