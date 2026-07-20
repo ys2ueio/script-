@@ -1,9 +1,9 @@
 --[[
-    test_speed.lua — Script solo : Custom Speed + Speed Bypass (extrait de MoonHub_v16.lua)
+    test_speed.lua — Script solo : Custom Speed + Speed Bypass + Auto Grab + Steal Bar
+    (extrait/adapté de MoonHub_v16.lua) — thème 100% noir, effets "Moon" en noir/blanc.
 
     Teste ça en jeu. Si ça te convient, dis-le moi et je remets ça
-    proprement dans MoonHub_v16.lua si besoin (déjà présent dedans en fait,
-    ceci est juste une version isolée pour tester/ajuster tranquille).
+    proprement dans MoonHub_v16.lua si besoin.
 ]]
 
 local Players     = game:GetService("Players")
@@ -26,20 +26,76 @@ if not pcall(function() gui.Parent = game:GetService("CoreGui") end) then
 	gui.Parent = (gethui and gethui()) or LP:WaitForChild("PlayerGui")
 end
 
-local C_BG   = Color3.fromRGB(10,10,14)
-local C_MOON = Color3.fromRGB(90,160,255)
-local C_ON   = Color3.fromRGB(20,45,80)
-local C_OFF  = Color3.fromRGB(0,0,0)
-local C_ROW  = Color3.fromRGB(22,22,28)
+-- ===================================================================
+-- THÈME — 100% noir, aucune couleur bleue
+-- ===================================================================
+local C_BG    = Color3.fromRGB(0,0,0)
+local C_ON    = Color3.fromRGB(30,30,30)
+local C_OFF   = Color3.fromRGB(0,0,0)
+local C_ROW   = Color3.fromRGB(14,14,14)
+local C_WHITE = Color3.fromRGB(255,255,255)
+local C_DIM   = Color3.fromRGB(130,130,130)
+
+-- Effets "Moon" (dégradé texte + contour qui tourne en boucle) en noir/blanc/gris
+local G1 = Color3.fromRGB(255,255,255)
+local G2 = Color3.fromRGB(140,140,140)
+local G3 = Color3.fromRGB(50,50,50)
+
+local _livingGradients = {}
+local _livingStrokes = {}
+
+local function addCorner(inst, r)
+	local c = Instance.new("UICorner", inst)
+	c.CornerRadius = UDim.new(0, r or 8)
+	return c
+end
+
+local function addLivingTextGradient(label)
+	local g = Instance.new("UIGradient", label)
+	g.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0,    G1),
+		ColorSequenceKeypoint.new(0.25, G2),
+		ColorSequenceKeypoint.new(0.5,  G1),
+		ColorSequenceKeypoint.new(0.75, G2),
+		ColorSequenceKeypoint.new(1,    G1),
+	})
+	g.Rotation = 0
+	table.insert(_livingGradients, g)
+	return g
+end
+
+local function addLivingStroke(parent, thickness)
+	local stroke = Instance.new("UIStroke", parent)
+	stroke.Thickness = thickness or 1.5
+	stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	stroke.Color = G2
+	local g = Instance.new("UIGradient", stroke)
+	g.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0,    G3),
+		ColorSequenceKeypoint.new(0.25, G2),
+		ColorSequenceKeypoint.new(0.5,  G3),
+		ColorSequenceKeypoint.new(0.75, G2),
+		ColorSequenceKeypoint.new(1,    G3),
+	})
+	table.insert(_livingStrokes, g)
+	return stroke, g
+end
+
+local _livingRotationSpeed = 0.6
+RunService.RenderStepped:Connect(function()
+	for _, g in ipairs(_livingGradients) do if g and g.Parent then g.Rotation=(g.Rotation+_livingRotationSpeed)%360 end end
+	for _, g in ipairs(_livingStrokes)   do if g and g.Parent then g.Rotation=(g.Rotation+_livingRotationSpeed)%360 end end
+end)
 
 -- ===================================================================
 -- CUSTOM SPEED — logique EXACTE du "Speed Booster" du hub :
 -- proxy part soudé au HRP + AssemblyLinearVelocity (pas juste WalkSpeed,
--- qui peut être corrigé/ignoré par le serveur).
+-- qui peut être corrigé/ignoré par le serveur). WalkSpeed reste donc
+-- intact et sert de vrai signal pour Auto Grab (voir plus bas).
 -- ===================================================================
 local normalSpeed = 16
 local stealSpeed  = 16
-local stealMode    = false  -- basculé manuellement par le bouton MODE (plus d'auto-détection piégeuse)
+local stealMode    = false  -- basculé par le bouton MODE ou automatiquement par Auto Grab
 
 local function getCurrentSpeed()
 	return stealMode and stealSpeed or normalSpeed
@@ -138,20 +194,117 @@ local function stopSpeedBypass()
 end
 
 -- ===================================================================
+-- AUTO GRAB — même logique que "Auto Carry On Grab" du hub :
+-- surveille le vrai WalkSpeed (signal serveur) pour détecter un grab
+-- et bascule automatiquement en mode STEAL. Alimente aussi la barre
+-- de steal ci-dessous.
+-- ===================================================================
+local autoGrabOn = true
+local lastCarryDetected = false
+local stealBarSetState  -- déclaré plus bas, assigné après création de la barre
+
+RunService.Heartbeat:Connect(function()
+	if not autoGrabOn then return end
+	local hum = LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
+	if not hum then return end
+	local carrying = hum.WalkSpeed <= 25
+	if carrying == lastCarryDetected then return end
+	lastCarryDetected = carrying
+	stealMode = carrying
+	if stealBarSetState then stealBarSetState(carrying) end
+end)
+
+-- ===================================================================
+-- STEAL BAR — widget séparé, 100% noir, pilotée par Auto Grab
+-- ===================================================================
+local stealWidget = Instance.new("Frame", gui)
+stealWidget.Name = "StealBarWidget"
+stealWidget.Size = UDim2.new(0,200,0,32)
+stealWidget.Position = UDim2.new(0.5,-100,0,35)
+stealWidget.BackgroundTransparency = 1
+stealWidget.Active = true
+
+local stealPill = Instance.new("Frame", stealWidget)
+stealPill.Size = UDim2.new(1,0,0,32)
+stealPill.BackgroundColor3 = C_BG
+stealPill.BackgroundTransparency = 0.1
+stealPill.BorderSizePixel = 0
+stealPill.ClipsDescendants = true
+addCorner(stealPill, 18)
+local stealPillStk = addLivingStroke(stealPill, 1.5)
+
+local stealLabel = Instance.new("TextLabel", stealPill)
+stealLabel.Size = UDim2.new(0.56,-20,1,0)
+stealLabel.Position = UDim2.new(0,12,0,0)
+stealLabel.BackgroundTransparency = 1
+stealLabel.Text = "READY"
+stealLabel.TextColor3 = C_WHITE
+stealLabel.Font = Enum.Font.GothamBlack
+stealLabel.TextSize = 11
+stealLabel.TextXAlignment = Enum.TextXAlignment.Left
+stealLabel.ZIndex = 6
+addLivingTextGradient(stealLabel)
+
+local stealFill = Instance.new("Frame", stealPill)
+stealFill.Size = UDim2.new(0,0,1,0)
+stealFill.BackgroundColor3 = Color3.fromRGB(60,60,60)
+stealFill.BackgroundTransparency = 0.35
+stealFill.BorderSizePixel = 0
+stealFill.ZIndex = 1
+addCorner(stealFill, 18)
+local stealFillGrad = Instance.new("UIGradient", stealFill)
+stealFillGrad.Color = ColorSequence.new({
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(20,20,20)),
+	ColorSequenceKeypoint.new(0.85, Color3.fromRGB(120,120,120)),
+	ColorSequenceKeypoint.new(1, C_WHITE),
+})
+
+local stealPctLbl = Instance.new("TextLabel", stealPill)
+stealPctLbl.Size = UDim2.new(0.44,-12,1,0)
+stealPctLbl.Position = UDim2.new(0.56,0,0,0)
+stealPctLbl.BackgroundTransparency = 1
+stealPctLbl.Text = ""
+stealPctLbl.TextColor3 = C_DIM
+stealPctLbl.Font = Enum.Font.GothamBlack
+stealPctLbl.TextSize = 11
+stealPctLbl.TextXAlignment = Enum.TextXAlignment.Right
+stealPctLbl.ZIndex = 6
+
+local STEAL_DURATION = 1.4
+local _stealAnimConn = nil
+stealBarSetState = function(carrying)
+	if _stealAnimConn then _stealAnimConn:Disconnect(); _stealAnimConn = nil end
+	if carrying then
+		stealLabel.Text = "CARRYING"
+		local t0 = tick()
+		_stealAnimConn = RunService.Heartbeat:Connect(function()
+			local prog = math.clamp((tick()-t0)/STEAL_DURATION, 0, 1)
+			stealFill.Size = UDim2.new(prog,0,1,0)
+			stealPctLbl.Text = math.floor(prog*100).."%"
+			if prog >= 1 then
+				stealLabel.Text = "GRABBED"
+				if _stealAnimConn then _stealAnimConn:Disconnect(); _stealAnimConn = nil end
+			end
+		end)
+	else
+		stealLabel.Text = "READY"
+		stealFill.Size = UDim2.new(0,0,1,0)
+		stealPctLbl.Text = ""
+	end
+end
+
+-- ===================================================================
 -- UI — panneau compact, en haut à gauche (ne recouvre pas l'écran)
 -- ===================================================================
 local panel = Instance.new("Frame", gui)
-panel.Size = UDim2.new(0,220,0,258)
+panel.Size = UDim2.new(0,220,0,290)
 panel.Position = UDim2.new(0,16,0,80)
 panel.BackgroundColor3 = C_BG
 panel.BorderSizePixel = 0
 panel.Active = true
 panel.ZIndex = 10
-Instance.new("UICorner", panel).CornerRadius = UDim.new(0,14)
-local stroke = Instance.new("UIStroke", panel)
-stroke.Color = C_MOON
-stroke.Thickness = 1.5
-stroke.Transparency = 0.3
+addCorner(panel, 14)
+addLivingStroke(panel, 1.5)
 
 -- Drag
 do
@@ -173,14 +326,14 @@ do
 end
 
 -- Bouton "-" pour réduire/cacher le panneau (ne garde que la barre de titre)
-local panelFullH = 258
+local panelFullH = 290
 local minimized = false
 local minBtn = Instance.new("TextButton", panel)
 minBtn.Size = UDim2.new(0,20,0,20)
 minBtn.Position = UDim2.new(1,-26,0,4)
 minBtn.BackgroundTransparency = 1
 minBtn.Text = "-"
-minBtn.TextColor3 = Color3.new(1,1,1)
+minBtn.TextColor3 = C_WHITE
 minBtn.Font = Enum.Font.GothamBlack
 minBtn.TextSize = 16
 minBtn.ZIndex = 11
@@ -189,12 +342,13 @@ local title = Instance.new("TextLabel", panel)
 title.Size = UDim2.new(1,-40,0,20)
 title.Position = UDim2.new(0,10,0,6)
 title.BackgroundTransparency = 1
-title.Text = "CUSTOM SPEED"
-title.TextColor3 = Color3.new(1,1,1)
+title.Text = "MOON SPEED"
+title.TextColor3 = C_WHITE
 title.Font = Enum.Font.GothamBlack
 title.TextSize = 13
 title.TextXAlignment = Enum.TextXAlignment.Left
 title.ZIndex = 11
+addLivingTextGradient(title)
 
 -- Champ avec boutons -/+ et TextBox éditable
 local function makeInputRow(yPos, label, initial, min, max, step, onChange)
@@ -204,14 +358,14 @@ local function makeInputRow(yPos, label, initial, min, max, step, onChange)
 	row.BackgroundColor3 = C_ROW
 	row.BorderSizePixel = 0
 	row.ZIndex = 11
-	Instance.new("UICorner", row).CornerRadius = UDim.new(0,8)
+	addCorner(row, 8)
 
 	local lbl = Instance.new("TextLabel", row)
 	lbl.Size = UDim2.new(0.4,0,1,0)
 	lbl.Position = UDim2.new(0,8,0,0)
 	lbl.BackgroundTransparency = 1
 	lbl.Text = label
-	lbl.TextColor3 = Color3.fromRGB(200,200,210)
+	lbl.TextColor3 = Color3.fromRGB(200,200,200)
 	lbl.Font = Enum.Font.Gotham
 	lbl.TextSize = 11
 	lbl.TextXAlignment = Enum.TextXAlignment.Left
@@ -224,13 +378,13 @@ local function makeInputRow(yPos, label, initial, min, max, step, onChange)
 	minusBtn.Position = UDim2.new(1,-92,0.5,-10)
 	minusBtn.BackgroundColor3 = C_OFF
 	minusBtn.Text = "-"
-	minusBtn.TextColor3 = C_MOON
+	minusBtn.TextColor3 = C_WHITE
 	minusBtn.Font = Enum.Font.GothamBlack
 	minusBtn.TextSize = 14
 	minusBtn.BorderSizePixel = 0
 	minusBtn.AutoButtonColor = false
 	minusBtn.ZIndex = 12
-	Instance.new("UICorner", minusBtn).CornerRadius = UDim.new(0,6)
+	addCorner(minusBtn, 6)
 
 	local box = Instance.new("TextBox", row)
 	box.Size = UDim2.new(0,44,1,-6)
@@ -238,25 +392,25 @@ local function makeInputRow(yPos, label, initial, min, max, step, onChange)
 	box.BackgroundColor3 = C_OFF
 	box.BorderSizePixel = 0
 	box.Text = tostring(value)
-	box.TextColor3 = C_MOON
+	box.TextColor3 = C_WHITE
 	box.Font = Enum.Font.GothamBold
 	box.TextSize = 11
 	box.ClearTextOnFocus = false
 	box.ZIndex = 12
-	Instance.new("UICorner", box).CornerRadius = UDim.new(0,6)
+	addCorner(box, 6)
 
 	local plusBtn = Instance.new("TextButton", row)
 	plusBtn.Size = UDim2.new(0,20,0,20)
 	plusBtn.Position = UDim2.new(1,-22,0.5,-10)
 	plusBtn.BackgroundColor3 = C_OFF
 	plusBtn.Text = "+"
-	plusBtn.TextColor3 = C_MOON
+	plusBtn.TextColor3 = C_WHITE
 	plusBtn.Font = Enum.Font.GothamBlack
 	plusBtn.TextSize = 14
 	plusBtn.BorderSizePixel = 0
 	plusBtn.AutoButtonColor = false
 	plusBtn.ZIndex = 12
-	Instance.new("UICorner", plusBtn).CornerRadius = UDim.new(0,6)
+	addCorner(plusBtn, 6)
 
 	local function setValue(n)
 		value = math.clamp(n, min, max)
@@ -281,17 +435,17 @@ modeBtn.Size = UDim2.new(1,-20,0,24)
 modeBtn.Position = UDim2.new(0,10,0,90)
 modeBtn.BackgroundColor3 = C_OFF
 modeBtn.Text = "MODE: NORMAL"
-modeBtn.TextColor3 = Color3.fromRGB(140,140,150)
+modeBtn.TextColor3 = C_DIM
 modeBtn.Font = Enum.Font.GothamBlack
 modeBtn.TextSize = 11
 modeBtn.BorderSizePixel = 0
 modeBtn.AutoButtonColor = false
 modeBtn.ZIndex = 11
-Instance.new("UICorner", modeBtn).CornerRadius = UDim.new(0,8)
+addCorner(modeBtn, 8)
 modeBtn.MouseButton1Click:Connect(function()
 	stealMode = not stealMode
 	modeBtn.Text = stealMode and "MODE: STEAL" or "MODE: NORMAL"
-	modeBtn.TextColor3 = stealMode and C_MOON or Color3.fromRGB(140,140,150)
+	modeBtn.TextColor3 = stealMode and C_WHITE or C_DIM
 	TweenService:Create(modeBtn, TweenInfo.new(0.15), {BackgroundColor3 = stealMode and C_ON or C_OFF}):Play()
 end)
 
@@ -300,54 +454,78 @@ speedBtn.Size = UDim2.new(1,-20,0,30)
 speedBtn.Position = UDim2.new(0,10,0,118)
 speedBtn.BackgroundColor3 = C_OFF
 speedBtn.Text = "SPEED: DISABLED"
-speedBtn.TextColor3 = Color3.fromRGB(140,140,150)
+speedBtn.TextColor3 = C_DIM
 speedBtn.Font = Enum.Font.GothamBlack
 speedBtn.TextSize = 12
 speedBtn.BorderSizePixel = 0
 speedBtn.AutoButtonColor = false
 speedBtn.ZIndex = 11
-Instance.new("UICorner", speedBtn).CornerRadius = UDim.new(0,10)
+addCorner(speedBtn, 10)
 speedBtn.MouseButton1Click:Connect(function()
 	if customSpeedOn then
 		stopCustomSpeed()
 		speedBtn.Text = "SPEED: DISABLED"
-		speedBtn.TextColor3 = Color3.fromRGB(140,140,150)
+		speedBtn.TextColor3 = C_DIM
 		TweenService:Create(speedBtn, TweenInfo.new(0.15), {BackgroundColor3 = C_OFF}):Play()
 	else
 		startCustomSpeed()
 		speedBtn.Text = "SPEED: ENABLED"
-		speedBtn.TextColor3 = C_MOON
+		speedBtn.TextColor3 = C_WHITE
 		TweenService:Create(speedBtn, TweenInfo.new(0.15), {BackgroundColor3 = C_ON}):Play()
+	end
+end)
+
+local grabBtn = Instance.new("TextButton", panel)
+grabBtn.Size = UDim2.new(1,-20,0,24)
+grabBtn.Position = UDim2.new(0,10,0,152)
+grabBtn.BackgroundColor3 = C_ON
+grabBtn.Text = "AUTO GRAB: ENABLED"
+grabBtn.TextColor3 = C_WHITE
+grabBtn.Font = Enum.Font.GothamBlack
+grabBtn.TextSize = 11
+grabBtn.BorderSizePixel = 0
+grabBtn.AutoButtonColor = false
+grabBtn.ZIndex = 11
+addCorner(grabBtn, 8)
+grabBtn.MouseButton1Click:Connect(function()
+	autoGrabOn = not autoGrabOn
+	grabBtn.Text = autoGrabOn and "AUTO GRAB: ENABLED" or "AUTO GRAB: DISABLED"
+	grabBtn.TextColor3 = autoGrabOn and C_WHITE or C_DIM
+	TweenService:Create(grabBtn, TweenInfo.new(0.15), {BackgroundColor3 = autoGrabOn and C_ON or C_OFF}):Play()
+	if not autoGrabOn then
+		lastCarryDetected = false
+		if stealBarSetState then stealBarSetState(false) end
 	end
 end)
 
 local sbTitle = Instance.new("TextLabel", panel)
 sbTitle.Size = UDim2.new(1,-40,0,18)
-sbTitle.Position = UDim2.new(0,10,0,156)
+sbTitle.Position = UDim2.new(0,10,0,186)
 sbTitle.BackgroundTransparency = 1
-sbTitle.Text = "SPEED BYPASS"
-sbTitle.TextColor3 = Color3.new(1,1,1)
+sbTitle.Text = "MOON BYPASS"
+sbTitle.TextColor3 = C_WHITE
 sbTitle.Font = Enum.Font.GothamBlack
 sbTitle.TextSize = 12
 sbTitle.TextXAlignment = Enum.TextXAlignment.Left
 sbTitle.ZIndex = 11
+addLivingTextGradient(sbTitle)
 
 local sbBtn = Instance.new("TextButton", panel)
 sbBtn.Size = UDim2.new(1,-20,0,26)
-sbBtn.Position = UDim2.new(0,10,0,176)
+sbBtn.Position = UDim2.new(0,10,0,206)
 sbBtn.BackgroundColor3 = C_OFF
 sbBtn.Text = "BYPASS: DISABLED  (Bind: E)"
-sbBtn.TextColor3 = Color3.fromRGB(140,140,150)
+sbBtn.TextColor3 = C_DIM
 sbBtn.Font = Enum.Font.GothamBlack
 sbBtn.TextSize = 11
 sbBtn.BorderSizePixel = 0
 sbBtn.AutoButtonColor = false
 sbBtn.ZIndex = 11
-Instance.new("UICorner", sbBtn).CornerRadius = UDim.new(0,10)
+addCorner(sbBtn, 10)
 
 local function refreshSbBtn()
 	sbBtn.Text = (sbActive and "BYPASS: ENABLED  (Bind: " or "BYPASS: DISABLED  (Bind: ") .. sbKeybind.Name .. ")"
-	sbBtn.TextColor3 = sbActive and C_MOON or Color3.fromRGB(140,140,150)
+	sbBtn.TextColor3 = sbActive and C_WHITE or C_DIM
 	TweenService:Create(sbBtn, TweenInfo.new(0.15), {BackgroundColor3 = sbActive and C_ON or C_OFF}):Play()
 end
 local function toggleSpeedBypass()
@@ -357,16 +535,16 @@ local function toggleSpeedBypass()
 end
 sbBtn.MouseButton1Click:Connect(toggleSpeedBypass)
 
-local powerRow = makeInputRow(206, "Power (10k-500k)", sbPower, 10000, 500000, 5000, function(n)
+local powerRow = makeInputRow(236, "Power (10k-500k)", sbPower, 10000, 500000, 5000, function(n)
 	sbApplyPower(n)
 end)
 
 local bindHint = Instance.new("TextLabel", panel)
 bindHint.Size = UDim2.new(1,-20,0,16)
-bindHint.Position = UDim2.new(0,10,0,234)
+bindHint.Position = UDim2.new(0,10,0,264)
 bindHint.BackgroundTransparency = 1
 bindHint.Text = "Clique le bouton BYPASS pour rebind"
-bindHint.TextColor3 = Color3.fromRGB(120,120,130)
+bindHint.TextColor3 = Color3.fromRGB(100,100,100)
 bindHint.Font = Enum.Font.Gotham
 bindHint.TextSize = 9
 bindHint.TextXAlignment = Enum.TextXAlignment.Left
@@ -390,7 +568,7 @@ UIS.InputBegan:Connect(function(input, gpe)
 	if input.KeyCode == sbKeybind then toggleSpeedBypass() end
 end)
 
-local hideableElements = {normalRow, stealRow, modeBtn, speedBtn, sbTitle, sbBtn, powerRow, bindHint}
+local hideableElements = {normalRow, stealRow, modeBtn, speedBtn, grabBtn, sbTitle, sbBtn, powerRow, bindHint}
 minBtn.MouseButton1Click:Connect(function()
 	minimized = not minimized
 	minBtn.Text = minimized and "+" or "-"
