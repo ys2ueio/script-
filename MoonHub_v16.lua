@@ -1289,6 +1289,7 @@ local function tpToGround()
 	local char = LP.Character; if not char then return end
 	local root = char:FindFirstChild("HumanoidRootPart"); if not root then return end
 	local hum2 = char:FindFirstChildOfClass("Humanoid"); if not hum2 then return end
+	_G._MH_selfTPGuardUntil = tick() + 0.35  -- lets Anti TP Bat know this jump is ours
 	-- Amir Hub logic: direct TP to fixed ground Y (-7.00), keeping Y rotation
 	root.CFrame = CFrame.new(root.Position.X, -7.00, root.Position.Z)
 		* CFrame.Angles(0, select(2, root.CFrame:ToEulerAnglesYXZ()), 0)
@@ -1307,6 +1308,7 @@ local function runDropBrainrot()
 	local char = LP.Character; if not char then return end
 	local root = char:FindFirstChild("HumanoidRootPart"); if not root then return end
 	_dropActive = true
+	_G._MH_selfTPGuardUntil = tick() + DROP_ASCEND_DURATION + 0.3
 	local t0 = tick()
 	local dc
 	dc = RunService.Heartbeat:Connect(function()
@@ -1465,6 +1467,53 @@ local function stopAntiRagdoll()
 	if antiRagThread then pcall(function() task.cancel(antiRagThread) end); antiRagThread=nil end
 	if AR.isBoosting and AR.cachedCharData.humanoid then AR.cachedCharData.humanoid.WalkSpeed=AR.DEFAULT_SPEED end
 	AR.isBoosting=false; AR.cachedCharData={}
+end
+
+-- ===================================================================
+-- ANTI TP BAT — cancels sudden hostile pulls/teleports toward an enemy
+-- (opponent "grapple"/TP bat mechanics), without blocking our own
+-- self-TP tools (TP Down, Drop Brainrot, Bat TP) which set a short
+-- guard window via _G._MH_selfTPGuardUntil before moving us.
+-- ===================================================================
+local ATB = { conn=nil, active=false, lastPos=nil }
+-- Any single-frame displacement above this (studs) is treated as a
+-- hostile pull/TP rather than normal movement, even with speed features on.
+local ATB_JUMP_THRESHOLD = 18
+function ATB:reset()
+	local char = LP.Character
+	local root = char and char:FindFirstChild("HumanoidRootPart")
+	self.lastPos = root and root.Position or nil
+end
+local function startAntiTPBat()
+	if ATB.conn then return end
+	ATB.active = true
+	ATB:reset()
+	ATB.conn = RunService.Heartbeat:Connect(function()
+		if not ATB.active then return end
+		local char = LP.Character; if not char then ATB.lastPos=nil; return end
+		local root = char:FindFirstChild("HumanoidRootPart"); if not root then ATB.lastPos=nil; return end
+		if not ATB.lastPos then ATB.lastPos = root.Position; return end
+		-- Guard window: one of our own tools just moved us on purpose, skip
+		if tick() < (_G._MH_selfTPGuardUntil or 0) then
+			ATB.lastPos = root.Position
+			return
+		end
+		local delta = (root.Position - ATB.lastPos).Magnitude
+		if delta > ATB_JUMP_THRESHOLD then
+			-- Snap back and kill the residual velocity that caused the pull
+			pcall(function()
+				root.CFrame = CFrame.new(ATB.lastPos) * (root.CFrame - root.CFrame.Position)
+				root.AssemblyLinearVelocity = Vector3.zero
+			end)
+		else
+			ATB.lastPos = root.Position
+		end
+	end)
+end
+local function stopAntiTPBat()
+	ATB.active = false
+	if ATB.conn then pcall(function() ATB.conn:Disconnect() end); ATB.conn=nil end
+	ATB.lastPos = nil
 end
 
 -- ===================================================================
@@ -1824,6 +1873,7 @@ function AimV3.start()
 		-- TP to enemy if distance > 8
 		local targetPos=tr.Position+Vector3.new(0,0.9,0)
 		if (root.Position-targetPos).Magnitude>8 then
+			_G._MH_selfTPGuardUntil = tick() + 0.35
 			root.CFrame=CFrame.new(targetPos)
 		end
 		-- Aim camera at enemy
@@ -2002,6 +2052,9 @@ buildPage("Combat", function()
 	UIB.makeGap(4); UIB.makeSectionLabel("Defense")
 	UIB.makeToggleRow("Anti Ragdoll",false,function(on)
 		State.antiRagdollEnabled=on; if on then startAntiRagdoll() else stopAntiRagdoll() end
+	end)
+	UIB.makeToggleRow("Anti TP Bat",false,function(on)
+		if on then startAntiTPBat() else stopAntiTPBat() end
 	end)
 	UIB.makeToggleRow("Medusa Counter",false,function(on)
 		State.medusaCounterEnabled=on
