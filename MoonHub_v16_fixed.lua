@@ -2032,6 +2032,18 @@ function TPDetect.start()
 						_tpdDebounce = true
 						local hum = char:FindFirstChildOfClass("Humanoid")
 						if hum then hum.Jump = true end
+						-- Le perso peut se retrouver bloqué en Ragdoll/Physics juste
+						-- après le hit, ce qui rend hum.Jump inopérant. On force la
+						-- sortie de cet état pendant quelques frames en parallèle,
+						-- que Anti Ragdoll soit activé séparément ou non.
+						task.spawn(function()
+							pcall(function() AR:cacheCharacterData() end)
+							for i = 1, 8 do
+								local ok, ragdolled = pcall(function() return AR:isRagdolled() end)
+								if ok and ragdolled then pcall(function() AR:forceExitRagdoll() end) end
+								task.wait()
+							end
+						end)
 						task.spawn(function()
 							local bat = BatCounter.findBat()
 							if bat then
