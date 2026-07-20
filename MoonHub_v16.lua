@@ -15,17 +15,6 @@ local LP            = Players.LocalPlayer
 if not LP.Character then LP.CharacterAdded:Wait() end
 
 -- ===================================================================
--- SECURITY KERNEL
--- ===================================================================
-local _K = {
-	promptCache = nil, promptCacheTime = 0,
-	lastHrpPos = Vector3.new(0,0,0),
-	cacheValidityTime = 0.08, cacheDistanceThreshold = 1, stealRadius = 60,
-	randomDelayBase = 0.05, randomDelayVariation = 0.03,
-	methodNameMap = {}, testHistory = {}, maxHistory = 50,
-}
-
--- ===================================================================
 -- COLOR PALETTE
 -- ===================================================================
 local C_BG      = Color3.fromRGB(0,0,0)
@@ -42,7 +31,6 @@ local C_OFF_BG  = Color3.fromRGB(0,0,0)
 local C_SILVER  = Color3.fromRGB(210,222,240)
 local C_SILVER2 = Color3.fromRGB(140,165,210)
 local C_RED     = Color3.fromRGB(220,60,60)
-local C_GREEN   = Color3.fromRGB(60,220,120)
 
 -- ===================================================================
 -- STATE
@@ -327,7 +315,7 @@ do
 	orbitRing.Rotation = 0
 	orbitRing.ZIndex = 500
 	addCorner(orbitRing, 200)
-	local orbitStroke, orbitGrad = addLivingStroke(orbitRing, 1)
+	local orbitStroke = addLivingStroke(orbitRing, 1)
 	orbitStroke.Transparency = 0.55
 	local orbitDot = Instance.new("Frame", orbitRing)
 	orbitDot.AnchorPoint = Vector2.new(0.5,0.5)
@@ -408,7 +396,7 @@ do
 	nameLbl.TextSize = 46
 	nameLbl.TextTransparency = 1
 	nameLbl.ZIndex = 502
-	local nameGrad = addLivingTextGradient(nameLbl)
+	addLivingTextGradient(nameLbl)
 
 	local subLbl = Instance.new("TextLabel", introGui)
 	subLbl.AnchorPoint = Vector2.new(0.5,0.5)
@@ -1958,13 +1946,6 @@ end
 -- BUILD PAGES
 -- ===================================================================
 local applyAntiBatState
-local setAutoStealRowVisual
-local setAntiRagdollRowVisual
-local setAntiBatQuickBtnVisual
-local setBatCounterRowVisual
-local setAimbotRowVisual
-local setAimbotV2RowVisual
-local setInfJumpRowVisual
 
 	-- Bat Counter (automatic counter-attack when ragdoll detected) — missing table, was causing save crash
 local BatCounter = {active=false, conn=nil}
@@ -2006,27 +1987,27 @@ end
 
 buildPage("Combat", function()
 	UIB.makeSectionLabel("Combat")
-	setBatCounterRowVisual = UIB.makeToggleRow("Bat Counter",false,function(on)
+	UIB.makeToggleRow("Bat Counter",false,function(on)
 		BatCounter.active=on; if on then BatCounter.start() else BatCounter.stop() end
 	end)
-	setAimbotRowVisual = UIB.makeToggleRow("Bat Aimbot",false,function(on)
+	UIB.makeToggleRow("Bat Aimbot",false,function(on)
 		if on then if ABP.active then ABP.stop() end; AB.start() else AB.stop() end
 	end)
-	setAimbotV2RowVisual = UIB.makeToggleRow("Bat Aimbot V2",false,function(on)
+	UIB.makeToggleRow("Bat Aimbot V2",false,function(on)
 		if on then if AB.active then AB.stop() end; ABP.start() else ABP.stop() end
 	end)
 	UIB.makeGap(4); UIB.makeSectionLabel("Aimbot Tuning")
 	UIB.makeInputRow("Aim Speed",AB.SPEED,function(n) if n>0 and n<=200 then AB.SPEED=n end end)
 	UIB.makeInputRow("Aim Height",AB.HEIGHT,function(n) if n>=0 and n<=30 then AB.HEIGHT=n end end)
 	UIB.makeGap(4); UIB.makeSectionLabel("Defense")
-	setAntiRagdollRowVisual=UIB.makeToggleRow("Anti Ragdoll",false,function(on)
+	UIB.makeToggleRow("Anti Ragdoll",false,function(on)
 		State.antiRagdollEnabled=on; if on then startAntiRagdoll() else stopAntiRagdoll() end
 	end)
 	UIB.makeToggleRow("Medusa Counter",false,function(on)
 		State.medusaCounterEnabled=on
 		if on then setupMedusaCounter(LP.Character) else stopMedusaCounter() end
 	end)
-	setInfJumpRowVisual = UIB.makeToggleRow("Infinite Jump",false,function(on)
+	UIB.makeToggleRow("Infinite Jump",false,function(on)
 		IJ.active=on; if on then IJ.start() else IJ.stop() end
 	end)
 	do
@@ -2049,7 +2030,7 @@ buildPage("Combat", function()
 		holB.MouseButton1Click:Connect(function() IJ.mode="hold"; updM(); if _G._MH_autoSave then _G._MH_autoSave() end end)
 		makeDivider()
 	end
-	setAutoStealRowVisual=UIB.makeToggleRow("Auto Steal",false,function(on)
+	UIB.makeToggleRow("Auto Steal",false,function(on)
 		AutoSteal.Enabled=on; if on then startAutoSteal() else stopAutoSteal() end
 	end)
 	UIB.makeInputRow("Steal Radius",AutoSteal.Radius,function(n) if n and n>=1 and n<=500 then AutoSteal.Radius=n end end)
@@ -2808,7 +2789,6 @@ applyAntiBatState=function(on)
 	if on then
 		if not IJ.active then IJ.active=true; IJ.start() end
 	end
-	if setAntiBatQuickBtnVisual then setAntiBatQuickBtnVisual(on) end
 	if _G._MH_autoSave then _G._MH_autoSave() end
 end
 
@@ -4692,7 +4672,7 @@ end)()
 -- ===================================================================
 -- INITIALIZATION
 -- ===================================================================
-local _configLoaded = MH_load()   -- loads the config at startup
+MH_load()   -- loads the config at startup
 selectTab("Combat")
 -- All settings start OFF by default (no automatic activation
 -- on first launch) — only a saved config can re-enable them.
