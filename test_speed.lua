@@ -204,6 +204,27 @@ local function stopSpeedBypass()
 end
 
 -- ===================================================================
+-- AUTO GRAB — logique EXACTE "Auto Carry On Grab" du hub : bascule
+-- speedType en "carry" UNIQUEMENT quand l'animal est réellement dans les
+-- mains (signal serveur réel : WalkSpeed ≤ 25), pas pendant la simple
+-- tentative de vol (READY/UNREADY d'Auto Steal ci-dessous, qui reste
+-- séparé et purement informatif).
+-- ===================================================================
+local autoGrabOn = true
+local lastCarryDetected = false
+
+RunService.Heartbeat:Connect(function()
+	if not autoGrabOn then return end
+	local hum = LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
+	if not hum then return end
+	if tick() < _carryManualUntil then return end
+	local carrying = hum.WalkSpeed <= 25
+	if carrying == lastCarryDetected then return end
+	lastCarryDetected = carrying
+	speedType = carrying and "carry" or "normal"
+end)
+
+-- ===================================================================
 -- AUTO STEAL — logique EXACTE "Irish Hub" : sync ReplicatedStorage des
 -- plots + détection réelle via ProximityPrompt (hold/trigger interceptés),
 -- pas de WalkSpeed. C'est la vraie détection utilisée par le hub complet.
@@ -502,7 +523,6 @@ end)
 local function executeSteal(prompt, a)
 	local data = _stealCache[prompt]; if not data or not data.ready then return false end
 	data.ready = false; _stealActive = true; _stealStart = tick()
-	speedType = "carry"; _carryManualUntil = tick() + 0.35
 	_stealState = "UNREADY"; readyLbl.Text = "UNREADY"; setReadyColor("UNREADY")
 	task.spawn(function()
 		for _,fn in ipairs(data.hold) do task.spawn(fn) end
@@ -534,7 +554,6 @@ local function executeSteal(prompt, a)
 		_stealActive = false
 		stealFill.Size = UDim2.new(0,0,1,0); pctLbl.Text = ""
 		_stealState = "READY"; readyLbl.Text = "READY"; setReadyColor("READY")
-		speedType = "normal"; _carryManualUntil = tick() + 0.35
 		task.wait(CFG.COOLDOWN); data.ready = true
 	end)
 	return true
