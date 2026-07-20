@@ -3005,88 +3005,106 @@ _buildSpeedWidget()
 -- STEAL BAR WIDGET
 -- ===================================================================
 do
-local stealWidget=Instance.new("Frame",gui)
-stealWidget.Name="StealBarWidget"; stealWidget.Size=UDim2.new(0,200,0,32)
-stealWidget.Position=UDim2.new(0.5,-100,0,35); stealWidget.BackgroundTransparency=1; stealWidget.Active=true
+local stealWidget = Instance.new("Frame", gui)
+stealWidget.Name = "StealBarWidget"
+stealWidget.Size = UDim2.new(0, 280, 0, 40)
+stealWidget.Position = UDim2.new(0.5, -140, 0, 35)
+stealWidget.BackgroundTransparency = 1
+stealWidget.Active = true
 makeDraggable(stealWidget)
-local stealPill=Instance.new("Frame",stealWidget)
-stealPill.Size=UDim2.new(1,0,0,32); stealPill.BackgroundColor3=C_BG
-stealPill.BackgroundTransparency=0.1; stealPill.BorderSizePixel=0; stealPill.ClipsDescendants=true
-addCorner(stealPill,18)
-local stealPillStk=addStroke(stealPill,C_MOON,1.5,0.2)
-local stealPulseSpeed=1.2
-AutoSteal.SetFastPulse=function(on) stealPulseSpeed=on and 0.35 or 1.2 end
-task.spawn(function()
-	while stealPill.Parent do
-		TweenService:Create(stealPillStk,TweenInfo.new(stealPulseSpeed,Enum.EasingStyle.Sine,Enum.EasingDirection.InOut),{Transparency=0.6}):Play()
-		task.wait(stealPulseSpeed)
-		TweenService:Create(stealPillStk,TweenInfo.new(stealPulseSpeed,Enum.EasingStyle.Sine,Enum.EasingDirection.InOut),{Transparency=0.1}):Play()
-		task.wait(stealPulseSpeed)
-	end
-end)
-AutoSteal.FlashSuccess=function()
-	TweenService:Create(stealPillStk,TweenInfo.new(0.08),{Color=C_WHITE,Transparency=0}):Play()
-	TweenService:Create(stealPill,TweenInfo.new(0.08),{BackgroundTransparency=0}):Play()
-	task.delay(0.08,function()
-		TweenService:Create(stealPillStk,TweenInfo.new(0.35),{Color=C_MOON,Transparency=0.1}):Play()
-		TweenService:Create(stealPill,TweenInfo.new(0.35),{BackgroundTransparency=0.1}):Play()
-	end)
-end
-local stealLeftHalf=Instance.new("Frame",stealPill)
-stealLeftHalf.Size=UDim2.new(0.56,0,1,0); stealLeftHalf.BackgroundTransparency=1; stealLeftHalf.ZIndex=6
-local stealLabel=Instance.new("TextLabel",stealLeftHalf)
-stealLabel.Size=UDim2.new(1,-20,1,0); stealLabel.Position=UDim2.new(0,12,0,0)
-stealLabel.BackgroundTransparency=1; stealLabel.Text="READY"
-stealLabel.TextColor3=C_WHITE; stealLabel.Font=Enum.Font.GothamBlack; stealLabel.TextSize=11
-stealLabel.TextXAlignment=Enum.TextXAlignment.Left; stealLabel.ZIndex=6; addLivingTextGradient(stealLabel)
-local stealDivider=Instance.new("Frame",stealPill)
-stealDivider.Size=UDim2.new(0,1,0,18); stealDivider.Position=UDim2.new(0.56,0,0.5,-9)
-stealDivider.BackgroundColor3=C_SILVER2; stealDivider.BackgroundTransparency=0.4; stealDivider.BorderSizePixel=0; stealDivider.ZIndex=6
-local infoLabel=Instance.new("TextLabel",stealPill)
-infoLabel.Size=UDim2.new(0.44,-12,1,0); infoLabel.Position=UDim2.new(0.56,12,0,0)
-infoLabel.BackgroundTransparency=1; infoLabel.Text="0 FPS | --ms"
-infoLabel.TextColor3=C_WHITE; infoLabel.Font=Enum.Font.GothamBold; infoLabel.TextSize=11
-infoLabel.TextXAlignment=Enum.TextXAlignment.Left; infoLabel.ZIndex=6
-local stealFill=Instance.new("Frame",stealPill)
-stealFill.Size=UDim2.new(0,0,1,0); stealFill.BackgroundColor3=C_MOON
-stealFill.BackgroundTransparency=0.72; stealFill.BorderSizePixel=0; stealFill.ZIndex=1
-addCorner(stealFill,18)
-local stealFillGrad=Instance.new("UIGradient",stealFill)
-stealFillGrad.Color=ColorSequence.new({
-	ColorSequenceKeypoint.new(0,Color3.fromRGB(10,50,68)),
-	ColorSequenceKeypoint.new(0.85,C_MOON),
-	ColorSequenceKeypoint.new(1,C_SILVER),
+
+local stealPill = Instance.new("Frame", stealWidget)
+stealPill.Size = UDim2.new(1, 0, 1, 0)
+stealPill.BackgroundColor3 = C_BG
+stealPill.BackgroundTransparency = 0.1
+stealPill.BorderSizePixel = 0
+stealPill.ClipsDescendants = true
+addCorner(stealPill, 18)
+local stealPillStk, _ = addLivingStroke(stealPill, 1.5)
+
+local stealFill = Instance.new("Frame", stealPill)
+stealFill.Size = UDim2.new(0, 0, 1, 0)
+stealFill.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+stealFill.BackgroundTransparency = 0.35
+stealFill.BorderSizePixel = 0
+stealFill.ZIndex = 1
+addCorner(stealFill, 18)
+local stealFillGrad = Instance.new("UIGradient", stealFill)
+stealFillGrad.Color = ColorSequence.new({
+	ColorSequenceKeypoint.new(0,    Color3.fromRGB(20, 20, 20)),
+	ColorSequenceKeypoint.new(0.85, Color3.fromRGB(120, 120, 120)),
+	ColorSequenceKeypoint.new(1,    C_WHITE),
 })
-local stealEdge=Instance.new("Frame",stealFill)
-stealEdge.AnchorPoint=Vector2.new(1,0.5); stealEdge.Size=UDim2.new(0,4,1,-6); stealEdge.Position=UDim2.new(1,0,0.5,0)
-stealEdge.BackgroundColor3=C_WHITE; stealEdge.BorderSizePixel=0; stealEdge.ZIndex=2; addCorner(stealEdge,2)
-local stealPctLbl=Instance.new("TextLabel",stealLeftHalf)
-stealPctLbl.Size=UDim2.new(1,-32,1,0); stealPctLbl.Position=UDim2.new(0,12,0,0)
-stealPctLbl.BackgroundTransparency=1; stealPctLbl.Text=""
-stealPctLbl.TextColor3=C_MOON2; stealPctLbl.Font=Enum.Font.GothamBlack; stealPctLbl.TextSize=11
-stealPctLbl.TextXAlignment=Enum.TextXAlignment.Right; stealPctLbl.ZIndex=6
-AutoSteal.ProgressFill=stealFill; AutoSteal.ProgressText=stealPctLbl; AutoSteal.Widget=stealWidget; AutoSteal.StatusLabel=stealLabel
-task.spawn(function() task.wait(0.6); if AutoSteal.SetReadyColor then AutoSteal.SetReadyColor("READY") end end)
+
+local stealEdge = Instance.new("Frame", stealFill)
+stealEdge.AnchorPoint = Vector2.new(1, 0.5)
+stealEdge.Size = UDim2.new(0, 4, 1, -6)
+stealEdge.Position = UDim2.new(1, 0, 0.5, 0)
+stealEdge.BackgroundColor3 = C_WHITE
+stealEdge.BorderSizePixel = 0
+stealEdge.ZIndex = 2
+addCorner(stealEdge, 2)
+
+local stealLabel = Instance.new("TextLabel", stealPill)
+stealLabel.Size = UDim2.new(0.56, -16, 1, 0)
+stealLabel.Position = UDim2.new(0, 16, 0, 0)
+stealLabel.BackgroundTransparency = 1
+stealLabel.Text = "READY"
+stealLabel.TextColor3 = C_WHITE
+stealLabel.Font = Enum.Font.GothamBlack
+stealLabel.TextSize = 13
+stealLabel.TextXAlignment = Enum.TextXAlignment.Left
+stealLabel.ZIndex = 5
+local _readyGradient = addLivingTextGradient(stealLabel)
+
+local stealPctLbl = Instance.new("TextLabel", stealPill)
+stealPctLbl.Size = UDim2.new(0.56, -40, 1, 0)
+stealPctLbl.Position = UDim2.new(0, 16, 0, 0)
+stealPctLbl.BackgroundTransparency = 1
+stealPctLbl.Text = ""
+stealPctLbl.TextColor3 = C_WHITE
+stealPctLbl.Font = Enum.Font.GothamBlack
+stealPctLbl.TextSize = 13
+stealPctLbl.TextXAlignment = Enum.TextXAlignment.Right
+stealPctLbl.ZIndex = 5
+addLivingTextGradient(stealPctLbl)
+
+local infoLabel = Instance.new("TextLabel", stealPill)
+infoLabel.Size = UDim2.new(0.44, -16, 1, 0)
+infoLabel.Position = UDim2.new(0.56, 16, 0, 0)
+infoLabel.BackgroundTransparency = 1
+infoLabel.Text = "0 FPS | --ms"
+infoLabel.TextColor3 = C_WHITE
+infoLabel.Font = Enum.Font.GothamBold
+infoLabel.TextSize = 13
+infoLabel.TextXAlignment = Enum.TextXAlignment.Left
+infoLabel.ZIndex = 5
+addLivingTextGradient(infoLabel)
+
+AutoSteal.ProgressFill  = stealFill
+AutoSteal.ProgressText  = stealPctLbl
+AutoSteal.Widget        = stealWidget
+AutoSteal.StatusLabel   = stealLabel
+
 local function _setReadyColor(state)
-	local lbl = AutoSteal.StatusLabel; if not lbl then return end
 	local isReady = (state == "READY")
-	local col = isReady and C_MOON or C_RED
-	lbl.TextColor3 = col
-	-- Change the label's animated gradient
-	local g = lbl:FindFirstChildOfClass("UIGradient")
-	if g then
-		local c1 = isReady and Color3.fromRGB(20,70,140)  or Color3.fromRGB(120,20,20)
-		local c2 = isReady and Color3.fromRGB(120,180,255) or Color3.fromRGB(255,100,100)
-		g.Color = ColorSequence.new({
-			ColorSequenceKeypoint.new(0,    c2),
-			ColorSequenceKeypoint.new(0.25, c1),
-			ColorSequenceKeypoint.new(0.5,  c2),
-			ColorSequenceKeypoint.new(0.75, c1),
-			ColorSequenceKeypoint.new(1,    c2),
+	local col1 = isReady and Color3.fromRGB(30, 120, 60)  or Color3.fromRGB(120, 20, 20)
+	local col2 = isReady and C_GREEN                       or C_RED
+	local col3 = isReady and Color3.fromRGB(90, 255, 150) or Color3.fromRGB(255, 100, 100)
+	stealLabel.TextColor3 = col2
+	if _readyGradient then
+		_readyGradient.Color = ColorSequence.new({
+			ColorSequenceKeypoint.new(0,    col3),
+			ColorSequenceKeypoint.new(0.25, col1),
+			ColorSequenceKeypoint.new(0.5,  col3),
+			ColorSequenceKeypoint.new(0.75, col1),
+			ColorSequenceKeypoint.new(1,    col3),
 		})
 	end
+	TweenService:Create(stealPillStk, TweenInfo.new(0.2), {Color = col2}):Play()
 end
 AutoSteal.SetReadyColor = _setReadyColor
+task.spawn(function() task.wait(0.6); _setReadyColor("READY") end)
 local Stats=game:GetService("Stats")
 local frameCount,lastFpsTime,lastFps,lastPing=0,tick(),60,nil
 local function refreshInfoLabel()
