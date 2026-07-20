@@ -127,6 +127,7 @@ local function makeInstance(className)
             return Vector2.new(0, 0)
         end
         if k == "AbsoluteRotation" then return 0 end
+        if k == "Rotation" then return 0 end
 
         -- Retourne une sous-instance par défaut
         local sub = makeInstance(k)

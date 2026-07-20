@@ -183,17 +183,23 @@ if not pcall(function() gui.Parent = game:GetService("CoreGui") end) then
 end
 
 -- ===================================================================
--- INTRO CUTSCENE — shockwave ring, shine sweep, star burst finale (~4s)
+-- INTRO CUTSCENE — crescent moon reveal, orbit ring, cinematic zoom (~4.2s)
 -- ===================================================================
 do
 	local introGui = Instance.new("Frame", gui)
 	introGui.Name = "MoonIntro"
 	introGui.Size = UDim2.new(1,0,1,0)
-	introGui.BackgroundColor3 = Color3.fromRGB(0,0,0)
+	introGui.BackgroundColor3 = Color3.fromRGB(2,3,7)
 	introGui.BackgroundTransparency = 0
 	introGui.ZIndex = 1000
 	introGui.BorderSizePixel = 0
 	introGui.ClipsDescendants = true
+	-- Subtle depth gradient instead of flat black
+	addGradient(introGui, Color3.fromRGB(6,10,20), Color3.fromRGB(0,0,0), 90)
+
+	-- Everything scales together for a cinematic zoom-in on load
+	local sceneScale = Instance.new("UIScale", introGui)
+	sceneScale.Scale = 1.12
 
 	-- Rising particles
 	task.spawn(function()
@@ -217,35 +223,96 @@ do
 		end
 	end)
 
-	-- Shockwave ring — expands outward and fades when the logo bursts in
+	-- A few large soft drifting orbs for background depth
+	for i = 1, 3 do
+		local orb = Instance.new("Frame", introGui)
+		orb.Size = UDim2.new(0, math.random(90,150), 0, math.random(90,150))
+		orb.Position = UDim2.new(math.random(0,100)/100, 0, math.random(0,100)/100, 0)
+		orb.BackgroundColor3 = C_MOON
+		orb.BackgroundTransparency = 0.96
+		orb.BorderSizePixel = 0
+		orb.ZIndex = 10
+		addCorner(orb, 200)
+		task.spawn(function()
+			while orb.Parent do
+				TweenService:Create(orb, TweenInfo.new(math.random(30,45)/10, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
+					{Position = UDim2.new(math.random(0,100)/100, 0, math.random(0,100)/100, 0)}):Play()
+				task.wait(math.random(30,45)/10)
+			end
+		end)
+	end
+
+	-- Shockwave ring — expands outward and fades when the moon bursts in
 	local function fireShockwave()
 		local ring = Instance.new("Frame", introGui)
 		ring.AnchorPoint = Vector2.new(0.5,0.5)
-		ring.Position = UDim2.new(0.5,0,0.44,0)
+		ring.Position = UDim2.new(0.5,0,0.42,0)
 		ring.Size = UDim2.new(0,8,0,8)
 		ring.BackgroundTransparency = 1
 		ring.ZIndex = 498
 		addCorner(ring, 200)
 		local stroke = addStroke(ring, C_MOON, 2, 0)
-		TweenService:Create(ring, TweenInfo.new(0.7, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-			{Size = UDim2.new(0,260,0,260)}):Play()
-		TweenService:Create(stroke, TweenInfo.new(0.7, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		TweenService:Create(ring, TweenInfo.new(0.75, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+			{Size = UDim2.new(0,280,0,280)}):Play()
+		TweenService:Create(stroke, TweenInfo.new(0.75, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
 			{Transparency = 1}):Play()
-		task.delay(0.75, function() pcall(function() ring:Destroy() end) end)
+		task.delay(0.8, function() pcall(function() ring:Destroy() end) end)
 	end
 
-	local pip = Instance.new("Frame", introGui)
-	pip.AnchorPoint = Vector2.new(0.5,0.5)
-	pip.Position = UDim2.new(0.5,0,0.44,0)
-	pip.Size = UDim2.new(0,0,0,0)
-	pip.BackgroundColor3 = C_MOON
-	pip.BorderSizePixel = 0
-	pip.ZIndex = 501
-	Instance.new("UICorner", pip).CornerRadius = UDim.new(1,0)
+	-- Crescent moon icon: bright disc with an offset dark disc cut into it,
+	-- plus a slow-rotating orbit ring — replaces the plain dot from before.
+	local moonWrap = Instance.new("Frame", introGui)
+	moonWrap.AnchorPoint = Vector2.new(0.5,0.5)
+	moonWrap.Position = UDim2.new(0.5,0,0.42,0)
+	moonWrap.Size = UDim2.new(0,0,0,0)
+	moonWrap.BackgroundTransparency = 1
+	moonWrap.ZIndex = 501
+
+	local orbitRing = Instance.new("Frame", moonWrap)
+	orbitRing.AnchorPoint = Vector2.new(0.5,0.5)
+	orbitRing.Position = UDim2.new(0.5,0,0.5,0)
+	orbitRing.Size = UDim2.new(1.9,0,1.9,0)
+	orbitRing.BackgroundTransparency = 1
+	orbitRing.Rotation = 0
+	orbitRing.ZIndex = 500
+	addCorner(orbitRing, 200)
+	local orbitStroke, orbitGrad = addLivingStroke(orbitRing, 1)
+	orbitStroke.Transparency = 0.55
+	local orbitDot = Instance.new("Frame", orbitRing)
+	orbitDot.AnchorPoint = Vector2.new(0.5,0.5)
+	orbitDot.Position = UDim2.new(1,0,0.5,0)
+	orbitDot.Size = UDim2.new(0,5,0,5)
+	orbitDot.BackgroundColor3 = C_MOON
+	orbitDot.BorderSizePixel = 0
+	orbitDot.ZIndex = 500
+	addCorner(orbitDot, 3)
+	task.spawn(function()
+		while orbitRing.Parent do
+			orbitRing.Rotation = (orbitRing.Rotation + 3) % 360
+			task.wait()
+		end
+	end)
+
+	local moonBase = Instance.new("Frame", moonWrap)
+	moonBase.AnchorPoint = Vector2.new(0.5,0.5)
+	moonBase.Position = UDim2.new(0.5,0,0.5,0)
+	moonBase.Size = UDim2.new(1,0,1,0)
+	moonBase.BackgroundColor3 = C_MOON
+	moonBase.BorderSizePixel = 0
+	moonBase.ZIndex = 501
+	addCorner(moonBase, 200)
+	local moonBite = Instance.new("Frame", moonWrap)
+	moonBite.AnchorPoint = Vector2.new(0.5,0.5)
+	moonBite.Position = UDim2.new(0.62,0,0.38,0)
+	moonBite.Size = UDim2.new(0.86,0,0.86,0)
+	moonBite.BackgroundColor3 = Color3.fromRGB(2,3,7)
+	moonBite.BorderSizePixel = 0
+	moonBite.ZIndex = 502
+	addCorner(moonBite, 200)
 
 	local nameLbl = Instance.new("TextLabel", introGui)
 	nameLbl.AnchorPoint = Vector2.new(0.5,0.5)
-	nameLbl.Position = UDim2.new(0.5,0,0.44,0)
+	nameLbl.Position = UDim2.new(0.5,0,0.54,0)
 	nameLbl.Size = UDim2.new(1,-40,0,50)
 	nameLbl.BackgroundTransparency = 1
 	nameLbl.Text = "MOON HUB"
@@ -258,7 +325,7 @@ do
 
 	local subLbl = Instance.new("TextLabel", introGui)
 	subLbl.AnchorPoint = Vector2.new(0.5,0.5)
-	subLbl.Position = UDim2.new(0.5,0,0.56,0)
+	subLbl.Position = UDim2.new(0.5,0,0.635,0)
 	subLbl.Size = UDim2.new(1,-40,0,24)
 	subLbl.BackgroundTransparency = 1
 	subLbl.Text = "YSLEM  ×  ALN"
@@ -269,9 +336,19 @@ do
 	subLbl.ZIndex = 502
 	addLivingTextGradient(subLbl)
 
+	-- Divider line that draws itself under the subtitle
+	local divWrap = Instance.new("Frame", introGui)
+	divWrap.AnchorPoint = Vector2.new(0.5,0.5)
+	divWrap.Position = UDim2.new(0.5,0,0.685,0)
+	divWrap.Size = UDim2.new(0,0,0,1)
+	divWrap.BackgroundColor3 = C_MOON
+	divWrap.BackgroundTransparency = 0.3
+	divWrap.BorderSizePixel = 0
+	divWrap.ZIndex = 502
+
 	local verLbl = Instance.new("TextLabel", introGui)
 	verLbl.AnchorPoint = Vector2.new(0.5,0.5)
-	verLbl.Position = UDim2.new(0.5,0,0.62,0)
+	verLbl.Position = UDim2.new(0.5,0,0.72,0)
 	verLbl.Size = UDim2.new(1,-40,0,14)
 	verLbl.BackgroundTransparency = 1
 	verLbl.Text = "V3"
@@ -284,7 +361,7 @@ do
 	-- Shine sweep — a soft diagonal glint that passes across the title once
 	local shineWrap = Instance.new("Frame", introGui)
 	shineWrap.AnchorPoint = Vector2.new(0.5,0.5)
-	shineWrap.Position = UDim2.new(0.5,0,0.44,0)
+	shineWrap.Position = UDim2.new(0.5,0,0.54,0)
 	shineWrap.Size = UDim2.new(1,-40,0,50)
 	shineWrap.BackgroundTransparency = 1
 	shineWrap.ClipsDescendants = true
@@ -307,7 +384,7 @@ do
 	-- Star burst finale: a center star plus small sparkles flung outward
 	local star = Instance.new("TextLabel", introGui)
 	star.AnchorPoint = Vector2.new(0.5,0.5)
-	star.Position = UDim2.new(0.5,0,0.72,0)
+	star.Position = UDim2.new(0.5,0,0.8,0)
 	star.Size = UDim2.new(0,0,0,0)
 	star.BackgroundTransparency = 1
 	star.Text = "★"
@@ -319,51 +396,74 @@ do
 	addLivingTextGradient(star)
 
 	local function fireStarBurst()
-		for i = 1, 8 do
-			local ang = (i / 8) * math.pi * 2
-			local dist = math.random(50, 90)
+		for i = 1, 10 do
+			local ang = (i / 10) * math.pi * 2
+			local dist = math.random(55, 100)
 			local spark = Instance.new("TextLabel", introGui)
 			spark.AnchorPoint = Vector2.new(0.5,0.5)
-			spark.Position = UDim2.new(0.5,0,0.72,0)
+			spark.Position = UDim2.new(0.5,0,0.8,0)
 			spark.Size = UDim2.new(0,14,0,14)
 			spark.BackgroundTransparency = 1
 			spark.Text = "★"
 			spark.TextColor3 = C_MOON2
 			spark.Font = Enum.Font.GothamBold
-			spark.TextSize = 10
+			spark.TextSize = math.random(7,11)
 			spark.TextTransparency = 0
 			spark.ZIndex = 501
 			local dx, dy = math.cos(ang) * dist, math.sin(ang) * dist
-			TweenService:Create(spark, TweenInfo.new(0.55, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-				Position = UDim2.new(0.5, dx, 0.72, dy),
+			TweenService:Create(spark, TweenInfo.new(0.6, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+				Position = UDim2.new(0.5, dx, 0.8, dy),
 				TextTransparency = 1,
 			}):Play()
-			task.delay(0.6, function() pcall(function() spark:Destroy() end) end)
+			task.delay(0.65, function() pcall(function() spark:Destroy() end) end)
 		end
+	end
+
+	-- Bright flash accent — a quick full-screen white pulse for punch
+	local function fireFlash(peakTransparency)
+		local flash = Instance.new("Frame", introGui)
+		flash.Size = UDim2.new(1,0,1,0)
+		flash.BackgroundColor3 = C_WHITE
+		flash.BackgroundTransparency = 1
+		flash.BorderSizePixel = 0
+		flash.ZIndex = 999
+		TweenService:Create(flash, TweenInfo.new(0.08), {BackgroundTransparency = peakTransparency or 0.82}):Play()
+		task.delay(0.08, function()
+			pcall(function()
+				TweenService:Create(flash, TweenInfo.new(0.3), {BackgroundTransparency = 1}):Play()
+				task.delay(0.3, function() pcall(function() flash:Destroy() end) end)
+			end)
+		end)
 	end
 
 	-- ── SEQUENCE ──────────────────────────────────────────────────
 	task.spawn(function()
+		TweenService:Create(sceneScale, TweenInfo.new(3.6, Enum.EasingStyle.Sine, Enum.EasingDirection.Out),
+			{Scale = 1}):Play()
+
 		task.wait(0.4)
-		TweenService:Create(pip, TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
-			{Size = UDim2.new(0,8,0,8)}):Play()
+		moonWrap.Size = UDim2.new(0,0,0,0)
+		TweenService:Create(moonWrap, TweenInfo.new(0.45, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+			{Size = UDim2.new(0,46,0,46)}):Play()
 		fireShockwave()
-		task.wait(0.45)
+		fireFlash(0.9)
+		task.wait(0.5)
 		nameLbl.TextSize = 58
 		TweenService:Create(nameLbl, TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
 			{TextTransparency = 0, TextSize = 46}):Play()
 		task.wait(0.35)
 		TweenService:Create(subLbl, TweenInfo.new(0.4), {TextTransparency = 0}):Play()
-		task.wait(0.25)
+		task.wait(0.2)
+		TweenService:Create(divWrap, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+			{Size = UDim2.new(0,120,0,1)}):Play()
+		task.wait(0.2)
 		TweenService:Create(verLbl, TweenInfo.new(0.4), {TextTransparency = 0}):Play()
-		task.wait(0.3)
-		TweenService:Create(pip, TweenInfo.new(0.4), {BackgroundTransparency = 0}):Play()
 
 		-- Shine sweep passes across the title once it's fully visible
 		TweenService:Create(shine, TweenInfo.new(0.6, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
 			{Position = UDim2.new(1.25,0,0.5,0)}):Play()
 
-		task.wait(1.4)
+		task.wait(1.5)
 
 		-- End star: appears, glows, bursts into sparkles, then fades
 		star.Size = UDim2.new(0,24,0,24)
@@ -371,15 +471,17 @@ do
 			{TextTransparency = 0}):Play()
 		task.wait(0.3)
 		fireStarBurst()
+		fireFlash(0.94)
 		task.wait(0.2)
 
 		-- Text fade out
 		TweenService:Create(verLbl, TweenInfo.new(0.2), {TextTransparency = 1}):Play()
 		task.wait(0.1)
+		TweenService:Create(divWrap, TweenInfo.new(0.2), {Size = UDim2.new(0,0,0,1)}):Play()
 		TweenService:Create(subLbl, TweenInfo.new(0.2), {TextTransparency = 1}):Play()
 		task.wait(0.1)
 		TweenService:Create(nameLbl, TweenInfo.new(0.25), {TextTransparency = 1}):Play()
-		TweenService:Create(pip, TweenInfo.new(0.3), {Size = UDim2.new(0,0,0,0)}):Play()
+		TweenService:Create(moonWrap, TweenInfo.new(0.3), {Size = UDim2.new(0,0,0,0)}):Play()
 		task.wait(0.3)
 
 		-- The star fades out (last visible element)
@@ -3751,7 +3853,7 @@ buildPage("Settings", function()
 	creditRow.Size = UDim2.new(1,0,0,30); creditRow.BackgroundTransparency = 1; creditRow.LayoutOrder = LO()
 	local creditFooter = Instance.new("TextLabel", creditRow)
 	creditFooter.Size = UDim2.new(1,0,1,0); creditFooter.BackgroundTransparency = 1
-	creditFooter.Text = "ALN x YSLEM  •  made by 1200_unknown"
+	creditFooter.Text = "ALN x YSLEM"
 	creditFooter.TextColor3 = C_SILVER2; creditFooter.Font = Enum.Font.Gotham; creditFooter.TextSize = 10
 	addLivingTextGradient(creditFooter)
 end);  -- required semicolon (otherwise ambiguous merge with the (function() below)
