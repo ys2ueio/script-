@@ -117,7 +117,13 @@ local function ensureProxy()
 	if not char then return nil end
 	hrp = char:FindFirstChild("HumanoidRootPart")
 	if not hrp then return nil end
-	if proxy and proxy.Parent then return proxy end
+	-- Ne réutilise le proxy existant QUE s'il est encore soudé au HRP actuel
+	-- (sinon c'est un proxy périmé de l'ancien personnage, avant mort/reset).
+	if proxy and proxy.Parent then
+		local w = proxy:FindFirstChildOfClass("Weld")
+		if w and w.Part0 == hrp then return proxy end
+		pcall(function() proxy:Destroy() end)
+	end
 	proxy = Instance.new("Part")
 	proxy.Name = "SpeedProxy"
 	proxy.Size = Vector3.new(1,1,1); proxy.Transparency = 1
@@ -141,6 +147,9 @@ local function proxyStop()
 end
 
 local function setupChar(char)
+	-- Personnage précédent (mort/reset) : on jette l'ancien proxy, il pointe
+	-- vers un HRP qui n'existe plus.
+	if proxy then pcall(function() proxy:Destroy() end); proxy = nil end
 	h = char:WaitForChild("Humanoid", 5)
 	hrp = char:WaitForChild("HumanoidRootPart", 5)
 	if h then h.WalkSpeed = getCurrentSpeed() end
