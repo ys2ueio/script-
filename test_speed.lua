@@ -87,18 +87,33 @@ RunService.RenderStepped:Connect(function()
 	for _, g in ipairs(_livingStrokes)   do if g and g.Parent then g.Rotation=(g.Rotation+_livingRotationSpeed)%360 end end
 end)
 
+-- Déclarés tôt car utilisés par getCurrentSpeed() ci-dessous (fermeture Lua)
+local autoGrabOn = true
+local stealBarSetState  -- assigné après la création de la barre de steal
+
 -- ===================================================================
 -- CUSTOM SPEED — logique EXACTE du "Speed Booster" du hub :
 -- proxy part soudé au HRP + AssemblyLinearVelocity (pas juste WalkSpeed,
 -- qui peut être corrigé/ignoré par le serveur). WalkSpeed reste donc
 -- intact et sert de vrai signal pour Auto Grab (voir plus bas).
 -- ===================================================================
-local normalSpeed = 16
-local stealSpeed  = 16
-local stealMode    = false  -- basculé par le bouton MODE ou automatiquement par Auto Grab
+-- Valeurs par défaut EXACTES du hub : les deux DOIVENT rester > 25,
+-- sinon le check "isSteal" (WalkSpeed < 25) se piège lui-même pour toujours.
+local normalSpeed = 60
+local stealSpeed  = 30
+local speedType = "normal"        -- "normal" ou "carry" — piloté par MODE ou Auto Grab
+local _carryManualUntil = 0        -- garde anti-conflit après un choix manuel (comme State._carryManualUntil)
 
 local function getCurrentSpeed()
-	return stealMode and stealSpeed or normalSpeed
+	local char = LP.Character
+	local hum = char and char:FindFirstChildOfClass("Humanoid")
+	local isSteal = hum and hum.WalkSpeed < 25
+	if autoGrabOn and isSteal and speedType ~= "carry" then
+		speedType = "carry"
+	elseif autoGrabOn and not isSteal and speedType == "carry" and (tick() - _carryManualUntil) > 0 then
+		speedType = "normal"
+	end
+	return speedType == "carry" and stealSpeed or normalSpeed
 end
 
 local h, hrp, proxy
@@ -133,7 +148,7 @@ end
 local function setupChar(char)
 	h = char:WaitForChild("Humanoid", 5)
 	hrp = char:WaitForChild("HumanoidRootPart", 5)
-	if h then h.WalkSpeed = 16 end
+	if h then h.WalkSpeed = getCurrentSpeed() end
 	ensureProxy()
 end
 LP.CharacterAdded:Connect(setupChar)
@@ -158,7 +173,7 @@ local function stopCustomSpeed()
 	customSpeedOn = false
 	if speedConn then speedConn:Disconnect(); speedConn = nil end
 	proxyStop()
-	if h then h.WalkSpeed = 16 end
+	if h then h.WalkSpeed = getCurrentSpeed() end
 end
 
 -- ===================================================================
@@ -194,23 +209,29 @@ local function stopSpeedBypass()
 end
 
 -- ===================================================================
--- AUTO GRAB — même logique que "Auto Carry On Grab" du hub :
--- surveille le vrai WalkSpeed (signal serveur) pour détecter un grab
--- et bascule automatiquement en mode STEAL. Alimente aussi la barre
--- de steal ci-dessous.
+-- AUTO GRAB — même logique que "Auto Carry On Grab" du hub (2 détecteurs
+-- combinés, à l'identique) :
+--  1) getCurrentSpeed() ci-dessus bascule speedType dès qu'il lit un
+--     WalkSpeed réel < 25 (bootstrap au spawn).
+--  2) Ce Heartbeat surveille en continu le WalkSpeed réel (signal serveur,
+--     jamais réécrit par notre proxy) pour détecter un grab en cours de
+--     partie et synchronise speedType + la barre de steal.
+-- IMPORTANT : ça ne peut se déclencher que si le JEU lui-même fait
+-- redescendre WalkSpeed sous 25 (mécanique native de grab/carry). Si ton
+-- duel n'a pas ce genre de mécanique côté serveur, Auto Grab n'a tout
+-- simplement rien à détecter — ce n'est pas un bug, il n'y a pas de signal.
 -- ===================================================================
-local autoGrabOn = true
 local lastCarryDetected = false
-local stealBarSetState  -- déclaré plus bas, assigné après création de la barre
 
 RunService.Heartbeat:Connect(function()
 	if not autoGrabOn then return end
 	local hum = LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
 	if not hum then return end
+	if tick() < _carryManualUntil then return end
 	local carrying = hum.WalkSpeed <= 25
 	if carrying == lastCarryDetected then return end
 	lastCarryDetected = carrying
-	stealMode = carrying
+	speedType = carrying and "carry" or "normal"
 	if stealBarSetState then stealBarSetState(carrying) end
 end)
 
@@ -269,6 +290,7 @@ stealPctLbl.Font = Enum.Font.GothamBlack
 stealPctLbl.TextSize = 11
 stealPctLbl.TextXAlignment = Enum.TextXAlignment.Right
 stealPctLbl.ZIndex = 6
+addLivingTextGradient(stealPctLbl)
 
 local STEAL_DURATION = 1.4
 local _stealAnimConn = nil
@@ -337,6 +359,7 @@ minBtn.TextColor3 = C_WHITE
 minBtn.Font = Enum.Font.GothamBlack
 minBtn.TextSize = 16
 minBtn.ZIndex = 11
+addLivingTextGradient(minBtn)
 
 local title = Instance.new("TextLabel", panel)
 title.Size = UDim2.new(1,-40,0,20)
@@ -370,6 +393,7 @@ local function makeInputRow(yPos, label, initial, min, max, step, onChange)
 	lbl.TextSize = 11
 	lbl.TextXAlignment = Enum.TextXAlignment.Left
 	lbl.ZIndex = 12
+	addLivingTextGradient(lbl)
 
 	local value = initial
 
@@ -385,6 +409,7 @@ local function makeInputRow(yPos, label, initial, min, max, step, onChange)
 	minusBtn.AutoButtonColor = false
 	minusBtn.ZIndex = 12
 	addCorner(minusBtn, 6)
+	addLivingTextGradient(minusBtn)
 
 	local box = Instance.new("TextBox", row)
 	box.Size = UDim2.new(0,44,1,-6)
@@ -398,6 +423,7 @@ local function makeInputRow(yPos, label, initial, min, max, step, onChange)
 	box.ClearTextOnFocus = false
 	box.ZIndex = 12
 	addCorner(box, 6)
+	addLivingTextGradient(box)
 
 	local plusBtn = Instance.new("TextButton", row)
 	plusBtn.Size = UDim2.new(0,20,0,20)
@@ -411,6 +437,7 @@ local function makeInputRow(yPos, label, initial, min, max, step, onChange)
 	plusBtn.AutoButtonColor = false
 	plusBtn.ZIndex = 12
 	addCorner(plusBtn, 6)
+	addLivingTextGradient(plusBtn)
 
 	local function setValue(n)
 		value = math.clamp(n, min, max)
@@ -442,11 +469,14 @@ modeBtn.BorderSizePixel = 0
 modeBtn.AutoButtonColor = false
 modeBtn.ZIndex = 11
 addCorner(modeBtn, 8)
+addLivingTextGradient(modeBtn)
 modeBtn.MouseButton1Click:Connect(function()
-	stealMode = not stealMode
-	modeBtn.Text = stealMode and "MODE: STEAL" or "MODE: NORMAL"
-	modeBtn.TextColor3 = stealMode and C_WHITE or C_DIM
-	TweenService:Create(modeBtn, TweenInfo.new(0.15), {BackgroundColor3 = stealMode and C_ON or C_OFF}):Play()
+	speedType = (speedType == "carry") and "normal" or "carry"
+	_carryManualUntil = tick() + 0.35  -- empêche Auto Grab d'écraser le choix manuel immédiatement
+	local isSteal = speedType == "carry"
+	modeBtn.Text = isSteal and "MODE: STEAL" or "MODE: NORMAL"
+	modeBtn.TextColor3 = isSteal and C_WHITE or C_DIM
+	TweenService:Create(modeBtn, TweenInfo.new(0.15), {BackgroundColor3 = isSteal and C_ON or C_OFF}):Play()
 end)
 
 local speedBtn = Instance.new("TextButton", panel)
@@ -461,6 +491,7 @@ speedBtn.BorderSizePixel = 0
 speedBtn.AutoButtonColor = false
 speedBtn.ZIndex = 11
 addCorner(speedBtn, 10)
+addLivingTextGradient(speedBtn)
 speedBtn.MouseButton1Click:Connect(function()
 	if customSpeedOn then
 		stopCustomSpeed()
@@ -487,6 +518,7 @@ grabBtn.BorderSizePixel = 0
 grabBtn.AutoButtonColor = false
 grabBtn.ZIndex = 11
 addCorner(grabBtn, 8)
+addLivingTextGradient(grabBtn)
 grabBtn.MouseButton1Click:Connect(function()
 	autoGrabOn = not autoGrabOn
 	grabBtn.Text = autoGrabOn and "AUTO GRAB: ENABLED" or "AUTO GRAB: DISABLED"
@@ -522,6 +554,7 @@ sbBtn.BorderSizePixel = 0
 sbBtn.AutoButtonColor = false
 sbBtn.ZIndex = 11
 addCorner(sbBtn, 10)
+addLivingTextGradient(sbBtn)
 
 local function refreshSbBtn()
 	sbBtn.Text = (sbActive and "BYPASS: ENABLED  (Bind: " or "BYPASS: DISABLED  (Bind: ") .. sbKeybind.Name .. ")"
@@ -549,6 +582,7 @@ bindHint.Font = Enum.Font.Gotham
 bindHint.TextSize = 9
 bindHint.TextXAlignment = Enum.TextXAlignment.Left
 bindHint.ZIndex = 11
+addLivingTextGradient(bindHint)
 
 sbBtn.MouseButton2Click:Connect(function()
 	sbWaitingForKey = true
