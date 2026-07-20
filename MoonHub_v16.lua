@@ -293,6 +293,27 @@ do
 		end
 	end)
 
+	-- Soft moonlight halo behind the crescent
+	local moonHalo = Instance.new("Frame", moonWrap)
+	moonHalo.AnchorPoint = Vector2.new(0.5,0.5)
+	moonHalo.Position = UDim2.new(0.5,0,0.5,0)
+	moonHalo.Size = UDim2.new(1,0,1,0)
+	moonHalo.BackgroundColor3 = C_MOON
+	moonHalo.BackgroundTransparency = 0.55
+	moonHalo.BorderSizePixel = 0
+	moonHalo.ZIndex = 500
+	addCorner(moonHalo, 200)
+	task.spawn(function()
+		while moonHalo.Parent do
+			TweenService:Create(moonHalo, TweenInfo.new(1.4, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
+				{Size = UDim2.new(1.35,0,1.35,0), BackgroundTransparency = 0.75}):Play()
+			task.wait(1.4)
+			TweenService:Create(moonHalo, TweenInfo.new(1.4, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
+				{Size = UDim2.new(1,0,1,0), BackgroundTransparency = 0.55}):Play()
+			task.wait(1.4)
+		end
+	end)
+
 	local moonBase = Instance.new("Frame", moonWrap)
 	moonBase.AnchorPoint = Vector2.new(0.5,0.5)
 	moonBase.Position = UDim2.new(0.5,0,0.5,0)
@@ -301,6 +322,21 @@ do
 	moonBase.BorderSizePixel = 0
 	moonBase.ZIndex = 501
 	addCorner(moonBase, 200)
+
+	-- Small craters for surface texture
+	local craterSpots = {{0.32,0.38,0.16},{0.6,0.28,0.11},{0.42,0.6,0.13}}
+	for _, c in ipairs(craterSpots) do
+		local crater = Instance.new("Frame", moonBase)
+		crater.AnchorPoint = Vector2.new(0.5,0.5)
+		crater.Position = UDim2.new(c[1],0,c[2],0)
+		crater.Size = UDim2.new(c[3],0,c[3],0)
+		crater.BackgroundColor3 = C_MOON2
+		crater.BackgroundTransparency = 0.35
+		crater.BorderSizePixel = 0
+		crater.ZIndex = 501
+		addCorner(crater, 200)
+	end
+
 	local moonBite = Instance.new("Frame", moonWrap)
 	moonBite.AnchorPoint = Vector2.new(0.5,0.5)
 	moonBite.Position = UDim2.new(0.62,0,0.38,0)
@@ -358,28 +394,30 @@ do
 	verLbl.TextTransparency = 1
 	verLbl.ZIndex = 502
 
-	-- Shine sweep — a soft diagonal glint that passes across the title once
-	local shineWrap = Instance.new("Frame", introGui)
-	shineWrap.AnchorPoint = Vector2.new(0.5,0.5)
-	shineWrap.Position = UDim2.new(0.5,0,0.54,0)
-	shineWrap.Size = UDim2.new(1,-40,0,50)
-	shineWrap.BackgroundTransparency = 1
-	shineWrap.ClipsDescendants = true
-	shineWrap.ZIndex = 503
-	local shine = Instance.new("Frame", shineWrap)
-	shine.AnchorPoint = Vector2.new(0.5,0.5)
-	shine.Size = UDim2.new(0,26,4,0)
-	shine.Position = UDim2.new(-0.25,0,0.5,0)
-	shine.Rotation = 18
-	shine.BackgroundColor3 = C_WHITE
-	shine.BorderSizePixel = 0
-	shine.ZIndex = 503
-	local shineGrad = Instance.new("UIGradient", shine)
-	shineGrad.Transparency = NumberSequence.new({
-		NumberSequenceKeypoint.new(0,   1),
-		NumberSequenceKeypoint.new(0.5, 0.25),
-		NumberSequenceKeypoint.new(1,   1),
-	})
+	-- Twinkling night-sky stars scattered across the background
+	for i = 1, 22 do
+		local tw = Instance.new("Frame", introGui)
+		local sz = math.random(1,2)
+		tw.Size = UDim2.new(0,sz,0,sz)
+		tw.Position = UDim2.new(math.random(0,100)/100, 0, math.random(0,100)/100, 0)
+		tw.BackgroundColor3 = C_WHITE
+		tw.BackgroundTransparency = 1
+		tw.BorderSizePixel = 0
+		tw.ZIndex = 20
+		addCorner(tw, 2)
+		task.spawn(function()
+			task.wait(math.random(0,20)/10)
+			while tw.Parent do
+				local peak = math.random(20,55)/100
+				TweenService:Create(tw, TweenInfo.new(math.random(8,18)/10, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
+					{BackgroundTransparency = peak}):Play()
+				task.wait(math.random(8,18)/10)
+				TweenService:Create(tw, TweenInfo.new(math.random(8,18)/10, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
+					{BackgroundTransparency = 1}):Play()
+				task.wait(math.random(8,18)/10)
+			end
+		end)
+	end
 
 	-- Star burst finale: a center star plus small sparkles flung outward
 	local star = Instance.new("TextLabel", introGui)
@@ -458,10 +496,6 @@ do
 			{Size = UDim2.new(0,120,0,1)}):Play()
 		task.wait(0.2)
 		TweenService:Create(verLbl, TweenInfo.new(0.4), {TextTransparency = 0}):Play()
-
-		-- Shine sweep passes across the title once it's fully visible
-		TweenService:Create(shine, TweenInfo.new(0.6, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
-			{Position = UDim2.new(1.25,0,0.5,0)}):Play()
 
 		task.wait(1.5)
 
