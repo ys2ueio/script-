@@ -19,7 +19,7 @@
 ]]
 
 -- ===================================================================
-local BACKGROUND_ID = "rbxassetid://0"  -- ← remplace le 0 par ton vrai ID
+local BACKGROUND_ID = "rbxassetid://91640776333981"
 local DIM_OVERLAY   = true              -- assombrit l'image pour lisibilité
 local OVERLAY_ALPHA = 0.55              -- 0 = image brute, 1 = noir complet
 -- ===================================================================
