@@ -127,8 +127,8 @@ local C_ON   = Color3.fromRGB(20,45,80)
 local C_OFF  = Color3.fromRGB(0,0,0)
 
 local panel = Instance.new("Frame", gui)
-panel.Size = UDim2.new(0,220,0,110)
-panel.Position = UDim2.new(0.5,-110,0.5,-55)
+panel.Size = UDim2.new(0,170,0,86)
+panel.Position = UDim2.new(0,16,0,80)
 panel.BackgroundColor3 = C_BG
 panel.BorderSizePixel = 0
 panel.Active = true
@@ -159,19 +159,19 @@ do
 end
 
 local title = Instance.new("TextLabel", panel)
-title.Size = UDim2.new(1,-20,0,26)
-title.Position = UDim2.new(0,10,0,10)
+title.Size = UDim2.new(1,-40,0,20)
+title.Position = UDim2.new(0,10,0,6)
 title.BackgroundTransparency = 1
 title.Text = "ANTI TP BAT"
 title.TextColor3 = Color3.new(1,1,1)
 title.Font = Enum.Font.GothamBlack
-title.TextSize = 16
+title.TextSize = 13
 title.TextXAlignment = Enum.TextXAlignment.Left
 title.ZIndex = 11
 
 local statusPill = Instance.new("Frame", panel)
-statusPill.Size = UDim2.new(1,-20,0,40)
-statusPill.Position = UDim2.new(0,10,0,44)
+statusPill.Size = UDim2.new(1,-20,0,32)
+statusPill.Position = UDim2.new(0,10,0,30)
 statusPill.BackgroundColor3 = C_OFF
 statusPill.BorderSizePixel = 0
 statusPill.ZIndex = 11
@@ -206,13 +206,13 @@ statusBtn.MouseButton1Click:Connect(function()
 end)
 
 local closeBtn = Instance.new("TextButton", panel)
-closeBtn.Size = UDim2.new(0,22,0,22)
-closeBtn.Position = UDim2.new(1,-30,0,8)
+closeBtn.Size = UDim2.new(0,20,0,20)
+closeBtn.Position = UDim2.new(1,-26,0,4)
 closeBtn.BackgroundTransparency = 1
-closeBtn.Text = "✕"
+closeBtn.Text = "X"
 closeBtn.TextColor3 = Color3.new(1,1,1)
 closeBtn.Font = Enum.Font.GothamBold
-closeBtn.TextSize = 14
+closeBtn.TextSize = 13
 closeBtn.ZIndex = 11
 closeBtn.MouseButton1Click:Connect(function()
 	stopAntiTPBat()
