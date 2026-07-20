@@ -53,7 +53,7 @@ local State = {
 	laggerActive = false, laggerCarryActive = false,
 	autoLeftEnabled = false, autoRightEnabled = false,
 	autoPlayMode = "Full",
-	nukeOptEnabled = false, removeAccEnabled = false, antiLagAdvEnabled = false,
+	nukeOptEnabled = false, removeAccEnabled = false, antiLagAdvEnabled = false, antiDesyncEnabled = false,
 	guiVisible = true,
 	antiRagdollEnabled = false, unwalkEnabled = false, autoCarryOnGrab = true,
 	dropBrainrotActive = false, isStealing = false,
@@ -1607,6 +1607,64 @@ local function antiLagAdvStop()
 end
 
 -- ===================================================================
+-- ANTI DESYNC
+-- Lisse les corrections brutales de position (rubberbanding/desync dû
+-- au ping) au lieu de laisser le personnage "snap" d'un coup, et
+-- s'assure que le NetworkOwnership du HRP reste sur le client local
+-- pour une simulation physique plus réactive et moins saccadée.
+-- ===================================================================
+local AntiDesync = {active=false, conn=nil, lastPos=nil, threshold=6, smoothTime=0.15}
+
+local function _adSetOwnership()
+	local char = LP.Character
+	local hrp2 = char and char:FindFirstChild("HumanoidRootPart")
+	if hrp2 then pcall(function() hrp2:SetNetworkOwner(LP) end) end
+end
+
+local function antiDesyncStart()
+	if AntiDesync.active then return end
+	AntiDesync.active = true
+	_adSetOwnership()
+	AntiDesync.lastPos = nil
+	AntiDesync.conn = RunService.Heartbeat:Connect(function()
+		if not AntiDesync.active then return end
+		local char = LP.Character
+		local hrp2 = char and char:FindFirstChild("HumanoidRootPart")
+		if not hrp2 then return end
+		local pos = hrp2.Position
+		if AntiDesync.lastPos then
+			local jump = (pos - AntiDesync.lastPos).Magnitude
+			if jump > AntiDesync.threshold then
+				-- Grosse correction serveur détectée : on lisse le
+				-- retour sur quelques frames au lieu du snap brutal.
+				local from, to = AntiDesync.lastPos, pos
+				task.spawn(function()
+					local steps = 6
+					for i = 1, steps do
+						if not AntiDesync.active or not hrp2.Parent then return end
+						local a = i / steps
+						local newPos = from:Lerp(to, a)
+						hrp2.CFrame = CFrame.new(newPos) * (hrp2.CFrame - hrp2.CFrame.Position)
+						task.wait(AntiDesync.smoothTime / steps)
+					end
+				end)
+			end
+		end
+		AntiDesync.lastPos = pos
+	end)
+end
+
+local function antiDesyncStop()
+	AntiDesync.active = false
+	if AntiDesync.conn then AntiDesync.conn:Disconnect(); AntiDesync.conn=nil end
+	AntiDesync.lastPos = nil
+end
+
+LP.CharacterAdded:Connect(function()
+	if AntiDesync.active then task.wait(1); _adSetOwnership() end
+end)
+
+-- ===================================================================
 -- ===================================================================
 -- MEDUSA COUNTER (logique raw__59_)
 -- MEDUSA COUNTER (raw__59_ logic)
@@ -2718,6 +2776,7 @@ buildPage("Optimize", function()
 	UIB.makeToggleRow("Remove Accessories",false,function(on) State.removeAccEnabled=on; if on then removeAccStart() else removeAccStop() end end)
 	UIB.makeToggleRow("Anti-Lag (Light)",false,function(on) State.antiLagAdvEnabled=on; if on then antiLagAdvStart() else antiLagAdvStop() end end)
 	UIB.makeToggleRow("Anti-Lag Booster",false,function(on) if on then ralStart() else ralStop() end end)
+	UIB.makeToggleRow("Anti Desync",false,function(on) State.antiDesyncEnabled=on; if on then antiDesyncStart() else antiDesyncStop() end end)
 	UIB.makeToggleRow("Ultra Mode",false,function(on)
 		if on then
 			-- raw__59_ logic: plastic-coats everything, disables decals/particles
