@@ -197,6 +197,28 @@ do
 	-- Subtle depth gradient instead of flat black
 	addGradient(introGui, Color3.fromRGB(6,10,20), Color3.fromRGB(0,0,0), 90)
 
+	-- Vignette: soft dark edges to frame the scene, done as 4 gradient strips
+	do
+		local function edgeVignette(size, pos, rot)
+			local edge = Instance.new("Frame", introGui)
+			edge.Size = size
+			edge.Position = pos
+			edge.BackgroundColor3 = Color3.new(0,0,0)
+			edge.BorderSizePixel = 0
+			edge.ZIndex = 30
+			local g = Instance.new("UIGradient", edge)
+			g.Rotation = rot
+			g.Transparency = NumberSequence.new({
+				NumberSequenceKeypoint.new(0, 0.35),
+				NumberSequenceKeypoint.new(1, 1),
+			})
+		end
+		edgeVignette(UDim2.new(1,0,0,90), UDim2.new(0,0,0,0), 90)
+		edgeVignette(UDim2.new(1,0,0,90), UDim2.new(0,0,1,-90), 270)
+		edgeVignette(UDim2.new(0,140,1,0), UDim2.new(0,0,0,0), 0)
+		edgeVignette(UDim2.new(0,140,1,0), UDim2.new(1,-140,0,0), 180)
+	end
+
 	-- Everything scales together for a cinematic zoom-in on load
 	local sceneScale = Instance.new("UIScale", introGui)
 	sceneScale.Scale = 1.12
@@ -240,6 +262,35 @@ do
 				task.wait(math.random(30,45)/10)
 			end
 		end)
+	end
+
+	-- Shooting star — a bright streak with a fading trail crossing the sky
+	local function fireShootingStar()
+		local startX = math.random(5,30)/100
+		local startY = math.random(5,25)/100
+		local endX = startX + math.random(35,55)/100
+		local endY = startY + math.random(20,35)/100
+		local trail = Instance.new("Frame", introGui)
+		trail.AnchorPoint = Vector2.new(0.5,0.5)
+		trail.Size = UDim2.new(0,60,0,2)
+		trail.Position = UDim2.new(startX,0,startY,0)
+		trail.Rotation = math.deg(math.atan2(endY-startY, endX-startX))
+		trail.BackgroundColor3 = C_WHITE
+		trail.BorderSizePixel = 0
+		trail.BackgroundTransparency = 1
+		trail.ZIndex = 40
+		local g = Instance.new("UIGradient", trail)
+		g.Transparency = NumberSequence.new({
+			NumberSequenceKeypoint.new(0,   1),
+			NumberSequenceKeypoint.new(0.85,0.4),
+			NumberSequenceKeypoint.new(1,   1),
+		})
+		TweenService:Create(trail, TweenInfo.new(0.12), {BackgroundTransparency = 0.15}):Play()
+		TweenService:Create(trail, TweenInfo.new(0.55, Enum.EasingStyle.Sine, Enum.EasingDirection.In), {
+			Position = UDim2.new(endX,0,endY,0),
+			BackgroundTransparency = 1,
+		}):Play()
+		task.delay(0.6, function() pcall(function() trail:Destroy() end) end)
 	end
 
 	-- Shockwave ring — expands outward and fades when the moon bursts in
@@ -478,6 +529,7 @@ do
 	task.spawn(function()
 		TweenService:Create(sceneScale, TweenInfo.new(3.6, Enum.EasingStyle.Sine, Enum.EasingDirection.Out),
 			{Scale = 1}):Play()
+		task.delay(0.1, fireShootingStar)
 
 		task.wait(0.4)
 		moonWrap.Size = UDim2.new(0,0,0,0)
