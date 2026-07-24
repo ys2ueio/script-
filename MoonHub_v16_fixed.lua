@@ -680,76 +680,73 @@ end
 -- ===================================================================
 -- ANTI RAGDOLL
 -- ===================================================================
--- [FIX #5] savedSpeed remplace DEFAULT_SPEED hardcodé : la vitesse d'avant le
--- boost est mémorisée et restaurée, évitant le conflit avec le Speed Booster.
-local AR = { cachedCharData={}, isBoosting=false, savedSpeed=nil, BOOST_SPEED=400 }
-function AR:cacheCharacterData()
-	local char=LP.Character; if not char then return false end
-	local hum=char:FindFirstChildOfClass("Humanoid"); local root=char:FindFirstChild("HumanoidRootPart")
-	if not hum or not root then return false end
-	self.cachedCharData={character=char, humanoid=hum, root=root}; return true
-end
-function AR:isRagdolled()
-	local hum=self.cachedCharData.humanoid; if not hum or not hum.Parent then return false end
-	local state=hum:GetState()
-	if state==Enum.HumanoidStateType.Physics or state==Enum.HumanoidStateType.Ragdoll or state==Enum.HumanoidStateType.FallingDown then return true end
-	local endTime=LP:GetAttribute("RagdollEndTime"); return endTime and (endTime-workspace:GetServerTimeNow())>0
-end
-function AR:forceExitRagdoll()
-	local hum=self.cachedCharData.humanoid; local root=self.cachedCharData.root; local char=self.cachedCharData.character
-	if not hum or not root or not char then return end
-	pcall(function() LP:SetAttribute("RagdollEndTime", workspace:GetServerTimeNow()) end)
-	for _,d in ipairs(char:GetDescendants()) do
-		if d:IsA("BallSocketConstraint") or (d:IsA("Attachment") and d.Name:find("RagdollAttachment")) then
-			pcall(function() d:Destroy() end)
-		end
-	end
-	if not self.isBoosting then
-		self.isBoosting = true
-		self.savedSpeed = hum.WalkSpeed  -- sauvegarde la vitesse courante avant le boost
-		hum.WalkSpeed   = self.BOOST_SPEED
-	end
-	if hum.Health>0 then hum:ChangeState(Enum.HumanoidStateType.Running) end
-	root.Anchored = false
-end
-function AR:heartbeatLoop()
-	while State.antiRagdollEnabled do
-		task.wait()
-		local char=LP.Character
-		if char and char~=self.cachedCharData.character then
-			self:cacheCharacterData(); self.isBoosting=false; self.savedSpeed=nil
-		end
-		if self:isRagdolled() then
-			self:forceExitRagdoll()
-		elseif self.isBoosting then
-			self.isBoosting=false
-			local hum=self.cachedCharData.humanoid
-			if hum and hum.Parent then
-				-- Restaure la vitesse d'avant le boost (pas une valeur hardcodée)
-				hum.WalkSpeed = self.savedSpeed or getCurrentSpeed()
+local antiRagdollConn = nil
+
+local function _arResetCharacter(char)
+	local hum = char:FindFirstChildOfClass("Humanoid")
+	local root = char:FindFirstChild("HumanoidRootPart")
+	if not hum or not root or hum.Health <= 0 then return end
+	pcall(function()
+		hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+		hum:ChangeState(Enum.HumanoidStateType.Running)
+		root.Velocity = Vector3.zero
+		root.RotVelocity = Vector3.zero
+		root.AssemblyLinearVelocity = Vector3.zero
+		root.AssemblyAngularVelocity = Vector3.zero
+		hum.PlatformStand = false
+		hum.Sit = false
+		hum.AutoRotate = true
+		hum.JumpPower = hum.JumpPower > 0 and hum.JumpPower or 50
+		hum.WalkSpeed = hum.WalkSpeed > 0 and hum.WalkSpeed or 16
+		for _, obj in ipairs(char:GetDescendants()) do
+			if obj:IsA("Motor6D") then
+				obj.Enabled = true
+			elseif obj:IsA("Constraint") or obj:IsA("BallSocketConstraint") or obj:IsA("HingeConstraint") then
+				obj.Enabled = true
+			elseif obj:IsA("BasePart") then
+				obj.CanCollide = true
+				obj.AssemblyLinearVelocity = Vector3.zero
+				obj.AssemblyAngularVelocity = Vector3.zero
 			end
-			self.savedSpeed = nil
 		end
-	end
-end
-local antiRagConn=nil; local antiRagThread=nil
-local function startAntiRagdoll()
-	if antiRagConn then return end; if not AR:cacheCharacterData() then return end
-	antiRagConn = RunService.RenderStepped:Connect(function()
-		local cam=workspace.CurrentCamera; local hum=AR.cachedCharData.humanoid
-		if cam and hum and hum.Parent and AR:isRagdolled() then cam.CameraSubject=hum end
+		workspace.CurrentCamera.CameraSubject = hum
+		local PM = LP.PlayerScripts:FindFirstChild("PlayerModule")
+		if PM then
+			local CM = PM:FindFirstChild("ControlModule")
+			if CM then
+				local ok, module = pcall(require, CM)
+				if ok and module and module.Enable then module:Enable() end
+			end
+		end
 	end)
-	if antiRagThread then pcall(function() task.cancel(antiRagThread) end) end
-	antiRagThread = task.spawn(function() AR:heartbeatLoop() end)
 end
+
+local function startAntiRagdoll()
+	if antiRagdollConn then return end
+	antiRagdollConn = RunService.Heartbeat:Connect(function()
+		if not State.antiRagdollEnabled then return end
+		local char = LP.Character; if not char then return end
+		local hum = char:FindFirstChildOfClass("Humanoid"); if not hum then return end
+		local st = hum:GetState()
+		if st == Enum.HumanoidStateType.Physics or
+		   st == Enum.HumanoidStateType.Ragdoll or
+		   st == Enum.HumanoidStateType.FallingDown or
+		   st == Enum.HumanoidStateType.Dead or
+		   hum.PlatformStand == true or
+		   hum.Sit == true then
+			_arResetCharacter(char)
+		end
+	end)
+end
+
 local function stopAntiRagdoll()
-	if antiRagConn then pcall(function() antiRagConn:Disconnect() end); antiRagConn=nil end
-	if antiRagThread then pcall(function() task.cancel(antiRagThread) end); antiRagThread=nil end
-	if AR.isBoosting and AR.cachedCharData.humanoid then
-		AR.cachedCharData.humanoid.WalkSpeed = AR.savedSpeed or getCurrentSpeed()
-	end
-	AR.isBoosting=false; AR.savedSpeed=nil; AR.cachedCharData={}
+	if antiRagdollConn then antiRagdollConn:Disconnect(); antiRagdollConn = nil end
 end
+
+LP.CharacterAdded:Connect(function()
+	task.wait(0.5)
+	if State.antiRagdollEnabled then startAntiRagdoll() end
+end)
 
 -- ===================================================================
 -- UNWALK
@@ -2453,9 +2450,6 @@ buildPage("Combat", function()
 	UIB.makeToggleRow("Auto Reset Medusa",false,function(on)
 		_armEnabled=on
 		if on then setupAutoResetMedusa(LP.Character) else stopAutoResetMedusa() end
-	end)
-	UIB.makeToggleRow("Anti Die",false,function(on)
-		if on then startAntiDie() else stopAntiDie() end
 	end)
 	setInfJumpRowVisual = UIB.makeToggleRow("Infinite Jump",false,function(on)
 		IJ.active=on; if on then IJ.start() else IJ.stop() end
