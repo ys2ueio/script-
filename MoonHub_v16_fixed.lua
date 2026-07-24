@@ -282,8 +282,7 @@ local function startAutoStealSemi()
 	local _stealActive  = false
 	local _stealStart   = 0
 	local _stealState   = "READY"
-	local _dur = AutoSteal.Duration or 1.4
-	local CFG = { HOLD_MIN=_dur*0.5, HOLD_MAX=_dur, ENTRY_DELAY=0.3, COOLDOWN=0.05, STEAL_RANGE=8 }
+	local CFG = { HOLD_MIN=1.3, HOLD_MAX=2.6, ENTRY_DELAY=0.3, COOLDOWN=0.05, STEAL_RANGE=8 }
 	local RS = game:GetService("ReplicatedStorage")
 	local _packages = RS:FindFirstChild("Packages")
 	local _datas    = RS:FindFirstChild("Datas")
@@ -421,12 +420,14 @@ local function startAutoStealSemi()
 	local function executeStealSemi(prompt, a)
 		local data=_stealCache[prompt]; if not data or not data.ready then return false end
 		data.ready=false; _stealActive=true; State.isStealing=true; _stealStart=tick()
-		local holdMax=AutoSteal.Duration or 1.4
+		_stealState="UNREADY"
+		if AutoSteal.StatusLabel then AutoSteal.StatusLabel.Text="UNREADY" end
+		if AutoSteal.SetReadyColor then AutoSteal.SetReadyColor("UNREADY") end
 		task.spawn(function()
 			for _,fn in ipairs(data.hold) do task.spawn(fn) end
 			task.spawn(function()
 				while _stealActive do
-					local prog=math.clamp((tick()-_stealStart)/holdMax,0,1)
+					local prog=math.clamp((tick()-_stealStart)/CFG.HOLD_MAX,0,1)
 					if AutoSteal.ProgressFill then AutoSteal.ProgressFill.Size=UDim2.new(prog,0,1,0) end
 					if AutoSteal.ProgressText then AutoSteal.ProgressText.Text=math.floor(prog*100).."%" end
 					if prog>=0.6 and _stealState~="READY" then
@@ -437,10 +438,10 @@ local function startAutoStealSemi()
 					task.wait()
 				end
 			end)
-			task.wait(holdMax*0.5)
+			task.wait(CFG.HOLD_MIN)
 			local alreadyClose=distTo(a)<=CFG.STEAL_RANGE
 			local fired=false
-			while tick()-_stealStart<=holdMax and prompt.Parent do
+			while tick()-_stealStart <= CFG.HOLD_MAX and prompt.Parent do
 				if distTo(a)<=CFG.STEAL_RANGE then
 					if not alreadyClose then task.wait(CFG.ENTRY_DELAY) end
 					for _,fn in ipairs(data.trigger) do task.spawn(fn) end
@@ -1682,6 +1683,7 @@ local function stopAntiKick()
 	end
 	_akActive = false
 end
+task.spawn(function() pcall(startAntiKick) end)
 
 local _MH_buildUI
 _MH_buildUI = function()
@@ -2500,9 +2502,12 @@ buildPage("Combat", function()
 	UIB.makeToggleRow("Anti Die",false,function(on)
 		if on then startAntiDie() else stopAntiDie() end
 	end)
-	UIB.makeToggleRow("Anti Kick",false,function(on)
-		if on then startAntiKick() else stopAntiKick() end
-	end)
+	do
+		local mr=Instance.new("Frame",currentPage); mr.Size=UDim2.new(1,0,0,26); mr.BackgroundColor3=C_ROW; mr.BackgroundTransparency=0.35; mr.BorderSizePixel=0; mr.LayoutOrder=LO(); addCorner(mr,12); addLivingStroke(mr,1)
+		local ml=Instance.new("TextLabel",mr); ml.Size=UDim2.new(0.7,0,1,0); ml.Position=UDim2.new(0,14,0,0); ml.BackgroundTransparency=1; ml.Text="Anti Kick"; ml.TextColor3=C_WHITE; ml.Font=Enum.Font.GothamBold; ml.TextSize=10; ml.TextXAlignment=Enum.TextXAlignment.Left; addLivingTextGradient(ml)
+		local badge=Instance.new("TextLabel",mr); badge.Size=UDim2.new(0,70,0,18); badge.Position=UDim2.new(1,-78,0.5,-9); badge.BackgroundColor3=C_ON_BG; badge.BackgroundTransparency=0.1; badge.BorderSizePixel=0; badge.Text="PASSIF ✓"; badge.TextColor3=C_GREEN; badge.Font=Enum.Font.GothamBold; badge.TextSize=9; badge.TextXAlignment=Enum.TextXAlignment.Center; addCorner(badge,6)
+		makeDivider()
+	end
 	setInfJumpRowVisual = UIB.makeToggleRow("Infinite Jump",false,function(on)
 		IJ.active=on; if on then IJ.start() else IJ.stop() end
 	end)
