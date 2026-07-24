@@ -520,16 +520,12 @@ local _KAG_conn     = nil
 local _KAG_scanTask = nil
 local _KAG_Active   = false
 local _KAG_Start    = 0
-local _KAG_Phase    = "idle"
-local _KAG_Label    = ""
-local _KAG_LastResult     = ""
-local _KAG_LastResultTime = 0
 local _KAG_Sync        = { caches={}, connections={} }
 local _KAG_AnimalsCache = {}
 local _KAG_PromptCache  = {}
 local _KAG_StealCache   = {}
 local _KAG_SyncRemotes  = nil
-local _KAG_STEAL_RANGE  = 10
+local _V2_CFG = { HOLD_MIN=1.3, HOLD_MAX=2.6, ENTRY_DELAY=0.3, COOLDOWN=0.05, STEAL_RANGE=8 }
 
 local function _KAG_splitPath(path)
 	if typeof(path)=="table" then return path end
@@ -674,44 +670,47 @@ end
 local function _KAG_executeSteal(prompt, a)
 	local data=_KAG_StealCache[prompt]; if not data or not data.ready then return false end
 	data.ready=false; _KAG_Active=true; State.isStealing=true
-	_KAG_Start=tick(); _KAG_Phase="holding"; _KAG_Label=a.name or "Animal"
-	local holdMax=AutoSteal.Duration or 1.4
-	local holdMin=holdMax*0.5
+	_KAG_Start=tick()
+	-- UNREADY immediately at steal start (test_speed.lua exact)
+	if AutoSteal.StatusLabel then AutoSteal.StatusLabel.Text="UNREADY" end
+	if AutoSteal.SetReadyColor then AutoSteal.SetReadyColor("UNREADY") end
 	task.spawn(function()
 		for _,fn in ipairs(data.hold) do task.spawn(fn) end
+		-- Progress loop (test_speed.lua exact)
 		task.spawn(function()
+			local _readyShown=false
 			while _KAG_Active do
-				local prog=math.clamp((tick()-_KAG_Start)/holdMax,0,1)
+				local prog=math.clamp((tick()-_KAG_Start)/_V2_CFG.HOLD_MAX,0,1)
 				if AutoSteal.ProgressFill then AutoSteal.ProgressFill.Size=UDim2.new(prog,0,1,0) end
 				if AutoSteal.ProgressText then AutoSteal.ProgressText.Text=math.floor(prog*100).."%" end
-				if prog>=0.6 and _KAG_Phase~="waitingRange" then
-					_KAG_Phase="waitingRange"
+				if prog>=0.6 and not _readyShown then
+					_readyShown=true
 					if AutoSteal.StatusLabel then AutoSteal.StatusLabel.Text="READY" end
 					if AutoSteal.SetReadyColor then AutoSteal.SetReadyColor("READY") end
 				end
 				task.wait()
 			end
 		end)
-		task.wait(holdMin)
-		local alreadyClose=_KAG_distTo(a)<=_KAG_STEAL_RANGE
+		task.wait(_V2_CFG.HOLD_MIN)
+		local alreadyClose=_KAG_distTo(a)<=_V2_CFG.STEAL_RANGE
 		local fired=false
-		while tick()-_KAG_Start<=holdMax and prompt.Parent do
-			if _KAG_distTo(a)<=_KAG_STEAL_RANGE then
-				if not alreadyClose then task.wait(0.3) end
+		while true do
+			if tick()-_KAG_Start>_V2_CFG.HOLD_MAX then break end
+			if not prompt.Parent then break end
+			if _KAG_distTo(a)<=_V2_CFG.STEAL_RANGE then
+				if not alreadyClose then task.wait(_V2_CFG.ENTRY_DELAY) end
 				for _,fn in ipairs(data.trigger) do task.spawn(fn) end
 				fired=true; break
 			end
 			task.wait()
 		end
-		_KAG_Active=false; State.isStealing=false; _KAG_Phase="idle"
-		_KAG_LastResult=fired and ("Stole ".._KAG_Label) or ("Missed: ".._KAG_Label)
-		_KAG_LastResultTime=tick()
+		_KAG_Active=false; State.isStealing=false
 		if AutoSteal.ProgressFill then AutoSteal.ProgressFill.Size=UDim2.new(0,0,1,0) end
 		if AutoSteal.ProgressText then AutoSteal.ProgressText.Text="" end
 		if AutoSteal.StatusLabel then AutoSteal.StatusLabel.Text="READY" end
 		if AutoSteal.SetReadyColor then AutoSteal.SetReadyColor("READY") end
 		if fired and AutoSteal.FlashSuccess then AutoSteal.FlashSuccess() end
-		task.wait(0.05); data.ready=true
+		task.wait(_V2_CFG.COOLDOWN); data.ready=true
 	end)
 	return true
 end
