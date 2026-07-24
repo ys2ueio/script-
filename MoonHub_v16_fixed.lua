@@ -1495,8 +1495,8 @@ do
 				local particle = Instance.new("Frame", introGui)
 				particle.Size = UDim2.new(0,size,0,size)
 				particle.Position = UDim2.new(math.random(15,85)/100, 0, 1, 10)
-				particle.BackgroundColor3 = C_MOON
-				particle.BackgroundTransparency = math.random(35,65)/100
+				particle.BackgroundColor3 = math.random()<0.3 and Color3.fromRGB(200,225,255) or C_MOON
+				particle.BackgroundTransparency = math.random(30,60)/100
 				particle.BorderSizePixel = 0
 				particle.ZIndex = 50
 				Instance.new("UICorner", particle).CornerRadius = UDim.new(1,0)
@@ -1573,6 +1573,22 @@ do
 		task.delay(0.8, function() pcall(function() ring:Destroy() end) end)
 	end
 
+	-- Lueur ambiante lunaire — sphère radiale bleue derrière la lune
+	do
+		local glowPos = UDim2.new(0.5,0,0.42,0)
+		for _, spec in ipairs({{240,0.910},{165,0.930},{95,0.905}}) do
+			local g = Instance.new("Frame", introGui)
+			g.AnchorPoint = Vector2.new(0.5,0.5)
+			g.Position = glowPos
+			g.Size = UDim2.new(0,spec[1],0,spec[1])
+			g.BackgroundColor3 = Color3.fromRGB(90,170,235)
+			g.BackgroundTransparency = spec[2]
+			g.BorderSizePixel = 0
+			g.ZIndex = 4
+			addCorner(g, 200)
+		end
+	end
+
 	-- Crescent moon icon: bright disc with an offset dark disc cut into it,
 	-- plus a slow-rotating orbit ring — replaces the plain dot from before.
 	local moonWrap = Instance.new("Frame", introGui)
@@ -1585,21 +1601,22 @@ do
 	local orbitRing = Instance.new("Frame", moonWrap)
 	orbitRing.AnchorPoint = Vector2.new(0.5,0.5)
 	orbitRing.Position = UDim2.new(0.5,0,0.5,0)
-	orbitRing.Size = UDim2.new(1.9,0,1.9,0)
+	orbitRing.Size = UDim2.new(2.3,0,0.85,0)   -- ellipse large
 	orbitRing.BackgroundTransparency = 1
 	orbitRing.Rotation = 0
 	orbitRing.ZIndex = 500
 	addCorner(orbitRing, 200)
 	local orbitStroke, orbitGrad = addLivingStroke(orbitRing, 1)
-	orbitStroke.Transparency = 0.55
+	orbitStroke.Transparency = 0.62
 	local orbitDot = Instance.new("Frame", orbitRing)
 	orbitDot.AnchorPoint = Vector2.new(0.5,0.5)
-	orbitDot.Position = UDim2.new(1,0,0.5,0)
-	orbitDot.Size = UDim2.new(0,5,0,5)
-	orbitDot.BackgroundColor3 = C_MOON
+	orbitDot.Position = UDim2.new(0.5,0,0,-2)  -- top of ellipse
+	orbitDot.Size = UDim2.new(0,4,0,4)
+	orbitDot.BackgroundColor3 = C_MOON2
 	orbitDot.BorderSizePixel = 0
 	orbitDot.ZIndex = 500
-	addCorner(orbitDot, 3)
+	addCorner(orbitDot, 2)
+	local orbitDotGlow = addStroke(orbitDot, C_MOON, 3, 0.4)
 	task.spawn(function()
 		while orbitRing.Parent do
 			orbitRing.Rotation = (orbitRing.Rotation + 3) % 360
@@ -1625,6 +1642,27 @@ do
 			TweenService:Create(moonHalo, TweenInfo.new(1.4, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
 				{Size = UDim2.new(1,0,1,0), BackgroundTransparency = 0.55}):Play()
 			task.wait(1.4)
+		end
+	end)
+
+	-- Outer second halo — slower, wider pulse
+	local moonHalo2 = Instance.new("Frame", moonWrap)
+	moonHalo2.AnchorPoint = Vector2.new(0.5,0.5)
+	moonHalo2.Position = UDim2.new(0.5,0,0.5,0)
+	moonHalo2.Size = UDim2.new(1.6,0,1.6,0)
+	moonHalo2.BackgroundColor3 = Color3.fromRGB(90,170,235)
+	moonHalo2.BackgroundTransparency = 0.84
+	moonHalo2.BorderSizePixel = 0
+	moonHalo2.ZIndex = 499
+	addCorner(moonHalo2, 200)
+	task.spawn(function()
+		while moonHalo2.Parent do
+			TweenService:Create(moonHalo2, TweenInfo.new(2.1, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
+				{Size = UDim2.new(2.0,0,2.0,0), BackgroundTransparency = 0.93}):Play()
+			task.wait(2.1)
+			TweenService:Create(moonHalo2, TweenInfo.new(2.1, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
+				{Size = UDim2.new(1.6,0,1.6,0), BackgroundTransparency = 0.84}):Play()
+			task.wait(2.1)
 		end
 	end)
 
@@ -1708,27 +1746,30 @@ do
 	verLbl.TextTransparency = 1
 	verLbl.ZIndex = 502
 
-	-- Twinkling night-sky stars scattered across the background
-	for i = 1, 22 do
+	-- Champ d'étoiles — 100 étoiles scintillantes (argenté/blanc/bleu)
+	local starColors = {C_WHITE, Color3.fromRGB(200,225,255), Color3.fromRGB(180,210,255), Color3.fromRGB(220,235,255)}
+	for i = 1, 100 do
 		local tw = Instance.new("Frame", introGui)
-		local sz = math.random(1,2)
+		local sz = math.random()<0.12 and 2 or 1
 		tw.Size = UDim2.new(0,sz,0,sz)
 		tw.Position = UDim2.new(math.random(0,100)/100, 0, math.random(0,100)/100, 0)
-		tw.BackgroundColor3 = C_WHITE
+		tw.BackgroundColor3 = starColors[math.random(1,#starColors)]
 		tw.BackgroundTransparency = 1
 		tw.BorderSizePixel = 0
 		tw.ZIndex = 20
 		addCorner(tw, 2)
 		task.spawn(function()
-			task.wait(math.random(0,20)/10)
+			task.wait(math.random(0,30)/10)
 			while tw.Parent do
-				local peak = math.random(20,55)/100
-				TweenService:Create(tw, TweenInfo.new(math.random(8,18)/10, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
+				local peak = math.random(15,60)/100
+				local dur = math.random(8,22)/10
+				TweenService:Create(tw, TweenInfo.new(dur/2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
 					{BackgroundTransparency = peak}):Play()
-				task.wait(math.random(8,18)/10)
-				TweenService:Create(tw, TweenInfo.new(math.random(8,18)/10, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
+				task.wait(dur/2)
+				if not tw.Parent then break end
+				TweenService:Create(tw, TweenInfo.new(dur/2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
 					{BackgroundTransparency = 1}):Play()
-				task.wait(math.random(8,18)/10)
+				task.wait(dur/2)
 			end
 		end)
 	end
@@ -1821,13 +1862,14 @@ do
 
 		task.wait(0.4)
 		moonWrap.Size = UDim2.new(0,0,0,0)
-		TweenService:Create(moonWrap, TweenInfo.new(0.45, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
-			{Size = UDim2.new(0,46,0,46)}):Play()
+		TweenService:Create(moonWrap, TweenInfo.new(0.48, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+			{Size = UDim2.new(0,70,0,70)}):Play()
 		fireShockwave()
+		task.delay(0.18, fireShockwave)
 		fireFlash(0.9)
 		_sfx(4115432498, 0.78, 1.0)            -- drop cinématique — apparition de la lune
 		task.wait(0.5)
-		nameLbl.TextSize = 58
+		nameLbl.TextSize = 62
 		TweenService:Create(nameLbl, TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
 			{TextTransparency = 0, TextSize = 46}):Play()
 		_sfx(9120386436, 0.40, 1.0)            -- bell — titre
