@@ -258,11 +258,11 @@ end)
 -- ===================================================================
 
 -- ===================================================================
--- AUTO STEAL (dual-mode: Kawai v2 [default] | Semi [legacy])
+-- AUTO STEAL (dual-mode: Auto Grab v2 [default] | Semi [legacy])
 -- ===================================================================
 local AutoSteal = {
 	Enabled=false, Radius=70, Duration=1.4, IsStealing=false,
-	Mode="kawai",  -- "kawai" | "semi"
+	Mode="v2",  -- "v2" | "semi"
 	ProgressFill=nil, ProgressText=nil, StatusLabel=nil,
 	SetFastPulse=nil, FlashSuccess=nil, Widget=nil,
 }
@@ -513,7 +513,7 @@ local function stopAutoStealSemi()
 	if AutoSteal.StatusLabel then AutoSteal.StatusLabel.Text="READY" end
 end
 
--- ── KAWAI mode (Kawai Auto Grab v2 — new default) ────────────────
+-- ── AUTO GRAB V2 mode (new default) ────────────────────────────
 local _KAG_started  = false
 local _KAG_conn     = nil
 local _KAG_scanTask = nil
@@ -751,7 +751,7 @@ local function _KAG_scanPlots()
 	_KAG_AnimalsCache=newCache
 end
 
-local function startAutoStealKawai()
+local function startAutoStealV2()
 	if _KAG_started then return end
 	_KAG_started=true
 	_KAG_initSync()
@@ -775,7 +775,7 @@ local function startAutoStealKawai()
 		if prompt then _KAG_attemptSteal(prompt,target) end
 	end)
 end
-local function stopAutoStealKawai()
+local function stopAutoStealV2()
 	_KAG_started=false
 	if _KAG_conn then _KAG_conn:Disconnect(); _KAG_conn=nil end
 	if _KAG_scanTask then pcall(task.cancel,_KAG_scanTask); _KAG_scanTask=nil end
@@ -785,10 +785,10 @@ end
 
 -- ── Unified entry points ──────────────────────────────────────────
 local function startAutoSteal()
-	if AutoSteal.Mode=="kawai" then startAutoStealKawai() else startAutoStealSemi() end
+	if AutoSteal.Mode=="v2" then startAutoStealV2() else startAutoStealSemi() end
 end
 local function stopAutoSteal()
-	if AutoSteal.Mode=="kawai" then stopAutoStealKawai() else stopAutoStealSemi() end
+	if AutoSteal.Mode=="v2" then stopAutoStealV2() else stopAutoStealSemi() end
 end
 
 
@@ -2530,18 +2530,18 @@ buildPage("Combat", function()
 		local mr=Instance.new("Frame",currentPage); mr.Size=UDim2.new(1,0,0,26); mr.BackgroundColor3=C_ROW; mr.BackgroundTransparency=0.35; mr.BorderSizePixel=0; mr.LayoutOrder=LO(); addCorner(mr,12); addLivingStroke(mr,1)
 		local ml=Instance.new("TextLabel",mr); ml.Size=UDim2.new(0,90,1,0); ml.Position=UDim2.new(0,14,0,0); ml.BackgroundTransparency=1; ml.Text="Grab Mode"; ml.TextColor3=C_WHITE; ml.Font=Enum.Font.GothamBold; ml.TextSize=10; ml.TextXAlignment=Enum.TextXAlignment.Left; addLivingTextGradient(ml)
 		local BW,BH=52,18
-		local kawaiB=Instance.new("TextButton",mr); kawaiB.Size=UDim2.new(0,BW,0,BH); kawaiB.Position=UDim2.new(1,-(BW*2+14),0.5,-BH/2); kawaiB.BackgroundColor3=C_MOON; kawaiB.BackgroundTransparency=0.15; kawaiB.BorderSizePixel=0; kawaiB.Text="Kawai"; kawaiB.TextColor3=Color3.fromRGB(0,10,20); kawaiB.Font=Enum.Font.GothamBold; kawaiB.TextSize=9; kawaiB.AutoButtonColor=false; addCorner(kawaiB,6); addLivingStroke(kawaiB,1)
+		local v2B=Instance.new("TextButton",mr); v2B.Size=UDim2.new(0,BW,0,BH); v2B.Position=UDim2.new(1,-(BW*2+14),0.5,-BH/2); v2B.BackgroundColor3=C_MOON; v2B.BackgroundTransparency=0.15; v2B.BorderSizePixel=0; v2B.Text="v2"; v2B.TextColor3=Color3.fromRGB(0,10,20); v2B.Font=Enum.Font.GothamBold; v2B.TextSize=9; v2B.AutoButtonColor=false; addCorner(v2B,6); addLivingStroke(v2B,1)
 		local semiB=Instance.new("TextButton",mr); semiB.Size=UDim2.new(0,BW,0,BH); semiB.Position=UDim2.new(1,-(BW+6),0.5,-BH/2); semiB.BackgroundColor3=C_OFF_BG; semiB.BackgroundTransparency=0.3; semiB.BorderSizePixel=0; semiB.Text="Semi"; semiB.TextColor3=C_DIM; semiB.Font=Enum.Font.GothamBold; semiB.TextSize=9; semiB.AutoButtonColor=false; addCorner(semiB,6)
 		local function updGrabMode()
-			local k=AutoSteal.Mode=="kawai"
-			kawaiB.BackgroundColor3=k and C_MOON or C_OFF_BG; kawaiB.BackgroundTransparency=k and 0.15 or 0.5; kawaiB.TextColor3=k and Color3.fromRGB(0,10,20) or C_DIM
+			local k=AutoSteal.Mode=="v2"
+			v2B.BackgroundColor3=k and C_MOON or C_OFF_BG; v2B.BackgroundTransparency=k and 0.15 or 0.5; v2B.TextColor3=k and Color3.fromRGB(0,10,20) or C_DIM
 			semiB.BackgroundColor3=(not k) and C_MOON or C_OFF_BG; semiB.BackgroundTransparency=(not k) and 0.15 or 0.5; semiB.TextColor3=(not k) and Color3.fromRGB(0,10,20) or C_DIM
 		end
 		updGrabMode()
-		kawaiB.MouseButton1Click:Connect(function()
-			if AutoSteal.Mode=="kawai" then return end
+		v2B.MouseButton1Click:Connect(function()
+			if AutoSteal.Mode=="v2" then return end
 			if AutoSteal.Enabled then stopAutoSteal() end
-			AutoSteal.Mode="kawai"; updGrabMode()
+			AutoSteal.Mode="v2"; updGrabMode()
 			if AutoSteal.Enabled then startAutoSteal() end
 			if _G._MH_autoSave then _G._MH_autoSave() end
 		end)
@@ -4152,7 +4152,7 @@ local function MH_load()
 		if data.infJumpMode=="manual" or data.infJumpMode=="hold" then IJ.mode=data.infJumpMode end
 		if data.grabRadius then AutoSteal.Radius=data.grabRadius end
 		if data.grabDuration then AutoSteal.Duration=data.grabDuration end
-		if data.grabMode=="kawai" or data.grabMode=="semi" then AutoSteal.Mode=data.grabMode end
+		if data.grabMode=="v2" or data.grabMode=="semi" then AutoSteal.Mode=data.grabMode end
 
 		if data.kb then
 			local kb = _G.MH_KB
