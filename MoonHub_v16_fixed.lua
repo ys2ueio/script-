@@ -258,261 +258,14 @@ end)
 -- ===================================================================
 
 -- ===================================================================
--- AUTO STEAL (dual-mode: Auto Grab v2 [default] | Semi [legacy])
+-- AUTO STEAL (Auto Grab — logique Irish Hub / test_speed.lua)
 -- ===================================================================
 local AutoSteal = {
-	Enabled=true, Radius=70, Duration=1.4, IsStealing=false,
-	Mode="v2",  -- "v2" | "semi"
+	Enabled=true, Radius=70, IsStealing=false,
 	ProgressFill=nil, ProgressText=nil, StatusLabel=nil,
 	SetFastPulse=nil, FlashSuccess=nil, Widget=nil,
 }
 
--- ── SEMI mode (legacy Irish Hub logic) ───────────────────────────
-local autoStealConnection = nil
-local _autoStealStarted   = false
-
-local function startAutoStealSemi()
-	if _autoStealStarted then return end
-	_autoStealStarted = true
-	task.spawn(function()
-	local IrishSync = { caches={}, connections={} }
-	local _animalsCache = {}
-	local _promptCache  = {}
-	local _stealCache   = {}
-	local _stealActive  = false
-	local _stealStart   = 0
-	local _stealState   = "READY"
-	local CFG = { HOLD_MIN=1.3, HOLD_MAX=2.6, ENTRY_DELAY=0.3, COOLDOWN=0.05, STEAL_RANGE=8 }
-	local RS = game:GetService("ReplicatedStorage")
-	local _packages = RS:FindFirstChild("Packages")
-	local _datas    = RS:FindFirstChild("Datas")
-	local _animData = nil
-	if _datas then task.spawn(function() pcall(function() local m=_datas:FindFirstChild("Animals"); if m then _animData=require(m) end end) end) end
-	local function splitPath(path)
-		if typeof(path)=="table" then return path end
-		local out={}
-		for p in string.gmatch(tostring(path),"[^%.]+") do table.insert(out, tonumber(p) or p) end
-		return out
-	end
-	local function resolvePath(path, root)
-		local cur=root; local par=nil; local key=nil
-		for _,p in ipairs(splitPath(path)) do par=cur; key=p; cur=cur and cur[p] or nil end
-		return cur, par, key
-	end
-	local function applyDiff(cn, packet)
-		local cache=IrishSync.caches[cn]; if typeof(cache)~="table" then return end
-		local path,action,a,b=packet[1],packet[2],packet[3],packet[4]
-		local cur,par,key=resolvePath(path,cache)
-		if action=="Changed" then if par~=nil then par[key]=a end
-		elseif action=="ArrayInsert" then if cur~=nil then table.insert(cur,b,a) end
-		elseif action=="ArrayRemoved" then if cur~=nil then table.remove(cur,b) end
-		elseif action=="DictionaryInsert" then if cur~=nil then cur[b]=a end
-		elseif action=="DictionaryRemoved" then if cur~=nil then cur[b]=nil end end
-	end
-	local _syncRemotes=nil
-	pcall(function()
-		if not _packages then return end
-		local f=_packages:FindFirstChild("Synchronizer"); if not f then return end
-		_syncRemotes={channelFolder=f:FindFirstChild("Channel"),routeRemote=f:FindFirstChild("CommunicationRoute"),requestData=f:FindFirstChild("RequestData")}
-	end)
-	local function attachChannel(remote)
-		if IrishSync.connections[remote] then return end
-		local cn=tostring(remote.Name)
-		local plots=workspace:FindFirstChild("Plots"); if not plots or not plots:FindFirstChild(cn) then return end
-		if _syncRemotes and _syncRemotes.requestData and IrishSync.caches[cn]==nil then
-			local ok,data=pcall(function() return _syncRemotes.requestData:InvokeServer(cn) end)
-			IrishSync.caches[cn]=(ok and typeof(data)=="table") and data or {}
-		elseif IrishSync.caches[cn]==nil then IrishSync.caches[cn]={} end
-		IrishSync.connections[remote]=remote.OnClientEvent:Connect(function(queue)
-			for _,packet in ipairs(queue) do applyDiff(cn,packet) end
-		end)
-	end
-	if _syncRemotes and _syncRemotes.channelFolder then
-		task.spawn(function()
-			for _,child in ipairs(_syncRemotes.channelFolder:GetChildren()) do
-				if child:IsA("RemoteEvent") then pcall(attachChannel,child) end
-			end
-		end)
-		_syncRemotes.channelFolder.ChildAdded:Connect(function(child)
-			if child:IsA("RemoteEvent") then task.spawn(function() pcall(attachChannel,child) end) end
-		end)
-		if _syncRemotes.routeRemote then
-			_syncRemotes.routeRemote.OnClientEvent:Connect(function(actions)
-				for _,action in ipairs(actions) do
-					local kind,cn=action[1],tostring(action[2])
-					local plots=workspace:FindFirstChild("Plots")
-					if plots and plots:FindFirstChild(cn) then
-						if kind=="ListenerAdded" then
-							local r=_syncRemotes.channelFolder:FindFirstChild(cn)
-							if r and r:IsA("RemoteEvent") then task.spawn(function() pcall(attachChannel,r) end) end
-						elseif kind=="ListenerRemoved" then
-							for rem,conn in pairs(IrishSync.connections) do
-								if tostring(rem.Name)==cn then conn:Disconnect(); IrishSync.connections[rem]=nil; IrishSync.caches[cn]=nil; break end
-							end
-						end
-					end
-				end
-			end)
-		end
-	end
-	local function getPlotOwnerS(plot)
-		local sign=plot:FindFirstChild("PlotSign")
-		local frame=sign and sign:FindFirstChild("SurfaceGui") and sign.SurfaceGui:FindFirstChild("Frame")
-		local label=frame and frame:FindFirstChild("TextLabel")
-		if not label or label.Text=="Empty Base" then return nil end
-		return label.Text:gsub("'s [Bb]ase$",""):gsub("%s+$","")
-	end
-	local function isMyAnimal(a)
-		if not a or not a.plot then return false end
-		local plots=workspace:FindFirstChild("Plots"); if not plots then return false end
-		local plot=plots:FindFirstChild(a.plot); if not plot then return false end
-		return getPlotOwnerS(plot)==LP.DisplayName
-	end
-	local function findPrompt(a)
-		if not a then return nil end
-		local cached=_promptCache[a.uid]; if cached and cached.Parent then return cached end
-		local plots=workspace:FindFirstChild("Plots"); if not plots then return nil end
-		local plot=plots:FindFirstChild(a.plot); if not plot then return nil end
-		local pods=plot:FindFirstChild("AnimalPodiums"); if not pods then return nil end
-		local pod=pods:FindFirstChild(a.slot); if not pod then return nil end
-		local base=pod:FindFirstChild("Base"); if not base then return nil end
-		local sp=base:FindFirstChild("Spawn"); if not sp then return nil end
-		local att=sp:FindFirstChild("PromptAttachment"); if not att then return nil end
-		for _,p in ipairs(att:GetChildren()) do if p:IsA("ProximityPrompt") then _promptCache[a.uid]=p; return p end end
-		return nil
-	end
-	local function getPos(a)
-		local plots=workspace:FindFirstChild("Plots"); if not plots then return nil end
-		local plot=plots:FindFirstChild(a.plot); if not plot then return nil end
-		local pods=plot:FindFirstChild("AnimalPodiums"); if not pods then return nil end
-		local pod=pods:FindFirstChild(a.slot); if not pod then return nil end
-		local ok,pos=pcall(function() return pod:GetPivot().Position end); return ok and pos or nil
-	end
-	local function distTo(a)
-		local char=LP.Character; if not char then return math.huge end
-		local hrp=char:FindFirstChild("HumanoidRootPart"); if not hrp then return math.huge end
-		local pos=getPos(a); if not pos then return math.huge end
-		return (hrp.Position-pos).Magnitude
-	end
-	local function pickClosestSemi()
-		local char=LP.Character; local hrp=char and char:FindFirstChild("HumanoidRootPart"); if not hrp then return nil end
-		local best,bestD=nil,math.huge
-		for _,a in ipairs(_animalsCache) do
-			if not isMyAnimal(a) then
-				local pos=getPos(a)
-				if pos then
-					local d=(hrp.Position-pos).Magnitude
-					if d<=(AutoSteal.Radius or 70) and d<bestD then bestD=d; best=a end
-				end
-			end
-		end
-		return best
-	end
-	local function buildCallbacks(prompt)
-		if _stealCache[prompt] then return end
-		local data={hold={},trigger={},ready=true}
-		local ok1,c1=pcall(getconnections,prompt.PromptButtonHoldBegan)
-		if ok1 and type(c1)=="table" then for _,c in ipairs(c1) do if type(c.Function)=="function" then table.insert(data.hold,c.Function) end end end
-		local ok2,c2=pcall(getconnections,prompt.Triggered)
-		if ok2 and type(c2)=="table" then for _,c in ipairs(c2) do if type(c.Function)=="function" then table.insert(data.trigger,c.Function) end end end
-		if #data.hold>0 or #data.trigger>0 then _stealCache[prompt]=data end
-	end
-	local function executeStealSemi(prompt, a)
-		local data=_stealCache[prompt]; if not data or not data.ready then return false end
-		data.ready=false; _stealActive=true; State.isStealing=true; _stealStart=tick()
-		_stealState="UNREADY"
-		if AutoSteal.StatusLabel then AutoSteal.StatusLabel.Text="UNREADY" end
-		if AutoSteal.SetReadyColor then AutoSteal.SetReadyColor("UNREADY") end
-		task.spawn(function()
-			for _,fn in ipairs(data.hold) do task.spawn(fn) end
-			task.spawn(function()
-				while _stealActive do
-					local prog=math.clamp((tick()-_stealStart)/CFG.HOLD_MAX,0,1)
-					if AutoSteal.ProgressFill then AutoSteal.ProgressFill.Size=UDim2.new(prog,0,1,0) end
-					if AutoSteal.ProgressText then AutoSteal.ProgressText.Text=math.floor(prog*100).."%" end
-					if prog>=0.6 and _stealState~="READY" then
-						_stealState="READY"
-						if AutoSteal.StatusLabel then AutoSteal.StatusLabel.Text="READY" end
-						if AutoSteal.SetReadyColor then AutoSteal.SetReadyColor("READY") end
-					end
-					task.wait()
-				end
-			end)
-			task.wait(CFG.HOLD_MIN)
-			local alreadyClose=distTo(a)<=CFG.STEAL_RANGE
-			local fired=false
-			while tick()-_stealStart <= CFG.HOLD_MAX and prompt.Parent do
-				if distTo(a)<=CFG.STEAL_RANGE then
-					if not alreadyClose then task.wait(CFG.ENTRY_DELAY) end
-					for _,fn in ipairs(data.trigger) do task.spawn(fn) end
-					fired=true; break
-				end
-				task.wait()
-			end
-			_stealActive=false; State.isStealing=false
-			if AutoSteal.ProgressFill then AutoSteal.ProgressFill.Size=UDim2.new(0,0,1,0) end
-			if AutoSteal.ProgressText then AutoSteal.ProgressText.Text="" end
-			_stealState="READY"
-			if AutoSteal.StatusLabel then AutoSteal.StatusLabel.Text="READY" end
-			if AutoSteal.SetReadyColor then AutoSteal.SetReadyColor("READY") end
-			if fired and AutoSteal.FlashSuccess then AutoSteal.FlashSuccess() end
-			task.wait(CFG.COOLDOWN); data.ready=true
-		end)
-		return true
-	end
-	local function attemptStealSemi(prompt, a)
-		if not prompt or not prompt.Parent then return false end
-		buildCallbacks(prompt)
-		if not _stealCache[prompt] then return false end
-		return executeStealSemi(prompt, a)
-	end
-	local function scanAllPlotsSemi()
-		local newCache={}
-		local plots=workspace:FindFirstChild("Plots"); if not plots then _animalsCache=newCache; return end
-		for _,plot in ipairs(plots:GetChildren()) do
-			local cache=IrishSync.caches[plot.Name]
-			if cache and typeof(cache)=="table" then
-				local list=cache.AnimalList
-				if typeof(list)=="table" then
-					for slot,ad in pairs(list) do
-						if type(ad)=="table" then
-							local name=ad.Index
-							local info=_animData and _animData[name]
-							if info or not _animData then
-								table.insert(newCache,{name=(info and info.DisplayName) or name, plot=plot.Name, slot=tostring(slot), uid=plot.Name.."_"..tostring(slot)})
-							end
-						end
-					end
-				end
-			end
-		end
-		_animalsCache=newCache
-	end
-	task.spawn(function() pcall(scanAllPlotsSemi) end)
-	task.spawn(function() while _autoStealStarted do task.wait(5); pcall(scanAllPlotsSemi) end end)
-	autoStealConnection=RunService.Heartbeat:Connect(function()
-		if not AutoSteal.Enabled or _stealActive then return end
-		local target=pickClosestSemi()
-		local newState=(target~=nil) and "UNREADY" or "READY"
-		if _stealState~=newState then
-			_stealState=newState
-			if AutoSteal.StatusLabel then AutoSteal.StatusLabel.Text=newState end
-			if AutoSteal.SetReadyColor then AutoSteal.SetReadyColor(newState) end
-		end
-		if not target then return end
-		local prompt=_promptCache[target.uid]
-		if not prompt or not prompt.Parent then prompt=findPrompt(target) end
-		if prompt then attemptStealSemi(prompt,target) end
-	end)
-	end)
-end
-
-local function stopAutoStealSemi()
-	_autoStealStarted=false
-	if autoStealConnection then autoStealConnection:Disconnect(); autoStealConnection=nil end
-	State.isStealing=false
-	if AutoSteal.StatusLabel then AutoSteal.StatusLabel.Text="READY" end
-end
 
 -- ── AUTO GRAB V2 mode (new default) ────────────────────────────
 local _KAG_started  = false
@@ -783,13 +536,8 @@ local function stopAutoStealV2()
 	if AutoSteal.StatusLabel then AutoSteal.StatusLabel.Text="READY" end
 end
 
--- ── Unified entry points ──────────────────────────────────────────
-local function startAutoSteal()
-	if AutoSteal.Mode=="v2" then startAutoStealV2() else startAutoStealSemi() end
-end
-local function stopAutoSteal()
-	if AutoSteal.Mode=="v2" then stopAutoStealV2() else stopAutoStealSemi() end
-end
+local function startAutoSteal() startAutoStealV2() end
+local function stopAutoSteal()  stopAutoStealV2()  end
 
 
 
@@ -2541,39 +2289,10 @@ buildPage("Combat", function()
 		holB.MouseButton1Click:Connect(function() IJ.mode="hold"; updM(); if _G._MH_autoSave then _G._MH_autoSave() end end)
 		makeDivider()
 	end
-	do
-		local mr=Instance.new("Frame",currentPage); mr.Size=UDim2.new(1,0,0,26); mr.BackgroundColor3=C_ROW; mr.BackgroundTransparency=0.35; mr.BorderSizePixel=0; mr.LayoutOrder=LO(); addCorner(mr,12); addLivingStroke(mr,1)
-		local ml=Instance.new("TextLabel",mr); ml.Size=UDim2.new(0,90,1,0); ml.Position=UDim2.new(0,14,0,0); ml.BackgroundTransparency=1; ml.Text="Grab Mode"; ml.TextColor3=C_WHITE; ml.Font=Enum.Font.GothamBold; ml.TextSize=10; ml.TextXAlignment=Enum.TextXAlignment.Left; addLivingTextGradient(ml)
-		local BW,BH=52,18
-		local v2B=Instance.new("TextButton",mr); v2B.Size=UDim2.new(0,BW,0,BH); v2B.Position=UDim2.new(1,-(BW*2+14),0.5,-BH/2); v2B.BackgroundColor3=C_MOON; v2B.BackgroundTransparency=0.15; v2B.BorderSizePixel=0; v2B.Text="v2"; v2B.TextColor3=Color3.fromRGB(0,10,20); v2B.Font=Enum.Font.GothamBold; v2B.TextSize=9; v2B.AutoButtonColor=false; addCorner(v2B,6); addLivingStroke(v2B,1)
-		local semiB=Instance.new("TextButton",mr); semiB.Size=UDim2.new(0,BW,0,BH); semiB.Position=UDim2.new(1,-(BW+6),0.5,-BH/2); semiB.BackgroundColor3=C_OFF_BG; semiB.BackgroundTransparency=0.3; semiB.BorderSizePixel=0; semiB.Text="Semi"; semiB.TextColor3=C_DIM; semiB.Font=Enum.Font.GothamBold; semiB.TextSize=9; semiB.AutoButtonColor=false; addCorner(semiB,6)
-		local function updGrabMode()
-			local k=AutoSteal.Mode=="v2"
-			v2B.BackgroundColor3=k and C_MOON or C_OFF_BG; v2B.BackgroundTransparency=k and 0.15 or 0.5; v2B.TextColor3=k and Color3.fromRGB(0,10,20) or C_DIM
-			semiB.BackgroundColor3=(not k) and C_MOON or C_OFF_BG; semiB.BackgroundTransparency=(not k) and 0.15 or 0.5; semiB.TextColor3=(not k) and Color3.fromRGB(0,10,20) or C_DIM
-		end
-		updGrabMode()
-		v2B.MouseButton1Click:Connect(function()
-			if AutoSteal.Mode=="v2" then return end
-			if AutoSteal.Enabled then stopAutoSteal() end
-			AutoSteal.Mode="v2"; updGrabMode()
-			if AutoSteal.Enabled then startAutoSteal() end
-			if _G._MH_autoSave then _G._MH_autoSave() end
-		end)
-		semiB.MouseButton1Click:Connect(function()
-			if AutoSteal.Mode=="semi" then return end
-			if AutoSteal.Enabled then stopAutoSteal() end
-			AutoSteal.Mode="semi"; updGrabMode()
-			if AutoSteal.Enabled then startAutoSteal() end
-			if _G._MH_autoSave then _G._MH_autoSave() end
-		end)
-		makeDivider()
-	end
 	setAutoStealRowVisual=UIB.makeToggleRow("Auto Steal",true,function(on)
 		AutoSteal.Enabled=on; if on then startAutoSteal() else stopAutoSteal() end
 	end)
 	UIB.makeInputRow("Steal Radius",AutoSteal.Radius,function(n) if n and n>=1 and n<=500 then AutoSteal.Radius=n end end)
-	UIB.makeInputRow("Steal Duration",AutoSteal.Duration,function(n) if n and n>=0.05 and n<=10 then AutoSteal.Duration=n end end)
 	local _autoTPEnabled = false
 	local _autoTPConn    = nil
 	local _autoTPHeight  = 20
@@ -4090,8 +3809,6 @@ local function MH_save()
 				infJumpMode      = IJ and IJ.mode or nil,
 				autoGrabEnabled  = AutoSteal and AutoSteal.Enabled or false,
 				grabRadius       = AutoSteal and AutoSteal.Radius or nil,
-				grabDuration     = AutoSteal and AutoSteal.Duration or nil,
-				grabMode         = AutoSteal and AutoSteal.Mode or nil,
 				floatSpawned = (function()
 					local ids = {}
 					for id in pairs(_floatBtns) do ids[#ids+1] = id end
@@ -4195,8 +3912,6 @@ local function MH_load()
 		if data.aimSpeed then AB.SPEED=data.aimSpeed end
 		if data.infJumpMode=="manual" or data.infJumpMode=="hold" then IJ.mode=data.infJumpMode end
 		if data.grabRadius then AutoSteal.Radius=data.grabRadius end
-		if data.grabDuration then AutoSteal.Duration=data.grabDuration end
-		if data.grabMode=="v2" or data.grabMode=="semi" then AutoSteal.Mode=data.grabMode end
 		if data.autoPlayMode then
 			if setAutoPlayModeUI then setAutoPlayModeUI(data.autoPlayMode)
 			else State.autoPlayMode = data.autoPlayMode end
