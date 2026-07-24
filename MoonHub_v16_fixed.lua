@@ -261,7 +261,7 @@ end)
 -- AUTO STEAL (dual-mode: Auto Grab v2 [default] | Semi [legacy])
 -- ===================================================================
 local AutoSteal = {
-	Enabled=false, Radius=70, Duration=1.4, IsStealing=false,
+	Enabled=true, Radius=70, Duration=1.4, IsStealing=false,
 	Mode="v2",  -- "v2" | "semi"
 	ProgressFill=nil, ProgressText=nil, StatusLabel=nil,
 	SetFastPulse=nil, FlashSuccess=nil, Widget=nil,
@@ -2105,6 +2105,8 @@ end
 local _uiLocked = false          -- LOCK : quand true, aucun drag ne fonctionne
 local _dragStates = {}           -- registry of all created drag states
 local _activeDrag = nil
+local _MH_positions = {}         -- registry of draggable frames keyed by posId
+_G._MH_positions = _MH_positions
 
 UIS.InputChanged:Connect(function(inp)
 	if not _activeDrag then return end
@@ -2116,10 +2118,11 @@ UIS.InputChanged:Connect(function(inp)
 	_activeDrag.frame.Position = UDim2.new(sp.X.Scale, sp.X.Offset+dx, sp.Y.Scale, sp.Y.Offset+dy)
 end)
 
-local function makeDraggable(frame, handle)
+local function makeDraggable(frame, handle, posId)
 	local src = handle or frame
 	local state = { frame=frame, dragging=false, dragInput=nil, dragStart=nil, startPos=nil }
 	_dragStates[#_dragStates+1] = state
+	if posId then _MH_positions[posId] = frame end
 	src.InputBegan:Connect(function(inp)
 		if _uiLocked then return end   -- LOCK: blocks drag from starting
 		if inp.UserInputType == Enum.UserInputType.MouseButton1
@@ -2132,6 +2135,7 @@ local function makeDraggable(frame, handle)
 				if inp.UserInputState == Enum.UserInputState.End then
 					state.dragging = false
 					if _activeDrag == state then _activeDrag = nil end
+					if posId and _G._MH_autoSave then _G._MH_autoSave() end
 				end
 			end)
 		end
@@ -2168,7 +2172,7 @@ mainOuter.Size = UDim2.new(0,WIN_W,0,WIN_H)
 mainOuter.Position = UDim2.new(0.5,-WIN_W/2,0.5,-137)
 mainOuter.BackgroundTransparency = 1; mainOuter.BorderSizePixel = 0
 mainOuter.ClipsDescendants = true; mainOuter.Active = true
-addCorner(mainOuter, 24); makeDraggable(mainOuter)
+addCorner(mainOuter, 24); makeDraggable(mainOuter, nil, "main")
 local mainUIScale = Instance.new("UIScale", mainOuter)
 
 local bgImg = Instance.new("Frame", mainOuter)
@@ -2286,6 +2290,11 @@ local function makeDivider()
 	addLivingTextGradient(div)
 end
 
+local _MH_allToggles = {}
+local _MH_allInputs  = {}
+_G._MH_allToggles = _MH_allToggles
+_G._MH_allInputs  = _MH_allInputs
+
 function UIB.makeInputRow(label, default, onChange)
 	local row = Instance.new("Frame", currentPage)
 	row.Size = UDim2.new(1,0,0,32); row.BackgroundColor3 = C_ROW; row.BackgroundTransparency = 0.35
@@ -2317,6 +2326,8 @@ function UIB.makeInputRow(label, default, onChange)
 		end
 	end)
 	makeDivider()
+	local key = (currentPage and currentPage.Name or "?") .. "::" .. label
+	_MH_allInputs[key] = { box = box, default = default, onChange = onChange }
 	return box
 end
 
@@ -2358,6 +2369,12 @@ function UIB.makeToggleRow(label, defaultOn, onToggle)
 		if _G._MH_autoSave then _G._MH_autoSave() end
 	end)
 	makeDivider()
+	local key = (currentPage and currentPage.Name or "?") .. "::" .. label
+	_MH_allToggles[key] = {
+		get = function() return isOn end,
+		set = setV,
+		onToggle = onToggle,
+	}
 	return setV
 end
 
@@ -2463,7 +2480,7 @@ end
 startMbAnim()
 _G._MH_mbHalo = mbHalo; _G._MH_miniStk = miniStk; _G._MH_startMbAnim = startMbAnim
 _G._MH_stopMbAnim = function() _mbAnimRunning = false end
-makeDraggable(miniBtn)
+makeDraggable(miniBtn, nil, "mini")
 
 local function showGui() mainOuter.Visible = true; miniBtn.Visible = false end
 local function hideGui() mainOuter.Visible = false; miniBtn.Visible = true end
@@ -2502,12 +2519,6 @@ buildPage("Combat", function()
 	UIB.makeToggleRow("Anti Die",false,function(on)
 		if on then startAntiDie() else stopAntiDie() end
 	end)
-	do
-		local mr=Instance.new("Frame",currentPage); mr.Size=UDim2.new(1,0,0,26); mr.BackgroundColor3=C_ROW; mr.BackgroundTransparency=0.35; mr.BorderSizePixel=0; mr.LayoutOrder=LO(); addCorner(mr,12); addLivingStroke(mr,1)
-		local ml=Instance.new("TextLabel",mr); ml.Size=UDim2.new(0.7,0,1,0); ml.Position=UDim2.new(0,14,0,0); ml.BackgroundTransparency=1; ml.Text="Anti Kick"; ml.TextColor3=C_WHITE; ml.Font=Enum.Font.GothamBold; ml.TextSize=10; ml.TextXAlignment=Enum.TextXAlignment.Left; addLivingTextGradient(ml)
-		local badge=Instance.new("TextLabel",mr); badge.Size=UDim2.new(0,70,0,18); badge.Position=UDim2.new(1,-78,0.5,-9); badge.BackgroundColor3=C_ON_BG; badge.BackgroundTransparency=0.1; badge.BorderSizePixel=0; badge.Text="PASSIF ✓"; badge.TextColor3=C_GREEN; badge.Font=Enum.Font.GothamBold; badge.TextSize=9; badge.TextXAlignment=Enum.TextXAlignment.Center; addCorner(badge,6)
-		makeDivider()
-	end
 	setInfJumpRowVisual = UIB.makeToggleRow("Infinite Jump",false,function(on)
 		IJ.active=on; if on then IJ.start() else IJ.stop() end
 	end)
@@ -2559,7 +2570,7 @@ buildPage("Combat", function()
 		end)
 		makeDivider()
 	end
-	setAutoStealRowVisual=UIB.makeToggleRow("Auto Steal",false,function(on)
+	setAutoStealRowVisual=UIB.makeToggleRow("Auto Steal",true,function(on)
 		AutoSteal.Enabled=on; if on then startAutoSteal() else stopAutoSteal() end
 	end)
 	UIB.makeInputRow("Steal Radius",AutoSteal.Radius,function(n) if n and n>=1 and n<=500 then AutoSteal.Radius=n end end)
@@ -2793,7 +2804,8 @@ buildPage("Visual", function()
 			mainOuter.Position = UDim2.new(0.5, -scaledW/2, 0.5, -137)
 		end
 	end
-	_G._MH_applyUIScale = applyUIScale  -- exposed once, not only on the 1st call
+	_G._MH_applyUIScale = applyUIScale
+	_G._MH_getUIScale   = function() return _uiScaleVal end
 
 	uiThumb.InputBegan:Connect(function(inp)
 		if inp.UserInputType == Enum.UserInputType.MouseButton1
@@ -3334,7 +3346,7 @@ spW.BorderSizePixel=0; spW.ClipsDescendants=true; spW.Active=true; spW.Visible=f
 addCorner(spW,12); addLivingStroke(spW,1.5)
 local spH=Instance.new("Frame",spW)
 spH.Size=UDim2.new(1,0,0,26); spH.BackgroundColor3=C_HEADER; spH.BorderSizePixel=0
-addCorner(spH,12); makeDraggable(spW,spH)
+addCorner(spH,12); makeDraggable(spW, spH, "speed")
 local spDot=Instance.new("Frame",spH)
 spDot.Size=UDim2.new(0,5,0,5); spDot.Position=UDim2.new(0,10,0,11)
 spDot.BackgroundColor3=C_MOON; spDot.BorderSizePixel=0; addCorner(spDot,3)
@@ -3509,7 +3521,7 @@ do
 local stealWidget=Instance.new("Frame",gui)
 stealWidget.Name="StealBarWidget"; stealWidget.Size=UDim2.new(0,200,0,32)
 stealWidget.Position=UDim2.new(0.5,-100,0,35); stealWidget.BackgroundTransparency=1; stealWidget.Active=true
-makeDraggable(stealWidget)
+makeDraggable(stealWidget, nil, "steal")
 local stealPill=Instance.new("Frame",stealWidget)
 stealPill.Size=UDim2.new(1,0,0,32); stealPill.BackgroundColor3=C_BG
 stealPill.BackgroundTransparency=0.1; stealPill.BorderSizePixel=0; stealPill.ClipsDescendants=true
@@ -4089,6 +4101,34 @@ local function MH_save()
 				floatPositions = _floatPositions,
 				floatPosV = _FLOAT_POS_VERSION,
 				uiLocked = _uiLocked,
+				autoPlayMode      = State.autoPlayMode,
+				uiScaleVal        = _G._MH_getUIScale and _G._MH_getUIScale() or nil,
+				floatScaleVal     = _G._MH_getFloatScale and _G._MH_getFloatScale() or nil,
+				positions = (function()
+					local t = {}
+					for id, frame in pairs(_G._MH_positions or {}) do
+						if frame and frame.Parent then
+							local p = frame.Position
+							t[id] = {p.X.Scale, p.X.Offset, p.Y.Scale, p.Y.Offset}
+						end
+					end
+					return t
+				end)(),
+				toggles = (function()
+					local t = {}
+					for key, entry in pairs(_G._MH_allToggles or {}) do
+						t[key] = entry.get()
+					end
+					return t
+				end)(),
+				inputs = (function()
+					local t = {}
+					for key, entry in pairs(_G._MH_allInputs or {}) do
+						local n = tonumber(entry.box.Text)
+						if n then t[key] = n end
+					end
+					return t
+				end)(),
 				kb = {
 					AntiBatAimbot = ks(kb.AntiBatAimbot),
 					DropBR        = ks(kb.DropBR),
@@ -4158,6 +4198,45 @@ local function MH_load()
 		if data.grabRadius then AutoSteal.Radius=data.grabRadius end
 		if data.grabDuration then AutoSteal.Duration=data.grabDuration end
 		if data.grabMode=="v2" or data.grabMode=="semi" then AutoSteal.Mode=data.grabMode end
+		if data.autoPlayMode then
+			if setAutoPlayModeUI then setAutoPlayModeUI(data.autoPlayMode)
+			else State.autoPlayMode = data.autoPlayMode end
+		end
+		if data.uiScaleVal and _G._MH_applyUIScale then _G._MH_applyUIScale(data.uiScaleVal) end
+		if data.floatScaleVal and _G._MH_applyFloatScale then _G._MH_applyFloatScale(data.floatScaleVal) end
+
+		-- Window/widget positions: restored before anything else so frames
+		-- never flash at their default position on load.
+		if type(data.positions) == "table" then
+			for id, pos in pairs(data.positions) do
+				local frame = _G._MH_positions and _G._MH_positions[id]
+				if frame and type(pos) == "table" and pos[1] then
+					frame.Position = UDim2.new(pos[1], pos[2], pos[3], pos[4])
+				end
+			end
+		end
+
+		-- Numeric input rows: restore value + re-apply effect (FOV, radius…)
+		if type(data.inputs) == "table" then
+			for key, value in pairs(data.inputs) do
+				local entry = _G._MH_allInputs and _G._MH_allInputs[key]
+				if entry and type(value) == "number" then
+					entry.box.Text = tostring(value)
+					pcall(entry.onChange, value)
+				end
+			end
+		end
+
+		-- Toggle rows: restore ON state and re-activate the underlying feature.
+		if type(data.toggles) == "table" then
+			for key, on in pairs(data.toggles) do
+				local entry = _G._MH_allToggles and _G._MH_allToggles[key]
+				if entry and on then
+					if entry.onToggle then pcall(entry.onToggle, true) end
+					entry.set(true)
+				end
+			end
+		end
 
 		if data.kb then
 			local kb = _G.MH_KB
@@ -4511,7 +4590,7 @@ _sbBypassWidget = sbW
 
 local sbHeader = Instance.new("Frame", sbW)
 sbHeader.Size = UDim2.new(1, 0, 0, 28); sbHeader.BackgroundColor3 = C_HEADER; sbHeader.BorderSizePixel = 0
-addCorner(sbHeader, 12); makeDraggable(sbW, sbHeader)
+addCorner(sbHeader, 12); makeDraggable(sbW, sbHeader, "speedbypass")
 local sbPatch = Instance.new("Frame", sbHeader)
 sbPatch.Size = UDim2.new(1,0,0,12); sbPatch.Position = UDim2.new(0,0,1,-12)
 sbPatch.BackgroundColor3 = C_HEADER; sbPatch.BorderSizePixel = 0
@@ -5219,8 +5298,11 @@ end)()
 -- ===================================================================
 local _configLoaded = MH_load()   -- loads the config at startup
 selectTab("Combat")
--- All settings start OFF by default (no automatic activation
--- on first launch) — only a saved config can re-enable them.
+-- No save file: start Auto Steal immediately (it defaults to enabled).
+-- When a save exists, MH_load already re-activates it via the toggles table.
+if not _configLoaded and AutoSteal.Enabled then
+	task.spawn(startAutoSteal)
+end
 print("[Moon Hub v2] Loaded.")
 
 -- Auto-save every 10s
