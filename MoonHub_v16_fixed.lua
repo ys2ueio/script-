@@ -593,79 +593,89 @@ local function runDropBrainrot()
 end
 
 -- ===================================================================
--- AUTO LEFT / RIGHT
+-- AUTO LEFT / RIGHT  (logique Taser Hub — 2 phases + orientation finale)
 -- ===================================================================
-local leftWaypoints = {
-	Vector3.new(-476.85,-6.59,94.91), Vector3.new(-485.55,-4.53,100.61),
-	Vector3.new(-475.60,-6.59,92.80), Vector3.new(-475.26,-6.57,21.54),
-}
-local rightWaypoints = {
-	Vector3.new(-475.77,-6.57,26.76), Vector3.new(-485.85,-4.48,20.13),
-	Vector3.new(-475.83,-6.59,26.54), Vector3.new(-476.17,-6.09,97.73),
-}
-local patrolConnection, patrolWaypoints, patrolIndex = nil, nil, 1
-local patrolFrozen, patrolFreezeUntil = false, 0
+local AP_L1     = Vector3.new(-476.48, -6.28, 92.73)
+local AP_L2     = Vector3.new(-483.12, -4.95, 94.80)
+local AP_L_FACE = Vector3.new(-482.25, -4.96, 92.09)
+local AP_R1     = Vector3.new(-476.16, -6.52, 25.62)
+local AP_R2     = Vector3.new(-483.06, -5.03, 25.48)
+local AP_R_FACE = Vector3.new(-482.06, -6.93, 35.47)
 
-local function patrolMoveTo(target, speed)
-	local pHrp = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart"); if not pHrp then return end
-	local dir = target - pHrp.Position
-	proxyMove(Vector3.new(dir.X,0,dir.Z).Unit, speed)
-end
-local function stopPatrol()
-	if patrolConnection then patrolConnection:Disconnect(); patrolConnection = nil end
-	patrolWaypoints = nil; patrolIndex = 1; patrolFrozen = false; proxyStop()
-end
-local function stopAutoLeft() stopPatrol() end
-local function stopAutoRight() stopPatrol() end
+local alConn, arConn = nil, nil
+local alPhase, arPhase = 1, 1
 
-local function runPatrol(waypoints, enabledKey)
-	patrolIndex = 1; patrolFrozen = false; patrolFreezeUntil = 0
-	patrolWaypoints = waypoints; State.speedType = "normal"
-	if patrolConnection then patrolConnection:Disconnect() end
-	patrolConnection = RunService.Stepped:Connect(function()
-		if not State[enabledKey] or not patrolWaypoints then return end
-		local pHrp = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart"); if not pHrp then return end
-		if patrolFrozen then
-			proxyStop()
-			if tick() >= patrolFreezeUntil then patrolFrozen=false; patrolIndex=patrolIndex+1 end
-			return
-		end
-		local target = patrolWaypoints[patrolIndex]; if not target then return end
-		local dist = (target-pHrp.Position).Magnitude
-		local speed = (patrolIndex<=2) and State.normalSpeed or State.carrySpeed
-		local arriveDist = (patrolIndex==2) and 1.5 or 2.5
-		if dist < arriveDist then
-			if patrolIndex==2 then
-				patrolFrozen=true; patrolFreezeUntil=tick()+0.1; proxyStop()
-				-- Half mode: stays at point 2, does not continue
-				if State.autoPlayMode == "Half" then
-					State[enabledKey]=false
-					if patrolConnection then patrolConnection:Disconnect(); patrolConnection=nil end
-					patrolWaypoints=nil; patrolIndex=1
-				end
+local function stopAutoLeft()
+	if alConn then alConn:Disconnect(); alConn = nil end
+	alPhase = 1; proxyStop(); State.autoLeftEnabled = false
+end
+
+local function stopAutoRight()
+	if arConn then arConn:Disconnect(); arConn = nil end
+	arPhase = 1; proxyStop(); State.autoRightEnabled = false
+end
+
+local function startAutoLeft()
+	if State.autoRightEnabled then stopAutoRight() end
+	if alConn then alConn:Disconnect() end
+	alPhase = 1; State.autoLeftEnabled = true
+	alConn = RunService.Heartbeat:Connect(function()
+		if not State.autoLeftEnabled then return end
+		local char = LP.Character; if not char then return end
+		local hrp = char:FindFirstChild("HumanoidRootPart")
+		local hum = char:FindFirstChildOfClass("Humanoid")
+		if not hrp or not hum then return end
+		local spd = State.normalSpeed
+		if alPhase == 1 then
+			if (Vector3.new(AP_L1.X, hrp.Position.Y, AP_L1.Z) - hrp.Position).Magnitude < 1 then
+				alPhase = 2
+			end
+			local d = AP_L1 - hrp.Position
+			proxyMove(Vector3.new(d.X, 0, d.Z).Unit, spd)
+		elseif alPhase == 2 then
+			if (Vector3.new(AP_L2.X, hrp.Position.Y, AP_L2.Z) - hrp.Position).Magnitude < 1 then
+				proxyStop(); State.autoLeftEnabled = false
+				if alConn then alConn:Disconnect(); alConn = nil end
+				alPhase = 1
+				hrp.CFrame = CFrame.new(hrp.Position, Vector3.new(AP_L_FACE.X, hrp.Position.Y, AP_L_FACE.Z))
 				return
 			end
-			patrolIndex = patrolIndex + 1
-			-- Semi mode: stops after waypoint 1
-			if State.autoPlayMode == "Semi" and patrolIndex > 1 then
-				proxyStop(); State[enabledKey]=false
-				if patrolConnection then patrolConnection:Disconnect(); patrolConnection=nil end
-				patrolWaypoints=nil; patrolIndex=1; return
-			end
-			if patrolIndex > #patrolWaypoints then
-				proxyStop(); State[enabledKey]=false
-				if patrolConnection then patrolConnection:Disconnect(); patrolConnection=nil end
-				patrolWaypoints=nil; patrolIndex=1
-				if State.autoCarryOnGrab then State.speedType="carry" end
-				return
-			end
-		else
-			patrolMoveTo(target, speed)
+			local d = AP_L2 - hrp.Position
+			proxyMove(Vector3.new(d.X, 0, d.Z).Unit, spd)
 		end
 	end)
 end
-local function startAutoLeft()  stopPatrol(); runPatrol(leftWaypoints,  "autoLeftEnabled")  end
-local function startAutoRight() stopPatrol(); runPatrol(rightWaypoints, "autoRightEnabled") end
+
+local function startAutoRight()
+	if State.autoLeftEnabled then stopAutoLeft() end
+	if arConn then arConn:Disconnect() end
+	arPhase = 1; State.autoRightEnabled = true
+	arConn = RunService.Heartbeat:Connect(function()
+		if not State.autoRightEnabled then return end
+		local char = LP.Character; if not char then return end
+		local hrp = char:FindFirstChild("HumanoidRootPart")
+		local hum = char:FindFirstChildOfClass("Humanoid")
+		if not hrp or not hum then return end
+		local spd = State.normalSpeed
+		if arPhase == 1 then
+			if (Vector3.new(AP_R1.X, hrp.Position.Y, AP_R1.Z) - hrp.Position).Magnitude < 1 then
+				arPhase = 2
+			end
+			local d = AP_R1 - hrp.Position
+			proxyMove(Vector3.new(d.X, 0, d.Z).Unit, spd)
+		elseif arPhase == 2 then
+			if (Vector3.new(AP_R2.X, hrp.Position.Y, AP_R2.Z) - hrp.Position).Magnitude < 1 then
+				proxyStop(); State.autoRightEnabled = false
+				if arConn then arConn:Disconnect(); arConn = nil end
+				arPhase = 1
+				hrp.CFrame = CFrame.new(hrp.Position, Vector3.new(AP_R_FACE.X, hrp.Position.Y, AP_R_FACE.Z))
+				return
+			end
+			local d = AP_R2 - hrp.Position
+			proxyMove(Vector3.new(d.X, 0, d.Z).Unit, spd)
+		end
+	end)
+end
 
 -- ===================================================================
 -- ANTI RAGDOLL
@@ -933,6 +943,55 @@ end
 
 LP.CharacterAdded:Connect(function(char) if State.medusaCounterEnabled then task.wait(0.5); setupMedusaCounter(char) end end)
 
+-- ===================================================================
+-- AUTO RESET MEDUSA (Taser Hub — PlatformStand + Anchored detect)
+-- ===================================================================
+local _armEnabled = false
+local _armDebounce = false
+local _armConns = {}
+
+local function _armDoReset()
+	if _armDebounce then return end
+	_armDebounce = true
+	task.spawn(function()
+		if _G.MH_instareset then pcall(_G.MH_instareset) end
+		task.wait(3); _armDebounce = false
+	end)
+end
+
+local function _armWatchPart(part)
+	return part:GetPropertyChangedSignal("Anchored"):Connect(function()
+		if not _armEnabled then return end
+		if part.Anchored and part.Transparency == 1 then _armDoReset() end
+	end)
+end
+
+local function setupAutoResetMedusa(char)
+	for _,c in pairs(_armConns) do pcall(function() c:Disconnect() end) end; _armConns={}
+	if not char then return end
+	local hum=char:FindFirstChildOfClass("Humanoid")
+	if hum then
+		table.insert(_armConns, hum:GetPropertyChangedSignal("PlatformStand"):Connect(function()
+			if not _armEnabled then return end
+			if hum.PlatformStand then _armDoReset() end
+		end))
+	end
+	for _,part in ipairs(char:GetDescendants()) do
+		if part:IsA("BasePart") then table.insert(_armConns, _armWatchPart(part)) end
+	end
+	table.insert(_armConns, char.DescendantAdded:Connect(function(part)
+		if part:IsA("BasePart") then table.insert(_armConns, _armWatchPart(part)) end
+	end))
+end
+
+local function stopAutoResetMedusa()
+	for _,c in pairs(_armConns) do pcall(function() c:Disconnect() end) end; _armConns={}
+end
+
+LP.CharacterAdded:Connect(function(char)
+	task.wait(0.5); if _armEnabled then setupAutoResetMedusa(char) end
+end)
+
 -- ANTI BAT (logique Envy — spike 1000 + restore XZ)
 -- ANTI BAT (Envy logic — 1000 spike + XZ restore)
 local BC = {active=false, conn=nil}
@@ -1092,103 +1151,160 @@ function AimV3.start()
 	if AimV3.conn then AimV3.conn:Disconnect() end; AimV3.active=true
 	AimV3.conn=RunService.Heartbeat:Connect(function()
 		if not AimV3.active then return end
-		local char=LP.Character; if not char then return end
-		local root=char:FindFirstChild("HumanoidRootPart"); if not root then return end
-		local hum=char:FindFirstChildOfClass("Humanoid"); if not hum then return end
+		local root=LP.Character and LP.Character:FindFirstChild("HumanoidRootPart"); if not root then return end
 		local target=_av3Nearest(root); if not target or not target.Character then return end
 		local tr=target.Character:FindFirstChild("HumanoidRootPart"); if not tr then return end
-		-- Exact anti-desync (sethiddenproperty PhysicsRepRootPart)
-		if sethiddenproperty then
-			pcall(function() sethiddenproperty(root,"PhysicsRepRootPart",tr) end)
-		end
-		-- TP to enemy if distance > 8
-		local targetPos=tr.Position+Vector3.new(0,0.9,0)
-		if (root.Position-targetPos).Magnitude>8 then
-			root.CFrame=CFrame.new(targetPos)
-		end
-		-- Aim camera at enemy
-		local cam=workspace.CurrentCamera
-		if cam then cam.CFrame=CFrame.new(cam.CFrame.Position,tr.Position) end
-		-- Strike
-		_av3Hit()
+		pcall(function()
+			if sethiddenproperty then sethiddenproperty(root,"PhysicsRepRootPart",tr) end
+			local targetPos=tr.Position+Vector3.new(0,0.9,0)
+			if (root.Position-targetPos).Magnitude>8 then root.CFrame=CFrame.new(targetPos) end
+			local cam=workspace.CurrentCamera
+			cam.CFrame=CFrame.new(cam.CFrame.Position,tr.Position)
+			_av3Hit()
+		end)
 	end)
 end
 function AimV3.stop()
 	if AimV3.conn then AimV3.conn:Disconnect(); AimV3.conn=nil end; AimV3.active=false
 end
 
--- Aim V2 (Amir Hub logic — BAT_SPEED + HIT_DISTANCE)
+-- Aim V2 (Taser Hub — prédiction + rotation angulaire + AutoRotate false)
 local ABP = {active=false, conn=nil}
-local ABP_BAT_SPEED    = 56.5
-local ABP_HIT_DISTANCE = 6.5
-local ABP_SWING_CD     = 0.2
-local ABP_HIT_CD       = false
+local ABP_CFG = {
+	CHASE_SPEED   = 58,
+	VERT_SPEED    = 52,
+	FOLLOW_DIST   = -2,
+	HEIGHT_OFFSET = 1.6,
+	VERT_OFFSET   = 1,
+	TURN_SPEED    = 285,
+	MAX_TURN_RATE = 40,
+	SWING_RANGE   = 6,
+}
+local _abpUnwalkSaved = nil
+local _abpScanCache, _abpScanTime = nil, 0
 
-local function ABP_getBat()
-	local char = LP.Character; if not char then return nil end
-	local hum  = char:FindFirstChildOfClass("Humanoid")
-	for _, n in ipairs(BAT_NAMES) do
-		local t = char:FindFirstChild(n); if t and t:IsA("Tool") then return t end
-	end
-	local bp = LP:FindFirstChildOfClass("Backpack")
-	if bp and hum then
-		for _, n in ipairs(BAT_NAMES) do
-			local t = bp:FindFirstChild(n)
-			if t and t:IsA("Tool") then pcall(function() hum:EquipTool(t) end); return t end
-		end
+local function ABP_findBat()
+	local char=LP.Character; if not char then return nil end
+	local tool=char:FindFirstChild("Bat"); if tool then return tool end
+	local bp=LP:FindFirstChildOfClass("Backpack")
+	if bp then tool=bp:FindFirstChild("Bat"); if tool then tool.Parent=char; return tool end end
+	for _,n in ipairs(BAT_NAMES) do
+		local t=char:FindFirstChild(n) or (bp and bp:FindFirstChild(n))
+		if t and t:IsA("Tool") then return t end
 	end
 	return nil
 end
 
-local function ABP_swing()
-	if ABP_HIT_CD then return end
-	ABP_HIT_CD = true
-	pcall(function()
-		local bat = ABP_getBat()
-		if bat then
-			local char = LP.Character; local hum = char and char:FindFirstChildOfClass("Humanoid")
-			if bat.Parent ~= char and hum then pcall(function() hum:EquipTool(bat) end) end
-			pcall(function() bat:Activate() end)
-		end
-	end)
-	task.delay(ABP_SWING_CD, function() ABP_HIT_CD = false end)
+local function ABP_equip()
+	local char=LP.Character; local hum=char and char:FindFirstChildOfClass("Humanoid")
+	if not char or not hum then return end
+	if not char:FindFirstChildOfClass("Tool") then
+		local bat=ABP_findBat(); if bat then pcall(function() hum:EquipTool(bat) end) end
+	end
 end
 
-local function ABP_getNearest()
-	local char = LP.Character; local root = char and char:FindFirstChild("HumanoidRootPart")
-	if not root then return nil, math.huge end
-	local closest, bestDist = nil, math.huge
-	for _, plr in ipairs(Players:GetPlayers()) do
-		if plr ~= LP and plr.Character then
-			local tr = plr.Character:FindFirstChild("HumanoidRootPart")
-			if tr then
-				local d = (root.Position - tr.Position).Magnitude
-				if d < bestDist then bestDist = d; closest = plr end
+local function ABP_swing()
+	pcall(function()
+		local bat=ABP_findBat(); if not bat then return end
+		pcall(function() bat:Activate() end)
+		local ev=bat:FindFirstChildWhichIsA("RemoteEvent")
+		if ev then pcall(function() ev:FireServer() end) end
+	end)
+end
+
+local function ABP_startUnwalk()
+	local char=LP.Character; if not char then return end
+	local hum=char:FindFirstChildOfClass("Humanoid")
+	if hum then for _,tr in pairs(hum:GetPlayingAnimationTracks()) do tr:Stop() end end
+	local anim=char:FindFirstChild("Animate")
+	if anim then _abpUnwalkSaved=anim:Clone(); anim:Destroy() end
+end
+
+local function ABP_stopUnwalk()
+	local char=LP.Character
+	if char and _abpUnwalkSaved then _abpUnwalkSaved.Parent=char; _abpUnwalkSaved=nil end
+end
+
+local function ABP_resetMotion()
+	local char=LP.Character
+	local root=char and char:FindFirstChild("HumanoidRootPart")
+	local hum=char and char:FindFirstChildOfClass("Humanoid")
+	if root then root.AssemblyLinearVelocity=root.AssemblyLinearVelocity*0.3; root.AssemblyAngularVelocity=Vector3.zero end
+	if hum then hum.AutoRotate=true end
+end
+
+local function ABP_nearest(root)
+	local now=tick()
+	if now-_abpScanTime<=0.1 and _abpScanCache and _abpScanCache.Parent then
+		local h=_abpScanCache.Parent and _abpScanCache.Parent:FindFirstChildOfClass("Humanoid")
+		if h and h.Health>0 then return _abpScanCache end
+	end
+	_abpScanTime=now; _abpScanCache=nil
+	local best,bestD=nil,math.huge
+	for _,p in ipairs(Players:GetPlayers()) do
+		if p~=LP and p.Character then
+			local tr=p.Character:FindFirstChild("HumanoidRootPart")
+			local h=p.Character:FindFirstChildOfClass("Humanoid")
+			if tr and h and h.Health>0 then
+				local d=(tr.Position-root.Position).Magnitude
+				if d<bestD then bestD=d; best=tr end
 			end
 		end
 	end
-	return closest, bestDist
+	_abpScanCache=best; return best
 end
 
 function ABP.start()
 	if ABP.conn then ABP.conn:Disconnect() end; ABP.active=true
+	ABP_startUnwalk()
 	ABP.conn=RunService.Heartbeat:Connect(function()
 		if not ABP.active then return end
 		local char=LP.Character; if not char then return end
 		local root=char:FindFirstChild("HumanoidRootPart"); if not root then return end
-		local target,dist=ABP_getNearest()
-		if target and target.Character then
-			local tr=target.Character:FindFirstChild("HumanoidRootPart"); if not tr then return end
-			local dir=(tr.Position-root.Position).Unit
-			root.AssemblyLinearVelocity=Vector3.new(dir.X*ABP_BAT_SPEED, dir.Y*ABP_BAT_SPEED, dir.Z*ABP_BAT_SPEED)
-			if dist<=ABP_HIT_DISTANCE then ABP_swing() end
-		else root.AssemblyLinearVelocity=Vector3.new(0,root.AssemblyLinearVelocity.Y,0) end
+		local hum=char:FindFirstChildOfClass("Humanoid"); if not hum then return end
+		ABP_equip()
+		local target=ABP_nearest(root)
+		if target then
+			local vel=target.AssemblyLinearVelocity
+			local aimPos=target.Position+(vel*math.clamp(vel.Magnitude/130,0.05,0.15))+Vector3.new(0,ABP_CFG.VERT_OFFSET,0)
+			hum.AutoRotate=false
+			local look=aimPos-root.Position
+			local flat=Vector3.new(look.X,0,look.Z)
+			if look.Magnitude>0.01 and flat.Magnitude>0.01 then
+				local tYaw=math.deg(math.atan2(-flat.X,-flat.Z))
+				local yawD=(tYaw-root.Orientation.Y+180)%360-180
+				local tPitch=math.deg(math.atan2(look.Y,flat.Magnitude))
+				local pitD=(tPitch-root.Orientation.X+180)%360-180
+				local yawR=math.clamp(math.rad(yawD)*ABP_CFG.TURN_SPEED,-ABP_CFG.MAX_TURN_RATE,ABP_CFG.MAX_TURN_RATE)
+				local pitR=math.clamp(math.rad(pitD)*ABP_CFG.TURN_SPEED,-ABP_CFG.MAX_TURN_RATE,ABP_CFG.MAX_TURN_RATE)
+				local yr=math.rad(root.Orientation.Y)
+				local right=Vector3.new(math.cos(yr),0,-math.sin(yr))
+				root.AssemblyAngularVelocity=Vector3.new(0,yawR,0)+(right*pitR)
+			else
+				root.AssemblyAngularVelocity=Vector3.zero
+			end
+			local fd=math.max(math.abs(ABP_CFG.FOLLOW_DIST),1)
+			local dir=look.Magnitude>0.01 and look.Unit or Vector3.new(1,0,0)
+			local standPos=aimPos-(dir*fd)+Vector3.new(0,ABP_CFG.HEIGHT_OFFSET,0)
+			local mv=standPos-root.Position
+			local hDir=Vector3.new(mv.X,0,mv.Z)
+			local hVel=hDir.Magnitude>0.1 and hDir.Unit*ABP_CFG.CHASE_SPEED or Vector3.zero
+			local vVel=math.abs(mv.Y)>0.1 and Vector3.new(0,math.sign(mv.Y)*ABP_CFG.VERT_SPEED,0) or Vector3.new(0,-2,0)
+			root.AssemblyLinearVelocity=hVel+vVel
+			if hDir.Magnitude>0.5 then hum:Move(hDir.Unit,false) end
+			if (root.Position-target.Position).Magnitude<ABP_CFG.SWING_RANGE then
+				ABP_swing()
+			end
+		else
+			hum.AutoRotate=true
+			root.AssemblyAngularVelocity=Vector3.zero
+			root.AssemblyLinearVelocity=Vector3.zero
+		end
 	end)
 end
 function ABP.stop()
-	if ABP.conn then ABP.conn:Disconnect(); ABP.conn=nil end; ABP.active=false; ABP_HIT_CD=false
-	local char=LP.Character; local root=char and char:FindFirstChild("HumanoidRootPart")
-	if root then root.AssemblyLinearVelocity=Vector3.new(0,root.AssemblyLinearVelocity.Y,0) end
+	if ABP.conn then ABP.conn:Disconnect(); ABP.conn=nil end; ABP.active=false
+	ABP_resetMotion(); ABP_stopUnwalk(); _abpScanCache=nil
 end
 
 -- ===================================================================
@@ -1854,10 +1970,10 @@ do
 	task.spawn(function()
 		TweenService:Create(sceneScale, TweenInfo.new(3.6, Enum.EasingStyle.Sine, Enum.EasingDirection.Out),
 			{Scale = 1}):Play()
-		_sfx(1846359858, 0.20, 0.5)            -- pad éthéré au démarrage
+		_sfx(3340803765, 0.20, 0.5)            -- nappe ambiante ouverture
 		task.delay(0.1, function()
 			fireShootingStar()
-			_sfx(5791714739, 0.32, 1.0)        -- swoosh sharp étoile filante
+			_sfx(260430148, 0.32, 1.0)         -- swoosh profond étoile filante
 		end)
 
 		task.wait(0.4)
@@ -1867,12 +1983,12 @@ do
 		fireShockwave()
 		task.delay(0.18, fireShockwave)
 		fireFlash(0.9)
-		_sfx(4115432498, 0.78, 1.0)            -- drop cinématique — apparition de la lune
+		_sfx(2545463903, 0.78, 1.0)            -- impact cinématique — apparition de la lune
 		task.wait(0.5)
 		nameLbl.TextSize = 62
 		TweenService:Create(nameLbl, TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
 			{TextTransparency = 0, TextSize = 46}):Play()
-		_sfx(9120386436, 0.40, 1.0)            -- bell — titre
+		_sfx(131322600, 0.40, 1.0)             -- cloche cristal — titre
 		task.wait(0.35)
 		TweenService:Create(subLbl, TweenInfo.new(0.4), {TextTransparency = 0}):Play()
 		task.wait(0.2)
@@ -1890,7 +2006,7 @@ do
 		task.wait(0.3)
 		fireStarBurst()
 		fireFlash(0.94)
-		_sfx(2865227271, 0.65, 1.0)            -- arpège sparkle — étoile burst
+		_sfx(876066539, 0.65, 1.0)             -- scintillement magique — étoile burst
 		task.wait(0.2)
 
 		-- Text fade out
@@ -1906,7 +2022,7 @@ do
 		-- The star fades out (last visible element)
 		TweenService:Create(star, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
 			{TextTransparency = 1}):Play()
-		_sfx(1369158167, 0.25, 1.0)            -- sweep descendant — fade out cinématique
+		_sfx(131070686, 0.25, 1.0)             -- transition sci-fi — fade out cinématique
 		task.wait(0.55)
 
 		TweenService:Create(introGui, TweenInfo.new(0.5), {BackgroundTransparency = 1}):Play()
@@ -2333,6 +2449,10 @@ buildPage("Combat", function()
 	UIB.makeToggleRow("Medusa Counter",false,function(on)
 		State.medusaCounterEnabled=on
 		if on then setupMedusaCounter(LP.Character) else stopMedusaCounter() end
+	end)
+	UIB.makeToggleRow("Auto Reset Medusa",false,function(on)
+		_armEnabled=on
+		if on then setupAutoResetMedusa(LP.Character) else stopAutoResetMedusa() end
 	end)
 	UIB.makeToggleRow("Anti Die",false,function(on)
 		if on then startAntiDie() else stopAntiDie() end
@@ -4095,7 +4215,7 @@ end)
 buildPage("Settings", function()
 	UIB.makeSectionLabel("Auto Play")
 	do
-		local apModes={"Full","Half","Semi"}
+		local apModes={"Full","Half"}
 		local function getIdx()
 			for i,m in ipairs(apModes) do if m==State.autoPlayMode then return i end end; return 1
 		end
