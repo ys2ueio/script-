@@ -1802,18 +1802,21 @@ do
 			game:GetService("Debris"):AddItem(s, 10)
 		end)
 	end
-	-- IDs  4612332731 = deep cinematic impact
-	--       6042053626 = air whoosh
-	--       3033543639 = crystal chime / sparkle
+	-- IDs  1846359858 = pad éthéré / ambient
+	--       5791714739 = swoosh sharp étoile
+	--       4115432498 = drop cinématique lune
+	--       9120386436 = bell titre
+	--       2865227271 = arpège sparkle étoile
+	--       1369158167 = fade sweep cinématique
 
 	-- ── SEQUENCE ──────────────────────────────────────────────────
 	task.spawn(function()
 		TweenService:Create(sceneScale, TweenInfo.new(3.6, Enum.EasingStyle.Sine, Enum.EasingDirection.Out),
 			{Scale = 1}):Play()
-		_sfx(4612332731, 0.18, 0.38)          -- ambiance grave au démarrage
+		_sfx(1846359858, 0.20, 0.5)            -- pad éthéré au démarrage
 		task.delay(0.1, function()
 			fireShootingStar()
-			_sfx(6042053626, 0.28, 1.5)        -- whoosh étoile filante
+			_sfx(5791714739, 0.32, 1.0)        -- swoosh sharp étoile filante
 		end)
 
 		task.wait(0.4)
@@ -1822,12 +1825,12 @@ do
 			{Size = UDim2.new(0,46,0,46)}):Play()
 		fireShockwave()
 		fireFlash(0.9)
-		_sfx(4612332731, 0.72, 1.0)            -- impact boom — apparition de la lune
+		_sfx(4115432498, 0.78, 1.0)            -- drop cinématique — apparition de la lune
 		task.wait(0.5)
 		nameLbl.TextSize = 58
 		TweenService:Create(nameLbl, TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
 			{TextTransparency = 0, TextSize = 46}):Play()
-		_sfx(3033543639, 0.38, 1.0)            -- chime doux — titre
+		_sfx(9120386436, 0.40, 1.0)            -- bell — titre
 		task.wait(0.35)
 		TweenService:Create(subLbl, TweenInfo.new(0.4), {TextTransparency = 0}):Play()
 		task.wait(0.2)
@@ -1845,7 +1848,7 @@ do
 		task.wait(0.3)
 		fireStarBurst()
 		fireFlash(0.94)
-		_sfx(3033543639, 0.62, 1.85)           -- sparkle aigu — étoile burst
+		_sfx(2865227271, 0.65, 1.0)            -- arpège sparkle — étoile burst
 		task.wait(0.2)
 
 		-- Text fade out
@@ -1861,7 +1864,7 @@ do
 		-- The star fades out (last visible element)
 		TweenService:Create(star, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
 			{TextTransparency = 1}):Play()
-		_sfx(6042053626, 0.22, 0.45)           -- whoosh grave — fade out cinématique
+		_sfx(1369158167, 0.25, 1.0)            -- sweep descendant — fade out cinématique
 		task.wait(0.55)
 
 		TweenService:Create(introGui, TweenInfo.new(0.5), {BackgroundTransparency = 1}):Play()
