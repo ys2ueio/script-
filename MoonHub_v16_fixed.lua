@@ -940,54 +940,6 @@ end
 
 LP.CharacterAdded:Connect(function(char) if State.medusaCounterEnabled then task.wait(0.5); setupMedusaCounter(char) end end)
 
--- ===================================================================
--- AUTO RESET MEDUSA (Taser Hub — PlatformStand + Anchored detect)
--- ===================================================================
-local _armEnabled = false
-local _armDebounce = false
-local _armConns = {}
-
-local function _armDoReset()
-	if _armDebounce then return end
-	_armDebounce = true
-	task.spawn(function()
-		if _G.MH_instareset then pcall(_G.MH_instareset) end
-		task.wait(3); _armDebounce = false
-	end)
-end
-
-local function _armWatchPart(part)
-	return part:GetPropertyChangedSignal("Anchored"):Connect(function()
-		if not _armEnabled then return end
-		if part.Anchored and part.Transparency == 1 then _armDoReset() end
-	end)
-end
-
-local function setupAutoResetMedusa(char)
-	for _,c in pairs(_armConns) do pcall(function() c:Disconnect() end) end; _armConns={}
-	if not char then return end
-	local hum=char:FindFirstChildOfClass("Humanoid")
-	if hum then
-		table.insert(_armConns, hum:GetPropertyChangedSignal("PlatformStand"):Connect(function()
-			if not _armEnabled then return end
-			if hum.PlatformStand then _armDoReset() end
-		end))
-	end
-	for _,part in ipairs(char:GetDescendants()) do
-		if part:IsA("BasePart") then table.insert(_armConns, _armWatchPart(part)) end
-	end
-	table.insert(_armConns, char.DescendantAdded:Connect(function(part)
-		if part:IsA("BasePart") then table.insert(_armConns, _armWatchPart(part)) end
-	end))
-end
-
-local function stopAutoResetMedusa()
-	for _,c in pairs(_armConns) do pcall(function() c:Disconnect() end) end; _armConns={}
-end
-
-LP.CharacterAdded:Connect(function(char)
-	task.wait(0.5); if _armEnabled then setupAutoResetMedusa(char) end
-end)
 
 -- ANTI BAT (logique Envy — spike 1000 + restore XZ)
 -- ANTI BAT (Envy logic — 1000 spike + XZ restore)
@@ -2447,10 +2399,7 @@ buildPage("Combat", function()
 		State.medusaCounterEnabled=on
 		if on then setupMedusaCounter(LP.Character) else stopMedusaCounter() end
 	end)
-	UIB.makeToggleRow("Auto Reset Medusa",false,function(on)
-		_armEnabled=on
-		if on then setupAutoResetMedusa(LP.Character) else stopAutoResetMedusa() end
-	end)
+
 	setInfJumpRowVisual = UIB.makeToggleRow("Infinite Jump",false,function(on)
 		IJ.active=on; if on then IJ.start() else IJ.stop() end
 	end)
