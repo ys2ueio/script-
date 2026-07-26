@@ -2263,6 +2263,55 @@ miniBtn.MouseButton1Click:Connect(showGui)
 -- No additional widget.
 
 -- ===================================================================
+-- AUTO TP DOWN — Raycast (déclaré ici pour être visible dans Combat)
+-- ===================================================================
+local _sTPDownEnabled = false
+local _sTPDownConn    = nil
+local _sTPDownHeight  = 20
+local _sTPDownBusy    = false
+local function _sRunTPDown()
+	if _sTPDownBusy then return end
+	_sTPDownBusy = true
+	pcall(function()
+		local char = LP.Character; if not char then _sTPDownBusy=false; return end
+		local root = char:FindFirstChild("HumanoidRootPart")
+		local hum2 = char:FindFirstChildOfClass("Humanoid")
+		if not root or not hum2 then _sTPDownBusy=false; return end
+		local hipH = hum2.HipHeight or 2
+		local rp = RaycastParams.new()
+		rp.FilterDescendantsInstances = {char}
+		rp.FilterType = Enum.RaycastFilterType.Exclude
+		local ray = workspace:Raycast(root.Position, Vector3.new(0,-500,0), rp)
+		if ray then
+			root.CFrame = CFrame.new(root.Position.X, ray.Position.Y + hipH + 0.1, root.Position.Z)
+			root.AssemblyLinearVelocity = Vector3.new(root.AssemblyLinearVelocity.X, 0, root.AssemblyLinearVelocity.Z)
+		end
+	end)
+	_sTPDownBusy = false
+end
+local function _sStartAutoTPDown()
+	if _sTPDownConn then task.cancel(_sTPDownConn); _sTPDownConn=nil end
+	_sTPDownEnabled = true
+	_sTPDownConn = task.spawn(function()
+		while _sTPDownEnabled do
+			task.wait(0.1)
+			pcall(function()
+				local char = LP.Character; if not char then return end
+				local root = char:FindFirstChild("HumanoidRootPart"); if not root then return end
+				local hum2 = char:FindFirstChildOfClass("Humanoid"); if not hum2 then return end
+				if hum2.FloorMaterial ~= Enum.Material.Air then return end
+				if root.Position.Y < _sTPDownHeight then return end
+				_sRunTPDown()
+			end)
+		end
+	end)
+end
+local function _sStopAutoTPDown()
+	_sTPDownEnabled = false
+	if _sTPDownConn then task.cancel(_sTPDownConn); _sTPDownConn=nil end
+end
+
+-- ===================================================================
 -- MELEE BODY LOCK
 -- ===================================================================
 local MeleeBodyLock = {active=false, conn=nil}
@@ -2288,7 +2337,7 @@ function MeleeBodyLock.start()
 		local char = LP.Character; if not char then return end
 		local root = char:FindFirstChild("HumanoidRootPart"); if not root then return end
 		local target = mbl_nearest(root); if not target then return end
-		root.CFrame = CFrame.new(target.Position + target.CFrame.LookVector * 2.2, target.Position)
+		root.CFrame = CFrame.new(target.Position - target.CFrame.LookVector * 1.5, target.Position)
 	end)
 end
 function MeleeBodyLock.stop()
@@ -2310,9 +2359,6 @@ buildPage("Combat", function()
 	end)
 	setAimbotV2RowVisual = UIB.makeToggleRow("Bat Aimbot V2",false,function(on)
 		if on then if AB.active then AB.stop() end; ABP.start() else ABP.stop() end
-	end)
-	UIB.makeToggleRow("Melee",false,function(on)
-		if on then MeleeBodyLock.start() else MeleeBodyLock.stop() end
 	end)
 	UIB.makeGap(4); UIB.makeSectionLabel("Aimbot Tuning")
 	UIB.makeInputRow("Aim Speed",AB.SPEED,function(n) if n>0 and n<=200 then AB.SPEED=n end end)
@@ -2353,34 +2399,11 @@ buildPage("Combat", function()
 		AutoSteal.Enabled=on; if on then startAutoSteal() else stopAutoSteal() end
 	end)
 	UIB.makeInputRow("Steal Radius",AutoSteal.Radius,function(n) if n and n>=1 and n<=500 then AutoSteal.Radius=n end end)
-	local _autoTPEnabled = false
-	local _autoTPConn    = nil
-	local _autoTPHeight  = 20
 	UIB.makeToggleRow("Auto TP Down", false, function(on)
-		_autoTPEnabled = on
-		if on then
-			if _autoTPConn then pcall(function() task.cancel(_autoTPConn) end) end
-			_autoTPConn = task.spawn(function()
-				while _autoTPEnabled do
-					task.wait(0.1)
-					pcall(function()
-						local char = LP.Character; if not char then return end
-						local root = char:FindFirstChild("HumanoidRootPart"); if not root then return end
-						local hum2 = char:FindFirstChildOfClass("Humanoid"); if not hum2 then return end
-						if hum2.FloorMaterial ~= Enum.Material.Air then return end
-						if root.Position.Y < _autoTPHeight then return end
-						root.CFrame = CFrame.new(root.Position.X, -7.00, root.Position.Z)
-							* CFrame.Angles(0, select(2, root.CFrame:ToEulerAnglesYXZ()), 0)
-						root.AssemblyLinearVelocity = Vector3.zero
-					end)
-				end
-			end)
-		else
-			if _autoTPConn then pcall(function() task.cancel(_autoTPConn) end); _autoTPConn = nil end
-		end
+		if on then _sStartAutoTPDown() else _sStopAutoTPDown() end
 	end)
-	UIB.makeInputRow("TP Height (Y)", _autoTPHeight, function(n)
-		if n >= 0 and n <= 500 then _autoTPHeight = n end
+	UIB.makeInputRow("Height (Y)", _sTPDownHeight, function(n)
+		if n >= 0 and n <= 9999 then _sTPDownHeight = n end
 	end)
 	local tpDownRow=Instance.new("Frame",currentPage)
 	tpDownRow.Size=UDim2.new(1,0,0,32); tpDownRow.BackgroundColor3=C_ROW; tpDownRow.BackgroundTransparency=0.35
@@ -3421,7 +3444,7 @@ end
 -- 8 packed right below it in a tight 2-wide grid (4 rows).
 local _FLOAT_GRID_ORDER = {
 	"aimbot","aimv2","dropbr","autoleft",
-	"autoright","tpdown","battp","instareset",
+	"autoright","tpdown","battp","instareset","melee",
 }
 local function _floatGridIndex(id)
 	for i, fid in ipairs(_FLOAT_GRID_ORDER) do
@@ -3633,6 +3656,14 @@ _floatDefs.aimv2 = {
 	end,
 	isActive = function() return ABP.active end,
 }
+_floatDefs.melee = {
+	label = "MELEE",
+	onClick = function()
+		local on = not MeleeBodyLock.active
+		if on then MeleeBodyLock.start() else MeleeBodyLock.stop() end
+	end,
+	isActive = function() return MeleeBodyLock.active end,
+}
 _G._MH_makeFloatButton   = makeFloatButton
 _G._MH_removeFloatButton = removeFloatButton
 _G._MH_setFloatLocked    = setFloatLocked
@@ -3741,23 +3772,12 @@ do
 	end)
 	if LP.Character then task.wait(0.1); createBB(); setupDetection(LP.Character) end
 
-	-- Speed update — delta position/time calculation (real measured speed, not the property)
-	local _lastPos, _lastT = nil, tick()
+	-- Speed update — affiche directement le WalkSpeed du Humanoid
 	RunService.RenderStepped:Connect(function()
 		if not speedLbl or not speedLbl.Parent then return end
 		local char = LP.Character; if not char then return end
-		local root = char:FindFirstChild("HumanoidRootPart"); if not root then return end
-		local now = tick()
-		local pos = Vector3.new(root.Position.X, 0, root.Position.Z)
-		if _lastPos then
-			local dt = now - _lastT
-			if dt > 0 then
-				local dist = (pos - _lastPos).Magnitude
-				local spd = dist / dt
-				speedLbl.Text = string.format("%.1f", spd)
-			end
-		end
-		_lastPos, _lastT = pos, now
+		local hum3 = char:FindFirstChildOfClass("Humanoid"); if not hum3 then return end
+		speedLbl.Text = string.format("%.0f", hum3.WalkSpeed)
 	end)
 
 	-- Other players' speed (billboard above their head)
@@ -4069,6 +4089,7 @@ buildPage("Buttons", function()
 		{id="tpdown",      name="TP Down"},
 		{id="battp",       name="Bat TP"},
 		{id="instareset",  name="Instant Reset"},
+		{id="melee",       name="Melee"},
 	}
 	for _, entry in ipairs(FLOAT_LABELS) do
 		_floatRowSetters[entry.id] = UIB.makeToggleRow(entry.name, false, function(on)
@@ -4149,53 +4170,6 @@ local function MH_resetBtnPos()
 		if winDefaults[id] then pcall(function() frame.Position = winDefaults[id] end) end
 	end
 	if _G._MH_autoSave then _G._MH_autoSave() end
-end
-
--- Auto TP Down (Settings) — Raycast-based, finds real ground
-local _sTPDownEnabled = false
-local _sTPDownConn    = nil
-local _sTPDownHeight  = 20
-local _sTPDownBusy    = false
-local function _sRunTPDown()
-	if _sTPDownBusy then return end
-	_sTPDownBusy = true
-	pcall(function()
-		local char = LP.Character; if not char then _sTPDownBusy=false; return end
-		local root = char:FindFirstChild("HumanoidRootPart")
-		local hum2 = char:FindFirstChildOfClass("Humanoid")
-		if not root or not hum2 then _sTPDownBusy=false; return end
-		local hipH = hum2.HipHeight or 2
-		local rp = RaycastParams.new()
-		rp.FilterDescendantsInstances = {char}
-		rp.FilterType = Enum.RaycastFilterType.Exclude
-		local ray = workspace:Raycast(root.Position, Vector3.new(0,-500,0), rp)
-		if ray then
-			root.CFrame = CFrame.new(root.Position.X, ray.Position.Y + hipH + 0.1, root.Position.Z)
-			root.AssemblyLinearVelocity = Vector3.new(root.AssemblyLinearVelocity.X, 0, root.AssemblyLinearVelocity.Z)
-		end
-	end)
-	_sTPDownBusy = false
-end
-local function _sStartAutoTPDown()
-	if _sTPDownConn then task.cancel(_sTPDownConn); _sTPDownConn=nil end
-	_sTPDownEnabled = true
-	_sTPDownConn = task.spawn(function()
-		while _sTPDownEnabled do
-			task.wait(0.1)
-			pcall(function()
-				local char = LP.Character; if not char then return end
-				local root = char:FindFirstChild("HumanoidRootPart"); if not root then return end
-				local hum2 = char:FindFirstChildOfClass("Humanoid"); if not hum2 then return end
-				if hum2.FloorMaterial ~= Enum.Material.Air then return end
-				if root.Position.Y < _sTPDownHeight then return end
-				_sRunTPDown()
-			end)
-		end
-	end)
-end
-local function _sStopAutoTPDown()
-	_sTPDownEnabled = false
-	if _sTPDownConn then task.cancel(_sTPDownConn); _sTPDownConn=nil end
 end
 
 buildPage("Settings", function()
@@ -4427,16 +4401,6 @@ buildPage("Settings", function()
 			end
 		end)
 	end
-
-	UIB.makeGap(4)
-	UIB.makeSectionLabel("Auto TP Down")
-	UIB.makeGap(2)
-	UIB.makeToggleRow("Auto TP Down", false, function(on)
-		if on then _sStartAutoTPDown() else _sStopAutoTPDown() end
-	end)
-	UIB.makeInputRow("Height Threshold", _sTPDownHeight, function(n)
-		if n >= 0 and n <= 9999 then _sTPDownHeight = n end
-	end)
 
 	UIB.makeGap(4)
 	UIB.makeSectionLabel("Reset")
