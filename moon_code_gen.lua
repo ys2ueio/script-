@@ -298,7 +298,6 @@ sendBtn.MouseButton1Click:Connect(function()
     if _G.moonAutoCode and _G.moonAutoCode.setLastCode then
         _G.moonAutoCode.setLastCode(t)
     end
-    injectNotif(t, autoRemoveOn)
     TweenService:Create(sendBtn, TweenInfo.new(0.1), {BackgroundColor3 = C_GREEN}):Play()
     task.delay(0.2, function()
         TweenService:Create(sendBtn, TweenInfo.new(0.2), {BackgroundColor3 = C_ON}):Play()
