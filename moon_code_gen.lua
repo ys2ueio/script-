@@ -295,6 +295,9 @@ end)
 sendBtn.MouseButton1Click:Connect(function()
     local t = customBox.Text
     if t == "" then return end
+    if _G.moonAutoCode and _G.moonAutoCode.setLastCode then
+        _G.moonAutoCode.setLastCode(t)
+    end
     injectNotif(t, autoRemoveOn)
     TweenService:Create(sendBtn, TweenInfo.new(0.1), {BackgroundColor3 = C_GREEN}):Play()
     task.delay(0.2, function()

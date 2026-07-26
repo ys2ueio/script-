@@ -895,4 +895,6 @@ UserInputService.InputBegan:Connect(function(input, gpe)
     if input.KeyCode == forceKb then doForceScan() end
 end)
 
+_G.moonAutoCode = { setLastCode = setLastCode }
+
 print("[MOON AUTO CODE] Loaded")
