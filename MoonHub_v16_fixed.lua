@@ -4093,6 +4093,7 @@ local function MH_resetAll()
 	pcall(function() stopAutoLeft()    end)
 	pcall(function() stopAutoRight()   end)
 	pcall(function() if MeleeBodyLock.active then MeleeBodyLock.stop() end end)
+	pcall(function() _sStopAutoTPDown() end)
 	State.normalSpeed=60; State.carrySpeed=30; State.laggerSpeed=15; State.laggerCarrySpeed=24.5
 	State.speedType="normal"; State.autoPlayMode="Full"
 	State.laggerActive=false; State.laggerCarryActive=false
@@ -4129,6 +4130,53 @@ local function MH_resetBtnPos()
 		if defaults[id] then pcall(function() frame.Position=defaults[id] end) end
 	end
 	if _G._MH_autoSave then _G._MH_autoSave() end
+end
+
+-- Auto TP Down (Settings) — Raycast-based, finds real ground
+local _sTPDownEnabled = false
+local _sTPDownConn    = nil
+local _sTPDownHeight  = 20
+local _sTPDownBusy    = false
+local function _sRunTPDown()
+	if _sTPDownBusy then return end
+	_sTPDownBusy = true
+	pcall(function()
+		local char = LP.Character; if not char then _sTPDownBusy=false; return end
+		local root = char:FindFirstChild("HumanoidRootPart")
+		local hum2 = char:FindFirstChildOfClass("Humanoid")
+		if not root or not hum2 then _sTPDownBusy=false; return end
+		local hipH = hum2.HipHeight or 2
+		local rp = RaycastParams.new()
+		rp.FilterDescendantsInstances = {char}
+		rp.FilterType = Enum.RaycastFilterType.Exclude
+		local ray = workspace:Raycast(root.Position, Vector3.new(0,-500,0), rp)
+		if ray then
+			root.CFrame = CFrame.new(root.Position.X, ray.Position.Y + hipH + 0.1, root.Position.Z)
+			root.AssemblyLinearVelocity = Vector3.new(root.AssemblyLinearVelocity.X, 0, root.AssemblyLinearVelocity.Z)
+		end
+	end)
+	_sTPDownBusy = false
+end
+local function _sStartAutoTPDown()
+	if _sTPDownConn then task.cancel(_sTPDownConn); _sTPDownConn=nil end
+	_sTPDownEnabled = true
+	_sTPDownConn = task.spawn(function()
+		while _sTPDownEnabled do
+			task.wait(0.1)
+			pcall(function()
+				local char = LP.Character; if not char then return end
+				local root = char:FindFirstChild("HumanoidRootPart"); if not root then return end
+				local hum2 = char:FindFirstChildOfClass("Humanoid"); if not hum2 then return end
+				if hum2.FloorMaterial ~= Enum.Material.Air then return end
+				if root.Position.Y < _sTPDownHeight then return end
+				_sRunTPDown()
+			end)
+		end
+	end)
+end
+local function _sStopAutoTPDown()
+	_sTPDownEnabled = false
+	if _sTPDownConn then task.cancel(_sTPDownConn); _sTPDownConn=nil end
 end
 
 buildPage("Settings", function()
@@ -4217,7 +4265,9 @@ buildPage("Settings", function()
 			["Superhero"]   = {WalkAnim=616013216,RunAnim=616111765,JumpAnim=616111876,FallAnim=616108001,SwimIdle=616112625,Swim=616112437,Animation1=616111295,Animation2=616111295,ClimbAnim=616110833},
 			["Cartoony"]    = {WalkAnim=742640026,RunAnim=742638842,JumpAnim=742637942,FallAnim=742637151,SwimIdle=742639220,Swim=742639812,Animation1=742635424,Animation2=742636889,ClimbAnim=742636889},
 			["Ninja"]       = {WalkAnim=656118852,RunAnim=656118852,JumpAnim=656117878,FallAnim=656115606,SwimIdle=656119721,Swim=656119721,Animation1=656117878,Animation2=656118341,ClimbAnim=656114359},
-			["Adidas Sports"]={WalkAnim=18537392113,RunAnim=18537384940,JumpAnim=18537380791,FallAnim=18537367238,SwimIdle=18537387180,Swim=18537389531,Animation1=18537376492,Animation2=18537371272,ClimbAnim=18537363391},
+			["Adidas Sports"]    ={WalkAnim=18537392113,RunAnim=18537384940,JumpAnim=18537380791,FallAnim=18537367238,SwimIdle=18537387180,Swim=18537389531,Animation1=18537376492,Animation2=18537371272,ClimbAnim=18537363391},
+			["Adidas Community"] ={WalkAnim=122150855457006,RunAnim=82598234841035,JumpAnim=75290611992385,FallAnim=98600215928904,SwimIdle=109346520324160,Swim=133308483266208,Animation1=122257458498464,Animation2=102357151005774,ClimbAnim=88763136693023},
+			["Adidas Aura"]      ={WalkAnim=83842218823011,RunAnim=118320322718866,JumpAnim=109996626521204,FallAnim=95603166884636,SwimIdle=94922130551805,Swim=134530128383903,Animation1=110211186840347,Animation2=114191137265065,ClimbAnim=97824616490448},
 			["Stylish"]     = {WalkAnim=616122287,RunAnim=616117076,JumpAnim=616119360,FallAnim=616115533,SwimIdle=616120448,Swim=616121235,Animation1=616117076,Animation2=616120861,ClimbAnim=616115533},
 			["Levitation"]  = {WalkAnim=616013216,RunAnim=616006778,JumpAnim=616008936,FallAnim=616005863,SwimIdle=616011509,Swim=616012453,Animation1=616006778,Animation2=616008087,ClimbAnim=616003713},
 			["Astronaut"]   = {WalkAnim=891667138,RunAnim=891636393,JumpAnim=891627522,FallAnim=891617961,SwimIdle=891639666,Swim=891663592,Animation1=891621366,Animation2=891633237,ClimbAnim=891609353},
@@ -4235,7 +4285,7 @@ buildPage("Settings", function()
 			["Princess"]    = {WalkAnim=941028902,RunAnim=941015281,JumpAnim=941008832,FallAnim=941000007,SwimIdle=941025398,Swim=941018893,Animation1=941003647,Animation2=941013098,ClimbAnim=940996062},
 			["Cowboy"]      = {WalkAnim=1014421541,RunAnim=1014401683,JumpAnim=1014394726,FallAnim=1014384571,SwimIdle=1014411816,Swim=1014406523,Animation1=1014390418,Animation2=1014398616,ClimbAnim=1014380606},
 		}
-		local ANIM_ORDER = {"Default","Robot","Vampire","Superhero","Cartoony","Ninja","Adidas Sports","Stylish","Levitation","Astronaut","Werewolf","Knight","Pirate","Toy","Elder","Bubbly","Zombie","Sneaky","Patrol","Popstar","Confident","Princess","Cowboy"}
+		local ANIM_ORDER = {"Default","Robot","Vampire","Superhero","Cartoony","Ninja","Adidas Sports","Adidas Community","Adidas Aura","Stylish","Levitation","Astronaut","Werewolf","Knight","Pirate","Toy","Elder","Bubbly","Zombie","Sneaky","Patrol","Popstar","Confident","Princess","Cowboy"}
 		local _animEnabled = false
 		local _animIndex = 1
 
@@ -4279,7 +4329,7 @@ buildPage("Settings", function()
 					if not id then return end
 					local f=animate:FindFirstChild(folder); if not f then return end
 					local a=f:FindFirstChild(slot)
-					if a and a:IsA("StringValue") then a.Value="rbxassetid://"..tostring(id) end
+					if a and a:IsA("Animation") then a.AnimationId="rbxassetid://"..tostring(id) end
 				end
 				setAnim("walk","WalkAnim",pack.WalkAnim)
 				setAnim("run","RunAnim",pack.RunAnim)
@@ -4288,6 +4338,10 @@ buildPage("Settings", function()
 				setAnim("idle","Animation1",pack.Animation1)
 				setAnim("idle","Animation2",pack.Animation2)
 				setAnim("climb","ClimbAnim",pack.ClimbAnim)
+				setAnim("swimidle","SwimIdle",pack.SwimIdle)
+				setAnim("swim","Swim",pack.Swim)
+				-- stop playing tracks so Animate reloads them with new IDs
+				for _, tr in ipairs(hum:GetPlayingAnimationTracks()) do pcall(function() tr:Stop(0) end) end
 			end
 		end
 
@@ -4351,6 +4405,16 @@ buildPage("Settings", function()
 			end
 		end)
 	end
+
+	UIB.makeGap(4)
+	UIB.makeSectionLabel("Auto TP Down")
+	UIB.makeGap(2)
+	UIB.makeToggleRow("Auto TP Down", false, function(on)
+		if on then _sStartAutoTPDown() else _sStopAutoTPDown() end
+	end)
+	UIB.makeInputRow("Height Threshold", _sTPDownHeight, function(n)
+		if n >= 0 and n <= 9999 then _sTPDownHeight = n end
+	end)
 
 	UIB.makeGap(4)
 	UIB.makeSectionLabel("Reset")
