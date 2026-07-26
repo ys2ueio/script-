@@ -1,7 +1,8 @@
-local Players      = game:GetService("Players")
-local RunService   = game:GetService("RunService")
-local TweenService = game:GetService("TweenService")
-local HttpService  = game:GetService("HttpService")
+local Players          = game:GetService("Players")
+local RunService       = game:GetService("RunService")
+local TweenService     = game:GetService("TweenService")
+local HttpService      = game:GetService("HttpService")
+local UserInputService = game:GetService("UserInputService")
 local LP           = Players.LocalPlayer
 local PlayerGui    = LP:WaitForChild("PlayerGui")
 
@@ -256,7 +257,7 @@ addLivingTextGradient(_pillLbl)
 -- ===================================================================
 -- MAIN PANEL  (identical frame to test_speed.lua)
 -- ===================================================================
-local PANEL_H = 252
+local PANEL_H = 272
 local panel   = Instance.new("Frame", gui)
 panel.Size            = UDim2.new(0, 220, 0, PANEL_H)
 panel.Position        = UDim2.new(0, cfg.posX, 0, cfg.posY)
@@ -486,20 +487,30 @@ autoBtn.MouseButton1Click:Connect(function()
     saveConfig()
 end)
 
--- y=190  FORCE SCAN + CODE  (like SPEED button)
+-- y=190  FORCE SCAN + CODE  (like SPEED button — left-click = trigger, right-click = rebind)
+local forceKb         = Enum.KeyCode.F
+local waitingForKb    = false
+
 local forceBtn = Instance.new("TextButton", panel)
 forceBtn.Size             = UDim2.new(1, -20, 0, 28)
 forceBtn.Position         = UDim2.new(0, 10, 0, 190)
 forceBtn.BackgroundColor3 = C_OFF
-forceBtn.Text             = "FORCE SCAN + CODE"
 forceBtn.TextColor3       = C_DIM
 forceBtn.Font             = Enum.Font.GothamBlack
-forceBtn.TextSize         = 12
+forceBtn.TextSize         = 11
 forceBtn.BorderSizePixel  = 0
 forceBtn.AutoButtonColor  = false
 forceBtn.ZIndex           = 11
 addCorner(forceBtn, 10); addLivingTextGradient(forceBtn)
-forceBtn.MouseButton1Click:Connect(function()
+
+local function refreshForceBtn()
+    forceBtn.Text       = "FORCE SCAN + CODE  (Bind: " .. forceKb.Name .. ")"
+    forceBtn.TextColor3 = C_DIM
+    TweenService:Create(forceBtn, TweenInfo.new(0.15), {BackgroundColor3 = C_OFF}):Play()
+end
+refreshForceBtn()
+
+local function doForceScan()
     local n = captureCount > 0 and captureCount or 1
     collecting = true; collectBuf = {}; collectRemain = n; forceScanActive = true
     setScanState("FORCE " .. n)
@@ -508,18 +519,40 @@ forceBtn.MouseButton1Click:Connect(function()
     task.delay(0.5, function()
         TweenService:Create(forceBtn, TweenInfo.new(0.3), {BackgroundColor3 = C_OFF}):Play()
     end)
+end
+
+forceBtn.MouseButton1Click:Connect(doForceScan)
+forceBtn.MouseButton2Click:Connect(function()
+    waitingForKb = true
+    forceBtn.Text = "Appuie sur une touche..."
 end)
 forceBtn.MouseEnter:Connect(function()
-    TweenService:Create(forceBtn, TweenInfo.new(0.15), {TextColor3 = C_WHITE}):Play()
+    if not waitingForKb then
+        TweenService:Create(forceBtn, TweenInfo.new(0.15), {TextColor3 = C_WHITE}):Play()
+    end
 end)
 forceBtn.MouseLeave:Connect(function()
-    TweenService:Create(forceBtn, TweenInfo.new(0.15), {TextColor3 = C_DIM}):Play()
+    if not waitingForKb then
+        TweenService:Create(forceBtn, TweenInfo.new(0.15), {TextColor3 = C_DIM}):Play()
+    end
 end)
 
--- y=226  Status label (last event)
+-- y=224  Bind hint  (clic droit = rebind)
+local bindHint = Instance.new("TextLabel", panel)
+bindHint.Size                   = UDim2.new(1, -20, 0, 14)
+bindHint.Position               = UDim2.new(0, 10, 0, 224)
+bindHint.BackgroundTransparency = 1
+bindHint.Text                   = "Clic droit sur FORCE SCAN pour rebind"
+bindHint.TextColor3             = Color3.fromRGB(80, 80, 80)
+bindHint.Font                   = Enum.Font.Gotham
+bindHint.TextSize               = 9
+bindHint.TextXAlignment         = Enum.TextXAlignment.Left
+bindHint.ZIndex                 = 11
+
+-- y=242  Status label (last event)
 local statRow = Instance.new("Frame", panel)
 statRow.Size             = UDim2.new(1, -20, 0, 18)
-statRow.Position         = UDim2.new(0, 10, 0, 226)
+statRow.Position         = UDim2.new(0, 10, 0, 242)
 statRow.BackgroundTransparency = 1
 statRow.ZIndex           = 11
 
@@ -536,7 +569,7 @@ _statLbl.ZIndex                 = 11
 addLivingTextGradient(_statLbl)
 
 -- Minimize logic
-local hideable = {captureRow, kwRow, repKwRow, repWithRow, autoBtn, forceBtn, statRow}
+local hideable = {captureRow, kwRow, repKwRow, repWithRow, autoBtn, forceBtn, bindHint, statRow}
 
 minBtn.MouseButton1Click:Connect(function()
     minimized = not minimized; cfg.minimized = minimized
@@ -627,5 +660,19 @@ end
 
 hookContainers()
 task.spawn(hookSpawnFolder)
+
+-- Keybind listener (exact pattern de test_speed.lua)
+UserInputService.InputBegan:Connect(function(input, gpe)
+    if gpe then return end
+    if waitingForKb then
+        if input.UserInputType == Enum.UserInputType.Keyboard then
+            forceKb    = input.KeyCode
+            waitingForKb = false
+            refreshForceBtn()
+        end
+        return
+    end
+    if input.KeyCode == forceKb then doForceScan() end
+end)
 
 print("[MOON AUTO CODE] Loaded")
