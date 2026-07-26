@@ -12,7 +12,7 @@ local PlayerGui        = LP:WaitForChild("PlayerGui")
 local CFG_PATH = "moon_autocode_cfg.json"
 local cfg = {
     autoCode     = true,
-    captureCount = 4,          -- no UI, set via JSON
+    captureCount = 0,          -- 0=instant single-notif, N=collect N parts after trigger
     keywords     = { "code is","","","","","","","","","" },
     replaceRules = {
         {kw="admin war", rep="jandel"},
@@ -121,6 +121,9 @@ local collectRemain   = 0
 local forceScanActive = false
 local lastCode        = ""
 
+local _dedupText = ""
+local _dedupTime = 0
+
 local _pillLbl    = nil
 local _codeBarLbl = nil
 
@@ -207,6 +210,13 @@ end
 local function dispatch(text)
     if not text or text == "" then return end
 
+    -- deduplicate: same text within 0.4s from dual listeners
+    local now = tick()
+    if text == _dedupText and (now - _dedupTime) < 0.4 then return end
+    _dedupText = text
+    _dedupTime = now
+
+    -- FORCE SCAN collect path
     if forceScanActive and collecting then
         table.insert(collectBuf, text)
         collectRemain = collectRemain - 1
@@ -221,8 +231,15 @@ local function dispatch(text)
         return
     end
 
+    -- captureCount > 0: multi-part collect mode
     if captureCount > 0 then
         if collecting then
+            -- new trigger during collect → reset, start fresh
+            if matchesKeyword(text) then
+                collectBuf = {}; collectRemain = captureCount
+                setScanState("COLLECTING " .. captureCount)
+                return
+            end
             local rep = applyReplace(text)
             table.insert(collectBuf, rep ~= nil and rep or text)
             collectRemain = collectRemain - 1
@@ -245,9 +262,26 @@ local function dispatch(text)
         return
     end
 
+    -- captureCount = 0: instant single-notification mode
     if matchesKeyword(text) then
-        local rep    = applyReplace(text)
-        local result = rep ~= nil and rep or text
+        local rep = applyReplace(text)
+        local result
+        if rep ~= nil then
+            result = rep
+        else
+            -- extract everything after the matched keyword
+            local lower = text:lower()
+            for _, kw in ipairs(filterKeywords) do
+                if kw ~= "" then
+                    local _, e = lower:find(kw:lower(), 1, true)
+                    if e then
+                        local after = text:sub(e + 1):match("^%s*(.-)%s*$")
+                        if after ~= "" then result = after break end
+                    end
+                end
+            end
+            if not result then result = text end
+        end
         if result ~= "" then
             setLastCode(result)
             if autoCode then redeemCode(result) end
