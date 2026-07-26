@@ -2443,7 +2443,7 @@ local _floatPositions = {}   -- id -> {xs,xo,ys,yo}
 -- Bump this whenever the default layout changes: saved positions from an
 -- older version get discarded on load instead of restoring stale/overlapping
 -- coordinates, so everyone gets the current clean column layout by default.
-local _FLOAT_POS_VERSION = 8
+local _FLOAT_POS_VERSION = 9
 local _floatLocked    = false
 local FLOAT_SZ = 44
 
@@ -3455,7 +3455,7 @@ end
 -- 8 packed right below it in a tight 2-wide grid (4 rows).
 local _FLOAT_GRID_ORDER = {
 	"aimbot","aimv2","dropbr","autoleft",
-	"autoright","tpdown","battp","instareset","melee",
+	"autoright","tpdown","battp","instareset",
 }
 local function _floatGridIndex(id)
 	for i, fid in ipairs(_FLOAT_GRID_ORDER) do
@@ -3481,6 +3481,15 @@ local function makeFloatButton(id)
 			btn.Position = UDim2.new(saved[1], saved[2], saved[3], saved[4])
 		else
 			btn.Position = UDim2.new(blockX, -(blockW + 12), 0, 8)
+		end
+	elseif id == "melee" then
+		-- Wide standalone button, bottom of the block (mirrors antibat).
+		btn.Size = UDim2.new(0, blockW, 0, FLOAT_SZ)
+		if saved then
+			btn.Position = UDim2.new(saved[1], saved[2], saved[3], saved[4])
+		else
+			local topOffset = 8 + FLOAT_SZ + GAP
+			btn.Position = UDim2.new(blockX, -(blockW + 12), 0, topOffset + 4 * (FLOAT_SZ + GAP))
 		end
 	else
 		btn.Size = UDim2.new(0, FLOAT_SZ, 0, FLOAT_SZ)
@@ -4195,6 +4204,9 @@ local function MH_resetBtnPos()
 			local pos
 			if id == "antibat" then
 				pos = UDim2.new(1, -(_blockW + 12), 0, 8)
+			elseif id == "melee" then
+				local topOffset = 8 + FLOAT_SZ + _GAP
+				pos = UDim2.new(1, -(_blockW + 12), 0, topOffset + 4 * (FLOAT_SZ + _GAP))
 			else
 				local idx = _floatGridIndex(id) - 1
 				local col = idx % 2
