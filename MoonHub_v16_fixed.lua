@@ -2370,9 +2370,7 @@ buildPage("Combat", function()
 	setAimbotV2RowVisual = UIB.makeToggleRow("Bat Aimbot V2",false,function(on)
 		if on then if AB.active then AB.stop() end; ABP.start() else ABP.stop() end
 	end)
-	UIB.makeToggleRow("Melee",false,function(on)
-		if on then MeleeBodyLock.start() else MeleeBodyLock.stop() end
-	end)
+
 	UIB.makeGap(4); UIB.makeSectionLabel("Aimbot Tuning")
 	UIB.makeInputRow("Aim Speed",AB.SPEED,function(n) if n>0 and n<=200 then AB.SPEED=n end end)
 	UIB.makeInputRow("Aim Height",AB.HEIGHT,function(n) if n>=0 and n<=30 then AB.HEIGHT=n end end)
@@ -2445,9 +2443,9 @@ local _floatPositions = {}   -- id -> {xs,xo,ys,yo}
 -- Bump this whenever the default layout changes: saved positions from an
 -- older version get discarded on load instead of restoring stale/overlapping
 -- coordinates, so everyone gets the current clean column layout by default.
-local _FLOAT_POS_VERSION = 6
+local _FLOAT_POS_VERSION = 7
 local _floatLocked    = false
-local FLOAT_SZ = 46
+local FLOAT_SZ = 54
 
 -- Declared here (before buildPage Settings) so the Speed
 -- Bypass / Lagger toggles can reference the widgets built further
@@ -3457,7 +3455,7 @@ end
 -- 8 packed right below it in a tight 2-wide grid (4 rows).
 local _FLOAT_GRID_ORDER = {
 	"aimbot","aimv2","dropbr","autoleft",
-	"autoright","tpdown","battp","instareset",
+	"autoright","tpdown","battp","instareset","melee",
 }
 local function _floatGridIndex(id)
 	for i, fid in ipairs(_FLOAT_GRID_ORDER) do
@@ -3482,7 +3480,7 @@ local function makeFloatButton(id)
 		if saved then
 			btn.Position = UDim2.new(saved[1], saved[2], saved[3], saved[4])
 		else
-			btn.Position = UDim2.new(blockX, -(blockW + 12), 0, 40)
+			btn.Position = UDim2.new(blockX, -(blockW + 12), 0, 8)
 		end
 	else
 		btn.Size = UDim2.new(0, FLOAT_SZ, 0, FLOAT_SZ)
@@ -3493,7 +3491,7 @@ local function makeFloatButton(id)
 			local idx = _floatGridIndex(id) - 1
 			local col = idx % 2
 			local row = math.floor(idx / 2)
-			local topOffset = 40 + FLOAT_SZ + GAP
+			local topOffset = 8 + FLOAT_SZ + GAP
 			btn.Position = UDim2.new(blockX, -(blockW + 12) + col * (FLOAT_SZ + GAP), 0, topOffset + row * (FLOAT_SZ + GAP))
 		end
 	end
@@ -3669,6 +3667,14 @@ _floatDefs.aimv2 = {
 	end,
 	isActive = function() return ABP.active end,
 }
+_floatDefs.melee = {
+	label = "MELEE",
+	onClick = function()
+		local on = not MeleeBodyLock.active
+		if on then MeleeBodyLock.start() else MeleeBodyLock.stop() end
+	end,
+	isActive = function() return MeleeBodyLock.active end,
+}
 _G._MH_makeFloatButton   = makeFloatButton
 _G._MH_removeFloatButton = removeFloatButton
 _G._MH_setFloatLocked    = setFloatLocked
@@ -3777,12 +3783,13 @@ do
 	end)
 	if LP.Character then task.wait(0.1); createBB(); setupDetection(LP.Character) end
 
-	-- Speed update — affiche directement le WalkSpeed du Humanoid
+	-- Speed update — actual horizontal velocity magnitude (avoids carry-speed lockout)
 	RunService.RenderStepped:Connect(function()
 		if not speedLbl or not speedLbl.Parent then return end
 		local char = LP.Character; if not char then return end
-		local hum3 = char:FindFirstChildOfClass("Humanoid"); if not hum3 then return end
-		speedLbl.Text = string.format("%.0f", hum3.WalkSpeed)
+		local hrp3 = char:FindFirstChild("HumanoidRootPart"); if not hrp3 then return end
+		local vel = hrp3.Velocity
+		speedLbl.Text = string.format("%.0f", math.sqrt(vel.X*vel.X + vel.Z*vel.Z))
 	end)
 
 	-- Other players' speed (billboard above their head)
@@ -4074,6 +4081,7 @@ buildPage("Buttons", function()
 		{id="antibat",     name="Anti Bat Aimbot"},
 		{id="aimbot",      name="Aim Bot"},
 		{id="aimv2",       name="Aim V2"},
+		{id="melee",       name="Melee"},
 		{id="dropbr",      name="Drop Brainrot"},
 		{id="autoleft",    name="Auto Left"},
 		{id="autoright",   name="Auto Right"},
@@ -4189,12 +4197,12 @@ local function MH_resetBtnPos()
 		pcall(function()
 			local pos
 			if id == "antibat" then
-				pos = UDim2.new(1, -(_blockW + 12), 0, 40)
+				pos = UDim2.new(1, -(_blockW + 12), 0, 8)
 			else
 				local idx = _floatGridIndex(id) - 1
 				local col = idx % 2
 				local row = math.floor(idx / 2)
-				local topOffset = 40 + FLOAT_SZ + _GAP
+				local topOffset = 8 + FLOAT_SZ + _GAP
 				pos = UDim2.new(1, -(_blockW + 12) + col * (FLOAT_SZ + _GAP), 0, topOffset + row * (FLOAT_SZ + _GAP))
 			end
 			entry.frame.Position = pos
