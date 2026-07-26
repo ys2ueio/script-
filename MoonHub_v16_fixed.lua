@@ -2443,9 +2443,9 @@ local _floatPositions = {}   -- id -> {xs,xo,ys,yo}
 -- Bump this whenever the default layout changes: saved positions from an
 -- older version get discarded on load instead of restoring stale/overlapping
 -- coordinates, so everyone gets the current clean column layout by default.
-local _FLOAT_POS_VERSION = 7
+local _FLOAT_POS_VERSION = 8
 local _floatLocked    = false
-local FLOAT_SZ = 54
+local FLOAT_SZ = 44
 
 -- Declared here (before buildPage Settings) so the Speed
 -- Bypass / Lagger toggles can reference the widgets built further
