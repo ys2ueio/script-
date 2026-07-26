@@ -4255,7 +4255,7 @@ buildPage("Settings", function()
 		if _lgrBypassWidget then _lgrBypassWidget.Visible = on end
 	end)
 
-	-- ── ANIMATION CHANGER (22 packs, ◀ ▶ navigation) ──────────────
+	-- ── ANIMATION CHANGER (25 packs, ◀ ▶ navigation) ──────────────
 	UIB.makeGap(4)
 	UIB.makeSectionLabel("Animation Changer")
 	do
@@ -4304,25 +4304,8 @@ buildPage("Settings", function()
 			local animator = hum:FindFirstChildOfClass("Animator")
 			if not animator then animator = Instance.new("Animator", hum) end
 			local pack = ANIM_PACKS[packName]; if not pack then return end
-			for _, tr in ipairs(hum:GetPlayingAnimationTracks()) do pcall(function() tr:Stop(0) end) end
-			local slots = {
-				{id=pack.WalkAnim, prio=Enum.AnimationPriority.Movement, loop=true},
-				{id=pack.Animation1, prio=Enum.AnimationPriority.Idle, loop=true},
-			}
-			for _, s in ipairs(slots) do
-				if s.id then
-					local anim = Instance.new("Animation")
-					anim.AnimationId = "rbxassetid://"..tostring(s.id)
-					local ok, track = pcall(function() return animator:LoadAnimation(anim) end)
-					if ok and track then
-						track.Priority = s.prio
-						track.Looped = s.loop
-						track:Play(0)
-						table.insert(_animTracks, track)
-					end
-				end
-			end
-			-- Also apply via Animate script (fallback for real walk/run/jump)
+
+			-- 1. Update Animate script IDs first (walk/run/jump/fall/climb/swim)
 			local animate = c:FindFirstChild("Animate")
 			if animate then
 				local function setAnim(folder,slot,id)
@@ -4340,8 +4323,28 @@ buildPage("Settings", function()
 				setAnim("climb","ClimbAnim",pack.ClimbAnim)
 				setAnim("swimidle","SwimIdle",pack.SwimIdle)
 				setAnim("swim","Swim",pack.Swim)
-				-- stop playing tracks so Animate reloads them with new IDs
-				for _, tr in ipairs(hum:GetPlayingAnimationTracks()) do pcall(function() tr:Stop(0) end) end
+			end
+
+			-- 2. Stop all currently playing tracks so Animate restarts with new IDs
+			for _, tr in ipairs(hum:GetPlayingAnimationTracks()) do pcall(function() tr:Stop(0) end) end
+
+			-- 3. Force-play idle immediately for visual feedback (Animate handles rest)
+			local slots = {
+				{id=pack.Animation1, prio=Enum.AnimationPriority.Idle,     loop=true},
+				{id=pack.WalkAnim,   prio=Enum.AnimationPriority.Movement, loop=true},
+			}
+			for _, s in ipairs(slots) do
+				if s.id then
+					local anim = Instance.new("Animation")
+					anim.AnimationId = "rbxassetid://"..tostring(s.id)
+					local ok, track = pcall(function() return animator:LoadAnimation(anim) end)
+					if ok and track then
+						track.Priority = s.prio
+						track.Looped = s.loop
+						track:Play(0)
+						table.insert(_animTracks, track)
+					end
+				end
 			end
 		end
 
