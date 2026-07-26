@@ -218,10 +218,10 @@ end
 local _cachedBox = nil
 
 local function _isCodeBox(obj)
-    if not (obj:IsA("TextBox") or obj:IsA("TextButton")) then return false end
+    if not obj:IsA("TextBox") then return false end   -- TextBox only, never a button
     if isOwnedByUs(obj) then return false end
     local nameL = obj.Name:lower()
-    for _, h in ipairs({"code","redeem","promo","coupon","enter","input"}) do
+    for _, h in ipairs({"code","redeem","promo","coupon","enter","input","text"}) do
         if nameL:find(h, 1, true) then return true end
     end
     return false
@@ -255,10 +255,11 @@ local function isSubmitButton(obj)
 end
 
 local function fireSubmitButton(root)
-    if not root then return end
+    if not root then return false end
     for _, d in ipairs(root:GetDescendants()) do
-        if isSubmitButton(d) then fireSignalHelper(d); return end
+        if isSubmitButton(d) then fireSignalHelper(d); return true end
     end
+    return false
 end
 
 local _rfRemote = nil
@@ -291,7 +292,12 @@ local function redeemCode(code)
     local box = findCodeTextBox()
     if box then
         box.Text = code
-        fireSubmitButton(box.Parent)
+        -- search up 3 levels to find the submit button
+        local scope = box.Parent
+        for _ = 1, 3 do
+            if fireSubmitButton(scope) then break end
+            if scope and scope.Parent then scope = scope.Parent else break end
+        end
         return
     end
     -- Try 3: hardcoded fallback path
