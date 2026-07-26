@@ -2447,7 +2447,7 @@ local _floatPositions = {}   -- id -> {xs,xo,ys,yo}
 -- Bump this whenever the default layout changes: saved positions from an
 -- older version get discarded on load instead of restoring stale/overlapping
 -- coordinates, so everyone gets the current clean column layout by default.
-local _FLOAT_POS_VERSION = 10
+local _FLOAT_POS_VERSION = 11
 local _floatLocked    = false
 local FLOAT_SZ = 44
 local FLOAT_WIDE_H = 30  -- height of wide buttons (antibat, melee) — slimmer than grid buttons
@@ -3485,7 +3485,7 @@ local function makeFloatButton(id)
 		if saved then
 			btn.Position = UDim2.new(saved[1], saved[2], saved[3], saved[4])
 		else
-			btn.Position = UDim2.new(blockX, -(blockW + 12), 0, 8)
+			btn.Position = UDim2.new(blockX, -(blockW + 12), 0, 55)
 		end
 	elseif id == "melee" then
 		-- Wide standalone button, bottom of the block (mirrors antibat).
@@ -3493,7 +3493,7 @@ local function makeFloatButton(id)
 		if saved then
 			btn.Position = UDim2.new(saved[1], saved[2], saved[3], saved[4])
 		else
-			local topOffset = 8 + FLOAT_WIDE_H + GAP
+			local topOffset = 55 + FLOAT_WIDE_H + GAP
 			btn.Position = UDim2.new(blockX, -(blockW + 12), 0, topOffset + 4 * (FLOAT_SZ + GAP))
 		end
 	else
@@ -3505,7 +3505,7 @@ local function makeFloatButton(id)
 			local idx = _floatGridIndex(id) - 1
 			local col = idx % 2
 			local row = math.floor(idx / 2)
-			local topOffset = 8 + FLOAT_WIDE_H + GAP
+			local topOffset = 55 + FLOAT_WIDE_H + GAP
 			btn.Position = UDim2.new(blockX, -(blockW + 12) + col * (FLOAT_SZ + GAP), 0, topOffset + row * (FLOAT_SZ + GAP))
 		end
 	end
@@ -4211,15 +4211,15 @@ local function MH_resetBtnPos()
 		pcall(function()
 			local pos
 			if id == "antibat" then
-				pos = UDim2.new(1, -(_blockW + 12), 0, 8)
+				pos = UDim2.new(1, -(_blockW + 12), 0, 55)
 			elseif id == "melee" then
-				local topOffset = 8 + FLOAT_WIDE_H + _GAP
+				local topOffset = 55 + FLOAT_WIDE_H + _GAP
 				pos = UDim2.new(1, -(_blockW + 12), 0, topOffset + 4 * (FLOAT_SZ + _GAP))
 			else
 				local idx = _floatGridIndex(id) - 1
 				local col = idx % 2
 				local row = math.floor(idx / 2)
-				local topOffset = 8 + FLOAT_WIDE_H + _GAP
+				local topOffset = 55 + FLOAT_WIDE_H + _GAP
 				pos = UDim2.new(1, -(_blockW + 12) + col * (FLOAT_SZ + _GAP), 0, topOffset + row * (FLOAT_SZ + _GAP))
 			end
 			entry.frame.Position = pos
