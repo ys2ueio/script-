@@ -4065,20 +4065,6 @@ end
 
 local _floatRowSetters = {}
 buildPage("Buttons", function()
-	-- Right at the top: direct toggle that spawns the Speed Booster widget
-	-- itself (not an intermediary floating button), shown in front.
-	UIB.makeSectionLabel("Speed Booster")
-	UIB.makeToggleRow("Speed Booster", false, function(on)
-		if _G._MH_spW then
-			_G._MH_spW.Visible = on
-			if on then _G._MH_spW.ZIndex = 1000 end
-		end
-	end)
-	UIB.makeGap(4)
-
-	UIB.makeSectionLabel("Floating Buttons")
-	UIB.makeGap(2)
-
 	local FLOAT_LABELS = {
 		{id="antibat",     name="Anti Bat Aimbot"},
 		{id="aimbot",      name="Aim Bot"},
@@ -4091,6 +4077,44 @@ buildPage("Buttons", function()
 		{id="instareset",  name="Instant Reset"},
 		{id="melee",       name="Melee"},
 	}
+
+	-- Select All — tout en haut
+	do
+		local saRow = Instance.new("Frame", currentPage)
+		saRow.Size = UDim2.new(1,0,0,34); saRow.BackgroundTransparency = 1
+		saRow.BorderSizePixel = 0; saRow.LayoutOrder = LO()
+		local saBtn = Instance.new("TextButton", saRow)
+		saBtn.Size = UDim2.new(1,0,1,0)
+		saBtn.BackgroundColor3 = Color3.fromRGB(30,60,30); saBtn.BackgroundTransparency = 0.15
+		saBtn.BorderSizePixel = 0; saBtn.Text = "✦ Select All"
+		saBtn.TextColor3 = C_WHITE; saBtn.Font = Enum.Font.GothamBold; saBtn.TextSize = 11
+		saBtn.AutoButtonColor = false; addCorner(saBtn, 10); addLivingStroke(saBtn, 1)
+		addLivingTextGradient(saBtn)
+		saBtn.MouseEnter:Connect(function() TweenService:Create(saBtn,TweenInfo.new(0.1),{BackgroundTransparency=0}):Play() end)
+		saBtn.MouseLeave:Connect(function() TweenService:Create(saBtn,TweenInfo.new(0.1),{BackgroundTransparency=0.15}):Play() end)
+		saBtn.MouseButton1Click:Connect(function()
+			for _, entry in ipairs(FLOAT_LABELS) do
+				if _floatRowSetters[entry.id] then _floatRowSetters[entry.id](true) end
+				makeFloatButton(entry.id)
+			end
+			if _G._MH_autoSave then _G._MH_autoSave() end
+		end)
+	end
+
+	UIB.makeGap(4)
+	-- Right at the top: direct toggle that spawns the Speed Booster widget
+	UIB.makeSectionLabel("Speed Booster")
+	UIB.makeToggleRow("Speed Booster", false, function(on)
+		if _G._MH_spW then
+			_G._MH_spW.Visible = on
+			if on then _G._MH_spW.ZIndex = 1000 end
+		end
+	end)
+	UIB.makeGap(4)
+
+	UIB.makeSectionLabel("Floating Buttons")
+	UIB.makeGap(2)
+
 	for _, entry in ipairs(FLOAT_LABELS) do
 		_floatRowSetters[entry.id] = UIB.makeToggleRow(entry.name, false, function(on)
 			if on then makeFloatButton(entry.id) else removeFloatButton(entry.id) end
