@@ -2314,45 +2314,27 @@ end
 -- ===================================================================
 -- MELEE BODY LOCK
 -- ===================================================================
-local MeleeBodyLock = {active=false, conn=nil, SPEED=60, STOP_DIST=2.5}
-local function mbl_nearest(root)
-	local best, bestD = nil, math.huge
-	for _, p in ipairs(Players:GetPlayers()) do
-		if p ~= LP and p.Character then
-			local tr = p.Character:FindFirstChild("HumanoidRootPart")
-			local h  = p.Character:FindFirstChildOfClass("Humanoid")
-			if tr and h and h.Health > 0 then
-				local d = (tr.Position - root.Position).Magnitude
-				if d < bestD then bestD = d; best = tr end
-			end
-		end
-	end
-	return best
-end
+local MeleeBodyLock = {active=false, conn=nil}
 function MeleeBodyLock.start()
 	if MeleeBodyLock.conn then MeleeBodyLock.conn:Disconnect() end
 	MeleeBodyLock.active = true
 	MeleeBodyLock.conn = RunService.Heartbeat:Connect(function()
 		if not MeleeBodyLock.active then return end
-		local char = LP.Character; if not char then return end
-		local root = char:FindFirstChild("HumanoidRootPart"); if not root then return end
-		local target = mbl_nearest(root); if not target then return end
-		local aimPos = target.Position - target.CFrame.LookVector * MeleeBodyLock.STOP_DIST
-		local diff = aimPos - root.Position
-		local dist = diff.Magnitude
-		if dist > MeleeBodyLock.STOP_DIST then
-			root.Velocity = diff.Unit * MeleeBodyLock.SPEED
-		else
-			root.Velocity = Vector3.new(0, root.Velocity.Y, 0)
-		end
+		local root = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart"); if not root then return end
+		local target = _av3Nearest(root); if not target or not target.Character then return end
+		local tr = target.Character:FindFirstChild("HumanoidRootPart"); if not tr then return end
+		pcall(function()
+			if sethiddenproperty then sethiddenproperty(root, "PhysicsRepRootPart", tr) end
+			local targetPos = tr.Position + Vector3.new(0, 0.9, 0)
+			if (root.Position - targetPos).Magnitude > 8 then root.CFrame = CFrame.new(targetPos) end
+			workspace.CurrentCamera.CFrame = CFrame.new(workspace.CurrentCamera.CFrame.Position, tr.Position)
+			_av3Hit()
+		end)
 	end)
 end
 function MeleeBodyLock.stop()
 	if MeleeBodyLock.conn then MeleeBodyLock.conn:Disconnect(); MeleeBodyLock.conn = nil end
 	MeleeBodyLock.active = false
-	local char = LP.Character
-	local root = char and char:FindFirstChild("HumanoidRootPart")
-	if root then root.Velocity = Vector3.new(0, root.Velocity.Y, 0) end
 end
 
 
