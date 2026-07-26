@@ -866,16 +866,80 @@ local function watchObject(obj)
     end)
 end
 
-local function hookContainers()
-    local names = { "TopNotification" }
-    for _, name in ipairs(names) do
-        local c = PlayerGui:FindFirstChild(name)
-        if c then watchObject(c) end
+-- ===================================================================
+-- SIGNAL HOOKS  (all possible code delivery channels)
+-- ===================================================================
+
+-- 1. PlayerGui — watch EVERY ScreenGui / Frame, existing + future
+local function hookPlayerGui()
+    for _, child in ipairs(PlayerGui:GetChildren()) do
+        task.spawn(watchObject, child)
     end
     PlayerGui.ChildAdded:Connect(function(child)
-        for _, name in ipairs(names) do
-            if child.Name == name then watchObject(child) end
+        task.spawn(watchObject, child)
+    end)
+end
+
+-- 2. CoreGui — notifications, system messages, game overlays
+local function hookCoreGui()
+    pcall(function()
+        local cg = game:GetService("CoreGui")
+        for _, child in ipairs(cg:GetChildren()) do
+            if not isOwnedByUs(child) then task.spawn(watchObject, child) end
         end
+        cg.ChildAdded:Connect(function(child)
+            if not isOwnedByUs(child) then task.spawn(watchObject, child) end
+        end)
+    end)
+end
+
+-- 3. TextChatService — modern Roblox chat (codes sent in chat by server/admin)
+local function hookTextChat()
+    task.spawn(function()
+        local ok, TCS = pcall(function() return game:GetService("TextChatService") end)
+        if not ok or not TCS then return end
+        local ok2, channels = pcall(function()
+            return TCS:WaitForChild("TextChannels", 5)
+        end)
+        if not ok2 or not channels then return end
+        local function hookChannel(ch)
+            pcall(function()
+                ch.MessageReceived:Connect(function(msg)
+                    if msg and msg.Text and msg.Text ~= "" then
+                        dispatch(msg.Text)
+                    end
+                end)
+            end)
+        end
+        for _, ch in ipairs(channels:GetChildren()) do hookChannel(ch) end
+        channels.ChildAdded:Connect(hookChannel)
+    end)
+end
+
+-- 4. Legacy chat — Players.Chatted (server-broadcast messages)
+local function hookLegacyChat()
+    pcall(function()
+        local function hookPlayer(plr)
+            plr.Chatted:Connect(function(msg)
+                if msg and msg ~= "" then dispatch(msg) end
+            end)
+        end
+        for _, plr in ipairs(Players:GetPlayers()) do hookPlayer(plr) end
+        Players.PlayerAdded:Connect(hookPlayer)
+    end)
+end
+
+-- 5. Workspace BillboardGui / SurfaceGui — codes displayed on parts in world
+local function hookWorkspaceGuis()
+    pcall(function()
+        local ws = game:GetService("Workspace")
+        local function checkGui(obj)
+            if obj:IsA("BillboardGui") or obj:IsA("SurfaceGui") then
+                task.spawn(watchObject, obj)
+            end
+        end
+        for _, d in ipairs(ws:GetDescendants()) do checkGui(d) end
+        ws.DescendantAdded:Connect(checkGui)
     end)
 end
 
@@ -912,7 +976,11 @@ local function hookSpawnFolder()
     folder.ChildAdded:Connect(function(obj) task.wait(); checkSpawn(obj) end)
 end
 
-hookContainers()
+hookPlayerGui()
+hookCoreGui()
+hookTextChat()
+hookLegacyChat()
+hookWorkspaceGuis()
 task.spawn(hookSpawnFolder)
 
 -- Keybind listener
