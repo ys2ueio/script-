@@ -2370,6 +2370,9 @@ buildPage("Combat", function()
 	setAimbotV2RowVisual = UIB.makeToggleRow("Bat Aimbot V2",false,function(on)
 		if on then if AB.active then AB.stop() end; ABP.start() else ABP.stop() end
 	end)
+	UIB.makeToggleRow("Melee",false,function(on)
+		if on then MeleeBodyLock.start() else MeleeBodyLock.stop() end
+	end)
 	UIB.makeGap(4); UIB.makeSectionLabel("Aimbot Tuning")
 	UIB.makeInputRow("Aim Speed",AB.SPEED,function(n) if n>0 and n<=200 then AB.SPEED=n end end)
 	UIB.makeInputRow("Aim Height",AB.HEIGHT,function(n) if n>=0 and n<=30 then AB.HEIGHT=n end end)
@@ -3454,7 +3457,7 @@ end
 -- 8 packed right below it in a tight 2-wide grid (4 rows).
 local _FLOAT_GRID_ORDER = {
 	"aimbot","aimv2","dropbr","autoleft",
-	"autoright","tpdown","battp","instareset","melee",
+	"autoright","tpdown","battp","instareset",
 }
 local function _floatGridIndex(id)
 	for i, fid in ipairs(_FLOAT_GRID_ORDER) do
@@ -3665,14 +3668,6 @@ _floatDefs.aimv2 = {
 		if on then if AB.active then AB.stop() end; ABP.start() else ABP.stop() end
 	end,
 	isActive = function() return ABP.active end,
-}
-_floatDefs.melee = {
-	label = "MELEE",
-	onClick = function()
-		local on = not MeleeBodyLock.active
-		if on then MeleeBodyLock.start() else MeleeBodyLock.stop() end
-	end,
-	isActive = function() return MeleeBodyLock.active end,
 }
 _G._MH_makeFloatButton   = makeFloatButton
 _G._MH_removeFloatButton = removeFloatButton
@@ -4085,27 +4080,40 @@ buildPage("Buttons", function()
 		{id="tpdown",      name="TP Down"},
 		{id="battp",       name="Bat TP"},
 		{id="instareset",  name="Instant Reset"},
-		{id="melee",       name="Melee"},
 	}
 
-	-- Select All — tout en haut
+	-- Select All / Unselect All — tout en haut
 	do
 		local saRow = Instance.new("Frame", currentPage)
 		saRow.Size = UDim2.new(1,0,0,34); saRow.BackgroundTransparency = 1
 		saRow.BorderSizePixel = 0; saRow.LayoutOrder = LO()
-		local saBtn = Instance.new("TextButton", saRow)
-		saBtn.Size = UDim2.new(1,0,1,0)
-		saBtn.BackgroundColor3 = Color3.fromRGB(30,60,30); saBtn.BackgroundTransparency = 0.15
-		saBtn.BorderSizePixel = 0; saBtn.Text = "✦ Select All"
-		saBtn.TextColor3 = C_WHITE; saBtn.Font = Enum.Font.GothamBold; saBtn.TextSize = 11
-		saBtn.AutoButtonColor = false; addCorner(saBtn, 10); addLivingStroke(saBtn, 1)
-		addLivingTextGradient(saBtn)
-		saBtn.MouseEnter:Connect(function() TweenService:Create(saBtn,TweenInfo.new(0.1),{BackgroundTransparency=0}):Play() end)
-		saBtn.MouseLeave:Connect(function() TweenService:Create(saBtn,TweenInfo.new(0.1),{BackgroundTransparency=0.15}):Play() end)
-		saBtn.MouseButton1Click:Connect(function()
+		local bW = 128; local gap = 8
+		local startX = (276 - (bW*2+gap)) / 2
+		local function makeSelBtn(label, xOff, col)
+			local b = Instance.new("TextButton", saRow)
+			b.Size = UDim2.new(0,bW,1,0); b.Position = UDim2.new(0,xOff,0,0)
+			b.BackgroundColor3 = col; b.BackgroundTransparency = 0.15
+			b.BorderSizePixel = 0; b.Text = label
+			b.TextColor3 = C_WHITE; b.Font = Enum.Font.GothamBold; b.TextSize = 11
+			b.AutoButtonColor = false; addCorner(b,10); addLivingStroke(b,1)
+			addLivingTextGradient(b)
+			b.MouseEnter:Connect(function() TweenService:Create(b,TweenInfo.new(0.1),{BackgroundTransparency=0}):Play() end)
+			b.MouseLeave:Connect(function() TweenService:Create(b,TweenInfo.new(0.1),{BackgroundTransparency=0.15}):Play() end)
+			return b
+		end
+		local selBtn = makeSelBtn("✦ Select All",   startX,        Color3.fromRGB(30,60,30))
+		local uslBtn = makeSelBtn("✦ Unselect All", startX+bW+gap, Color3.fromRGB(60,20,20))
+		selBtn.MouseButton1Click:Connect(function()
 			for _, entry in ipairs(FLOAT_LABELS) do
 				if _floatRowSetters[entry.id] then _floatRowSetters[entry.id](true) end
 				makeFloatButton(entry.id)
+			end
+			if _G._MH_autoSave then _G._MH_autoSave() end
+		end)
+		uslBtn.MouseButton1Click:Connect(function()
+			for _, entry in ipairs(FLOAT_LABELS) do
+				if _floatRowSetters[entry.id] then _floatRowSetters[entry.id](false) end
+				removeFloatButton(entry.id)
 			end
 			if _G._MH_autoSave then _G._MH_autoSave() end
 		end)
