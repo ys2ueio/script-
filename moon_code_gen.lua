@@ -358,18 +358,15 @@ end)
 -- ===================================================================
 -- MINIMIZE
 -- ===================================================================
-local hideable = {}
-for _, child in ipairs(panel:GetChildren()) do
-    if child ~= minBtn and child ~= titleLbl then
-        table.insert(hideable, child)
-    end
-end
-
 minBtn.MouseButton1Click:Connect(function()
     minimized = not minimized
     minBtn.Text = minimized and "+" or "-"
     panel.Size  = minimized and UDim2.new(0, PANEL_W, 0, 28) or UDim2.new(0, PANEL_W, 0, PANEL_H)
-    for _, el in ipairs(hideable) do el.Visible = not minimized end
+    for _, child in ipairs(panel:GetChildren()) do
+        if child ~= minBtn and child ~= titleLbl then
+            child.Visible = not minimized
+        end
+    end
 end)
 
 print("[MOON CODE GEN] Loaded — injecting into PlayerGui.TopNotification")

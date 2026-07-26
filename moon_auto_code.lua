@@ -12,7 +12,7 @@ local PlayerGui        = LP:WaitForChild("PlayerGui")
 local CFG_PATH = "moon_autocode_cfg.json"
 local cfg = {
     autoCode     = true,
-    captureCount = 4,
+    captureCount = 4,          -- no UI, set via JSON
     keywords     = { "code is","","","","","","","","","" },
     replaceRules = {
         {kw="admin war", rep="jandel"},
@@ -40,7 +40,7 @@ end
 loadConfig()
 
 -- ===================================================================
--- COLOUR / STYLE  (exact test_speed.lua theme)
+-- COLOUR / STYLE
 -- ===================================================================
 local C_BG    = Color3.fromRGB(0, 0, 0)
 local C_ON    = Color3.fromRGB(30, 30, 30)
@@ -119,17 +119,21 @@ local collecting      = false
 local collectBuf      = {}
 local collectRemain   = 0
 local forceScanActive = false
+local lastCode        = ""
 
-local _pillLbl = nil
-local _statLbl = nil
+local _pillLbl    = nil
+local _codeBarLbl = nil
 
 local function setScanState(txt)
     if _pillLbl then _pillLbl.Text = txt end
 end
 
-local function setStatus(txt)
-    print("[MOON AUTO CODE] " .. txt)
-    if _statLbl then _statLbl.Text = txt end
+local function setLastCode(code)
+    lastCode = code
+    if _codeBarLbl then
+        _codeBarLbl.Text      = code ~= "" and code or "No code yet"
+        _codeBarLbl.TextColor3 = code ~= "" and C_WHITE or C_DIM
+    end
 end
 
 -- ===================================================================
@@ -209,7 +213,7 @@ local function dispatch(text)
         setScanState("COLLECTING " .. collectRemain)
         if collectRemain <= 0 then
             local result = table.concat(collectBuf)
-            setStatus("Code: " .. result)
+            setLastCode(result)
             redeemCode(result)
             collecting = false; collectBuf = {}; collectRemain = 0; forceScanActive = false
             setScanState("SCANNING")
@@ -226,7 +230,7 @@ local function dispatch(text)
             if collectRemain <= 0 then
                 local result = table.concat(collectBuf)
                 if result ~= "" then
-                    setStatus("Code: " .. result)
+                    setLastCode(result)
                     if autoCode then redeemCode(result) end
                 end
                 collecting = false; collectBuf = {}; collectRemain = 0
@@ -245,14 +249,14 @@ local function dispatch(text)
         local rep    = applyReplace(text)
         local result = rep ~= nil and rep or text
         if result ~= "" then
-            setStatus("Code: " .. result)
+            setLastCode(result)
             if autoCode then redeemCode(result) end
         end
     end
 end
 
 -- ===================================================================
--- STATUS PILL  (top-center, same as test_speed.lua)
+-- STATUS PILL
 -- ===================================================================
 local pillWidget = Instance.new("Frame", gui)
 pillWidget.Name                   = "ScanPill"
@@ -412,89 +416,28 @@ page1.Size                   = UDim2.new(1, 0, 1, 0)
 page1.BackgroundTransparency = 1
 page1.ZIndex                 = 11
 
--- makeInputRow builds a label + minus + textbox + plus row
-local function makeInputRow(parent, yPos, label, initial, minV, maxV, step, onChange)
-    local row = Instance.new("Frame", parent)
-    row.Size             = UDim2.new(1, -20, 0, 26)
-    row.Position         = UDim2.new(0, 10, 0, yPos)
-    row.BackgroundColor3 = C_ROW
-    row.BorderSizePixel  = 0
-    row.ZIndex           = 12
-    addCorner(row, 8)
+-- Code display bar  y=6  (shows last assembled code)
+local codeBar = Instance.new("Frame", page1)
+codeBar.Size             = UDim2.new(1, -20, 0, 28)
+codeBar.Position         = UDim2.new(0, 10, 0, 6)
+codeBar.BackgroundColor3 = C_ROW
+codeBar.BorderSizePixel  = 0
+codeBar.ZIndex           = 12
+addCorner(codeBar, 8)
+addLivingStroke(codeBar, 1)
 
-    local lbl = Instance.new("TextLabel", row)
-    lbl.Size                   = UDim2.new(0.4, 0, 1, 0)
-    lbl.Position               = UDim2.new(0, 8, 0, 0)
-    lbl.BackgroundTransparency = 1
-    lbl.Text                   = label
-    lbl.TextColor3             = Color3.fromRGB(200, 200, 200)
-    lbl.Font                   = Enum.Font.Gotham
-    lbl.TextSize               = 11
-    lbl.TextXAlignment         = Enum.TextXAlignment.Left
-    lbl.ZIndex                 = 13
-    addLivingTextGradient(lbl)
-
-    local value = initial
-
-    local minusBtn = Instance.new("TextButton", row)
-    minusBtn.Size             = UDim2.new(0, 20, 0, 20)
-    minusBtn.Position         = UDim2.new(1, -92, 0.5, -10)
-    minusBtn.BackgroundColor3 = C_OFF
-    minusBtn.Text             = "-"
-    minusBtn.TextColor3       = C_WHITE
-    minusBtn.Font             = Enum.Font.GothamBlack
-    minusBtn.TextSize         = 14
-    minusBtn.BorderSizePixel  = 0
-    minusBtn.AutoButtonColor  = false
-    minusBtn.ZIndex           = 13
-    addCorner(minusBtn, 6); addLivingTextGradient(minusBtn)
-
-    local box = Instance.new("TextBox", row)
-    box.Size             = UDim2.new(0, 44, 1, -6)
-    box.Position         = UDim2.new(1, -68, 0, 3)
-    box.BackgroundColor3 = C_OFF
-    box.BorderSizePixel  = 0
-    box.Text             = tostring(value)
-    box.TextColor3       = C_WHITE
-    box.Font             = Enum.Font.GothamBold
-    box.TextSize         = 11
-    box.ClearTextOnFocus = false
-    box.ZIndex           = 13
-    addCorner(box, 6); addLivingTextGradient(box)
-
-    local plusBtn = Instance.new("TextButton", row)
-    plusBtn.Size             = UDim2.new(0, 20, 0, 20)
-    plusBtn.Position         = UDim2.new(1, -22, 0.5, -10)
-    plusBtn.BackgroundColor3 = C_OFF
-    plusBtn.Text             = "+"
-    plusBtn.TextColor3       = C_WHITE
-    plusBtn.Font             = Enum.Font.GothamBlack
-    plusBtn.TextSize         = 14
-    plusBtn.BorderSizePixel  = 0
-    plusBtn.AutoButtonColor  = false
-    plusBtn.ZIndex           = 13
-    addCorner(plusBtn, 6); addLivingTextGradient(plusBtn)
-
-    local function setValue(n)
-        value = math.clamp(n, minV, maxV)
-        box.Text = tostring(value)
-        onChange(value)
-    end
-    minusBtn.MouseButton1Click:Connect(function() setValue(value - step) end)
-    plusBtn.MouseButton1Click:Connect(function() setValue(value + step) end)
-    box.FocusLost:Connect(function()
-        local n = tonumber(box.Text)
-        if n then setValue(n) else box.Text = tostring(value) end
-    end)
-    return row
-end
-
--- Capture Count  y=8
-local captureRow = makeInputRow(page1, 8, "Capture Count", captureCount, 0, 20, 1, function(n)
-    captureCount = n; cfg.captureCount = n
-    collecting = false; collectBuf = {}; collectRemain = 0
-    saveConfig()
-end)
+_codeBarLbl = Instance.new("TextLabel", codeBar)
+_codeBarLbl.Size                   = UDim2.new(1, -16, 1, 0)
+_codeBarLbl.Position               = UDim2.new(0, 8, 0, 0)
+_codeBarLbl.BackgroundTransparency = 1
+_codeBarLbl.Text                   = "No code yet"
+_codeBarLbl.TextColor3             = C_DIM
+_codeBarLbl.Font                   = Enum.Font.GothamBold
+_codeBarLbl.TextSize               = 11
+_codeBarLbl.TextXAlignment         = Enum.TextXAlignment.Left
+_codeBarLbl.TextTruncate           = Enum.TextTruncate.AtEnd
+_codeBarLbl.ZIndex                 = 13
+addLivingTextGradient(_codeBarLbl)
 
 -- AUTO ENTER CODE toggle  y=42
 local autoBtn = Instance.new("TextButton", page1)
@@ -544,7 +487,6 @@ local function doForceScan()
     local n = captureCount > 0 and captureCount or 1
     collecting = true; collectBuf = {}; collectRemain = n; forceScanActive = true
     setScanState("FORCE " .. n)
-    setStatus("Force scan – collecting " .. n)
     TweenService:Create(forceBtn, TweenInfo.new(0.15), {BackgroundColor3 = C_ON}):Play()
     task.delay(0.5, function()
         TweenService:Create(forceBtn, TweenInfo.new(0.3), {BackgroundColor3 = C_OFF}):Play()
@@ -562,10 +504,32 @@ forceBtn.MouseLeave:Connect(function()
     if not waitingForKb then TweenService:Create(forceBtn, TweenInfo.new(0.15), {TextColor3 = C_DIM}):Play() end
 end)
 
--- Bind hint  y=110
+-- ENTER CODE button  y=110  (redeem lastCode manually)
+local enterBtn = Instance.new("TextButton", page1)
+enterBtn.Size             = UDim2.new(1, -20, 0, 24)
+enterBtn.Position         = UDim2.new(0, 10, 0, 110)
+enterBtn.BackgroundColor3 = C_ROW
+enterBtn.Text             = "ENTER CODE"
+enterBtn.TextColor3       = C_WHITE
+enterBtn.Font             = Enum.Font.GothamBlack
+enterBtn.TextSize         = 11
+enterBtn.BorderSizePixel  = 0
+enterBtn.AutoButtonColor  = false
+enterBtn.ZIndex           = 12
+addCorner(enterBtn, 8); addLivingTextGradient(enterBtn)
+enterBtn.MouseButton1Click:Connect(function()
+    if lastCode == "" then return end
+    redeemCode(lastCode)
+    TweenService:Create(enterBtn, TweenInfo.new(0.1), {BackgroundColor3 = C_ON}):Play()
+    task.delay(0.2, function()
+        TweenService:Create(enterBtn, TweenInfo.new(0.2), {BackgroundColor3 = C_ROW}):Play()
+    end)
+end)
+
+-- Bind hint  y=142
 local bindHint = Instance.new("TextLabel", page1)
 bindHint.Size                   = UDim2.new(1, -20, 0, 14)
-bindHint.Position               = UDim2.new(0, 10, 0, 110)
+bindHint.Position               = UDim2.new(0, 10, 0, 142)
 bindHint.BackgroundTransparency = 1
 bindHint.Text                   = "Right-click FORCE SCAN to rebind"
 bindHint.TextColor3             = Color3.fromRGB(80, 80, 80)
@@ -573,25 +537,6 @@ bindHint.Font                   = Enum.Font.Gotham
 bindHint.TextSize               = 9
 bindHint.TextXAlignment         = Enum.TextXAlignment.Left
 bindHint.ZIndex                 = 12
-
--- Status row  y=130
-local statRow = Instance.new("Frame", page1)
-statRow.Size                   = UDim2.new(1, -20, 0, 18)
-statRow.Position               = UDim2.new(0, 10, 0, 130)
-statRow.BackgroundTransparency = 1
-statRow.ZIndex                 = 12
-
-_statLbl = Instance.new("TextLabel", statRow)
-_statLbl.Size                   = UDim2.new(1, 0, 1, 0)
-_statLbl.BackgroundTransparency = 1
-_statLbl.Text                   = "Scanning notifications..."
-_statLbl.TextColor3             = C_DIM
-_statLbl.Font                   = Enum.Font.Gotham
-_statLbl.TextSize               = 9
-_statLbl.TextXAlignment         = Enum.TextXAlignment.Left
-_statLbl.TextTruncate           = Enum.TextTruncate.AtEnd
-_statLbl.ZIndex                 = 12
-addLivingTextGradient(_statLbl)
 
 -- ===================================================================
 -- PAGE 2: TRIGGERS  (10 keyword slots, scrollable)
@@ -629,7 +574,7 @@ addCorner(kwScroll, 8)
 
 local kwScrollLayout = Instance.new("UIListLayout", kwScroll)
 kwScrollLayout.Padding             = UDim.new(0, 3)
-kwScrollLayout.SortOrder          = Enum.SortOrder.LayoutOrder
+kwScrollLayout.SortOrder           = Enum.SortOrder.LayoutOrder
 kwScrollLayout.FillDirection       = Enum.FillDirection.Vertical
 kwScrollLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 kwScrollLayout.VerticalAlignment   = Enum.VerticalAlignment.Top
@@ -691,7 +636,7 @@ for i = 1, MAX_KW do
 end
 
 -- ===================================================================
--- PAGE 3: REPLACE  (10 paired rows: kw | replacement, scrollable)
+-- PAGE 3: REPLACE  (10 paired rows, scrollable)
 -- ===================================================================
 local page3 = Instance.new("Frame", contentFrame)
 page3.Size                   = UDim2.new(1, 0, 1, 0)
@@ -802,16 +747,13 @@ for i = 1, MAX_KW do
     addLivingTextGradient(repBox)
 
     kwBox.FocusLost:Connect(function()
-        replaceRules[i].kw = kwBox.Text
-        saveReplaceRules()
+        replaceRules[i].kw = kwBox.Text; saveReplaceRules()
     end)
     kwBox:GetPropertyChangedSignal("Text"):Connect(function()
         replaceRules[i].kw = kwBox.Text
     end)
-
     repBox.FocusLost:Connect(function()
-        replaceRules[i].rep = repBox.Text
-        saveReplaceRules()
+        replaceRules[i].rep = repBox.Text; saveReplaceRules()
     end)
     repBox:GetPropertyChangedSignal("Text"):Connect(function()
         replaceRules[i].rep = repBox.Text
@@ -859,8 +801,7 @@ end
 
 minBtn.MouseButton1Click:Connect(function()
     minimized = not minimized; cfg.minimized = minimized
-    applyMinimize(false)
-    saveConfig()
+    applyMinimize(false); saveConfig()
 end)
 
 applyMinimize(true)
@@ -913,7 +854,6 @@ local function checkSpawn(obj)
     local plain = obj.Text:gsub("<[^>]+>", "")
     local name  = plain:match("^(.-)%s+spawned!%s*$")
     if name and name ~= "" then
-        setStatus("Spawn: " .. name)
         if httpRequest then
             pcall(function()
                 httpRequest({
