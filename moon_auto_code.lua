@@ -3,8 +3,8 @@ local RunService       = game:GetService("RunService")
 local TweenService     = game:GetService("TweenService")
 local HttpService      = game:GetService("HttpService")
 local UserInputService = game:GetService("UserInputService")
-local LP           = Players.LocalPlayer
-local PlayerGui    = LP:WaitForChild("PlayerGui")
+local LP               = Players.LocalPlayer
+local PlayerGui        = LP:WaitForChild("PlayerGui")
 
 -- ===================================================================
 -- CONFIG  (persisted)
@@ -13,13 +13,19 @@ local CFG_PATH = "moon_autocode_cfg.json"
 local cfg = {
     autoCode     = true,
     captureCount = 4,
-    keyword      = "code is",
-    replaceKw    = "admin war",
-    replaceWith  = "jandel",
-    posX         = 16,
-    posY         = 80,
-    minimized    = false,
+    keywords     = { "code is","","","","","","","","","" },
+    replaceRules = {
+        {kw="admin war", rep="jandel"},
+        {kw="",rep=""},{kw="",rep=""},{kw="",rep=""},
+        {kw="",rep=""},{kw="",rep=""},{kw="",rep=""},
+        {kw="",rep=""},{kw="",rep=""},{kw="",rep=""},
+    },
+    posX      = 16,
+    posY      = 80,
+    minimized = false,
+    activeTab = 1,
 }
+
 local function saveConfig()
     if not writefile then return end
     pcall(writefile, CFG_PATH, HttpService:JSONEncode(cfg))
@@ -94,19 +100,28 @@ end)
 -- ===================================================================
 -- SCANNER STATE
 -- ===================================================================
-local autoCode       = cfg.autoCode
-local captureCount   = cfg.captureCount
-local keyword        = cfg.keyword
-local replaceKw      = cfg.replaceKw
-local replaceWith    = cfg.replaceWith
+local MAX_KW       = 10
+local autoCode     = cfg.autoCode == true
+local captureCount = cfg.captureCount
+
+local filterKeywords = {}
+local replaceRules   = {}
+
+for i = 1, MAX_KW do
+    filterKeywords[i] = (type(cfg.keywords) == "table" and cfg.keywords[i]) or ""
+end
+for i = 1, MAX_KW do
+    local s = type(cfg.replaceRules) == "table" and cfg.replaceRules[i]
+    replaceRules[i] = { kw = (s and s.kw) or "", rep = (s and s.rep) or "" }
+end
 
 local collecting      = false
 local collectBuf      = {}
 local collectRemain   = 0
 local forceScanActive = false
 
-local _pillLbl  = nil   -- assigned after GUI
-local _statLbl  = nil   -- assigned after GUI
+local _pillLbl = nil
+local _statLbl = nil
 
 local function setScanState(txt)
     if _pillLbl then _pillLbl.Text = txt end
@@ -148,11 +163,11 @@ end
 -- ===================================================================
 local function redeemCode(code)
     pcall(function()
-        local Codes  = PlayerGui:WaitForChild("Codes", 3).Codes
-        local tb     = Codes.CodeRedeem.TextBox
-        local cfm    = Codes.Confirm
-        tb.Text      = code
-        local btn    = cfm:FindFirstChildWhichIsA("TextButton") or cfm
+        local Codes = PlayerGui:WaitForChild("Codes", 3).Codes
+        local tb    = Codes.CodeRedeem.TextBox
+        local cfm   = Codes.Confirm
+        tb.Text     = code
+        local btn   = cfm:FindFirstChildWhichIsA("TextButton") or cfm
         if btn then
             firesignal(btn.MouseButton1Click)
             firesignal(btn.Activated)
@@ -162,13 +177,26 @@ end
 
 local function matchesKeyword(text)
     if not text or text == "" then return false end
-    if keyword == "" then return true end
-    return text:lower():find(keyword:lower(), 1, true) ~= nil
+    local hasAny = false
+    for _, kw in ipairs(filterKeywords) do
+        if kw ~= "" then hasAny = true; break end
+    end
+    if not hasAny then return true end
+    local lower = text:lower()
+    for _, kw in ipairs(filterKeywords) do
+        if kw ~= "" and lower:find(kw:lower(), 1, true) then return true end
+    end
+    return false
 end
 
 local function applyReplace(text)
-    if not text or text == "" or replaceKw == "" then return nil end
-    if text:lower():find(replaceKw:lower(), 1, true) then return replaceWith end
+    if not text or text == "" then return nil end
+    local lower = text:lower()
+    for _, rule in ipairs(replaceRules) do
+        if rule.kw ~= "" and lower:find(rule.kw:lower(), 1, true) then
+            return rule.rep
+        end
+    end
     return nil
 end
 
@@ -224,14 +252,14 @@ local function dispatch(text)
 end
 
 -- ===================================================================
--- STATUS PILL  (same design as steal widget in test_speed.lua)
+-- STATUS PILL  (top-center, same as test_speed.lua)
 -- ===================================================================
 local pillWidget = Instance.new("Frame", gui)
-pillWidget.Name                = "ScanPill"
-pillWidget.Size                = UDim2.new(0, 200, 0, 36)
-pillWidget.Position            = UDim2.new(0.5, -100, 0, 35)
+pillWidget.Name                   = "ScanPill"
+pillWidget.Size                   = UDim2.new(0, 200, 0, 36)
+pillWidget.Position               = UDim2.new(0.5, -100, 0, 35)
 pillWidget.BackgroundTransparency = 1
-pillWidget.Active              = true
+pillWidget.Active                 = true
 
 local pill = Instance.new("Frame", pillWidget)
 pill.Size                   = UDim2.new(1, 0, 1, 0)
@@ -289,16 +317,22 @@ task.spawn(function()
 end)
 
 -- ===================================================================
--- MAIN PANEL  (identical frame to test_speed.lua)
+-- MAIN PANEL
 -- ===================================================================
-local PANEL_H = 272
-local panel   = Instance.new("Frame", gui)
-panel.Size            = UDim2.new(0, 220, 0, PANEL_H)
-panel.Position        = UDim2.new(0, cfg.posX, 0, cfg.posY)
+local PANEL_W   = 240
+local TITLE_H   = 28
+local TAB_H     = 26
+local CONTENT_H = 164
+local FULL_H    = TITLE_H + TAB_H + CONTENT_H
+local MINI_H    = TITLE_H
+
+local panel = Instance.new("Frame", gui)
+panel.Size             = UDim2.new(0, PANEL_W, 0, FULL_H)
+panel.Position         = UDim2.new(0, cfg.posX, 0, cfg.posY)
 panel.BackgroundColor3 = C_BG
-panel.BorderSizePixel = 0
-panel.Active          = true
-panel.ZIndex          = 10
+panel.BorderSizePixel  = 0
+panel.Active           = true
+panel.ZIndex           = 10
 addCorner(panel, 14)
 addLivingStroke(panel, 1.5)
 
@@ -333,38 +367,93 @@ end
 local minimized = cfg.minimized == true
 local minBtn    = Instance.new("TextButton", panel)
 minBtn.Size                   = UDim2.new(0, 20, 0, 20)
-minBtn.Position               = UDim2.new(1, -26, 0, 4)
+minBtn.Position               = UDim2.new(1, -24, 0, 4)
 minBtn.BackgroundTransparency = 1
 minBtn.Text                   = "-"
 minBtn.TextColor3             = C_WHITE
 minBtn.Font                   = Enum.Font.GothamBlack
 minBtn.TextSize               = 16
-minBtn.ZIndex                 = 11
+minBtn.ZIndex                 = 15
 addLivingTextGradient(minBtn)
 
 -- Title
-local title = Instance.new("TextLabel", panel)
-title.Size                   = UDim2.new(1, -40, 0, 20)
-title.Position               = UDim2.new(0, 10, 0, 6)
-title.BackgroundTransparency = 1
-title.Text                   = "MOON AUTO CODE"
-title.TextColor3             = C_WHITE
-title.Font                   = Enum.Font.GothamBlack
-title.TextSize               = 13
-title.TextXAlignment         = Enum.TextXAlignment.Left
-title.ZIndex                 = 11
-addLivingTextGradient(title)
+local titleLbl = Instance.new("TextLabel", panel)
+titleLbl.Size                   = UDim2.new(1, -40, 0, TITLE_H)
+titleLbl.Position               = UDim2.new(0, 10, 0, 0)
+titleLbl.BackgroundTransparency = 1
+titleLbl.Text                   = "MOON AUTO CODE"
+titleLbl.TextColor3             = C_WHITE
+titleLbl.Font                   = Enum.Font.GothamBlack
+titleLbl.TextSize               = 13
+titleLbl.TextXAlignment         = Enum.TextXAlignment.Left
+titleLbl.ZIndex                 = 15
+addLivingTextGradient(titleLbl)
 
 -- ===================================================================
--- ROW BUILDERS  (exact test_speed.lua pattern)
+-- TAB BAR
 -- ===================================================================
-local function makeInputRow(yPos, label, initial, minV, maxV, step, onChange)
-    local row = Instance.new("Frame", panel)
+local tabBar = Instance.new("Frame", panel)
+tabBar.Size                   = UDim2.new(1, -16, 0, TAB_H)
+tabBar.Position               = UDim2.new(0, 8, 0, TITLE_H)
+tabBar.BackgroundTransparency = 1
+tabBar.ZIndex                 = 12
+
+local tabBarLayout = Instance.new("UIListLayout", tabBar)
+tabBarLayout.FillDirection       = Enum.FillDirection.Horizontal
+tabBarLayout.Padding             = UDim.new(0, 4)
+tabBarLayout.SortOrder           = Enum.SortOrder.LayoutOrder
+tabBarLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
+tabBarLayout.VerticalAlignment   = Enum.VerticalAlignment.Center
+
+local currentTab = math.max(1, math.min(3, cfg.activeTab or 1))
+
+local function makeTabBtn(label, order)
+    local btn = Instance.new("TextButton", tabBar)
+    btn.Size             = UDim2.new(0, 70, 1, -4)
+    btn.LayoutOrder      = order
+    btn.BackgroundColor3 = C_ROW
+    btn.BorderSizePixel  = 0
+    btn.AutoButtonColor  = false
+    btn.Text             = label
+    btn.TextColor3       = C_DIM
+    btn.Font             = Enum.Font.GothamBold
+    btn.TextSize         = 10
+    btn.ZIndex           = 13
+    addCorner(btn, 6)
+    addLivingTextGradient(btn)
+    return btn
+end
+
+local tabMainBtn = makeTabBtn("Main",     1)
+local tabTrigBtn = makeTabBtn("Triggers", 2)
+local tabRepBtn  = makeTabBtn("Replace",  3)
+
+-- ===================================================================
+-- CONTENT FRAME
+-- ===================================================================
+local contentFrame = Instance.new("Frame", panel)
+contentFrame.Size                   = UDim2.new(1, 0, 1, -(TITLE_H + TAB_H))
+contentFrame.Position               = UDim2.new(0, 0, 0, TITLE_H + TAB_H)
+contentFrame.BackgroundTransparency = 1
+contentFrame.ClipsDescendants       = true
+contentFrame.ZIndex                 = 11
+
+-- ===================================================================
+-- PAGE 1: MAIN
+-- ===================================================================
+local page1 = Instance.new("Frame", contentFrame)
+page1.Size                   = UDim2.new(1, 0, 1, 0)
+page1.BackgroundTransparency = 1
+page1.ZIndex                 = 11
+
+-- makeInputRow builds a label + minus + textbox + plus row
+local function makeInputRow(parent, yPos, label, initial, minV, maxV, step, onChange)
+    local row = Instance.new("Frame", parent)
     row.Size             = UDim2.new(1, -20, 0, 26)
     row.Position         = UDim2.new(0, 10, 0, yPos)
     row.BackgroundColor3 = C_ROW
     row.BorderSizePixel  = 0
-    row.ZIndex           = 11
+    row.ZIndex           = 12
     addCorner(row, 8)
 
     local lbl = Instance.new("TextLabel", row)
@@ -376,7 +465,7 @@ local function makeInputRow(yPos, label, initial, minV, maxV, step, onChange)
     lbl.Font                   = Enum.Font.Gotham
     lbl.TextSize               = 11
     lbl.TextXAlignment         = Enum.TextXAlignment.Left
-    lbl.ZIndex                 = 12
+    lbl.ZIndex                 = 13
     addLivingTextGradient(lbl)
 
     local value = initial
@@ -391,7 +480,7 @@ local function makeInputRow(yPos, label, initial, minV, maxV, step, onChange)
     minusBtn.TextSize         = 14
     minusBtn.BorderSizePixel  = 0
     minusBtn.AutoButtonColor  = false
-    minusBtn.ZIndex           = 12
+    minusBtn.ZIndex           = 13
     addCorner(minusBtn, 6); addLivingTextGradient(minusBtn)
 
     local box = Instance.new("TextBox", row)
@@ -404,7 +493,7 @@ local function makeInputRow(yPos, label, initial, minV, maxV, step, onChange)
     box.Font             = Enum.Font.GothamBold
     box.TextSize         = 11
     box.ClearTextOnFocus = false
-    box.ZIndex           = 12
+    box.ZIndex           = 13
     addCorner(box, 6); addLivingTextGradient(box)
 
     local plusBtn = Instance.new("TextButton", row)
@@ -417,7 +506,7 @@ local function makeInputRow(yPos, label, initial, minV, maxV, step, onChange)
     plusBtn.TextSize         = 14
     plusBtn.BorderSizePixel  = 0
     plusBtn.AutoButtonColor  = false
-    plusBtn.ZIndex           = 12
+    plusBtn.ZIndex           = 13
     addCorner(plusBtn, 6); addLivingTextGradient(plusBtn)
 
     local function setValue(n)
@@ -434,76 +523,17 @@ local function makeInputRow(yPos, label, initial, minV, maxV, step, onChange)
     return row
 end
 
-local function makeTextRow(yPos, label, initial, onChange)
-    local row = Instance.new("Frame", panel)
-    row.Size             = UDim2.new(1, -20, 0, 26)
-    row.Position         = UDim2.new(0, 10, 0, yPos)
-    row.BackgroundColor3 = C_ROW
-    row.BorderSizePixel  = 0
-    row.ZIndex           = 11
-    addCorner(row, 8)
-
-    local lbl = Instance.new("TextLabel", row)
-    lbl.Size                   = UDim2.new(0.38, 0, 1, 0)
-    lbl.Position               = UDim2.new(0, 8, 0, 0)
-    lbl.BackgroundTransparency = 1
-    lbl.Text                   = label
-    lbl.TextColor3             = Color3.fromRGB(200, 200, 200)
-    lbl.Font                   = Enum.Font.Gotham
-    lbl.TextSize               = 10
-    lbl.TextXAlignment         = Enum.TextXAlignment.Left
-    lbl.ZIndex                 = 12
-    addLivingTextGradient(lbl)
-
-    local box = Instance.new("TextBox", row)
-    box.Size             = UDim2.new(0.59, -4, 1, -6)
-    box.Position         = UDim2.new(0.4, 2, 0, 3)
-    box.BackgroundColor3 = C_OFF
-    box.BorderSizePixel  = 0
-    box.Text             = initial
-    box.TextColor3       = C_WHITE
-    box.Font             = Enum.Font.GothamBold
-    box.TextSize         = 10
-    box.ClearTextOnFocus = false
-    box.PlaceholderText  = "..."
-    box.PlaceholderColor3 = C_DIM
-    box.ZIndex           = 12
-    addCorner(box, 6); addLivingTextGradient(box)
-
-    box.FocusLost:Connect(function() onChange(box.Text) end)
-    box:GetPropertyChangedSignal("Text"):Connect(function() onChange(box.Text) end)
-    return row
-end
-
--- ===================================================================
--- ROWS
--- ===================================================================
--- y=30  Capture Count
-local captureRow = makeInputRow(30, "Capture Count", captureCount, 0, 20, 1, function(n)
+-- Capture Count  y=8
+local captureRow = makeInputRow(page1, 8, "Capture Count", captureCount, 0, 20, 1, function(n)
     captureCount = n; cfg.captureCount = n
     collecting = false; collectBuf = {}; collectRemain = 0
     saveConfig()
 end)
 
--- y=62  Trigger keyword
-local kwRow = makeTextRow(62, "Trigger KW", keyword, function(v)
-    keyword = v; cfg.keyword = v; saveConfig()
-end)
-
--- y=94  Replace keyword
-local repKwRow = makeTextRow(94, "Replace KW", replaceKw, function(v)
-    replaceKw = v; cfg.replaceKw = v; saveConfig()
-end)
-
--- y=126  Replace with
-local repWithRow = makeTextRow(126, "Replace With", replaceWith, function(v)
-    replaceWith = v; cfg.replaceWith = v; saveConfig()
-end)
-
--- y=160  AUTO ENTER CODE toggle  (like AUTO STEAL)
-local autoBtn = Instance.new("TextButton", panel)
+-- AUTO ENTER CODE toggle  y=42
+local autoBtn = Instance.new("TextButton", page1)
 autoBtn.Size             = UDim2.new(1, -20, 0, 24)
-autoBtn.Position         = UDim2.new(0, 10, 0, 160)
+autoBtn.Position         = UDim2.new(0, 10, 0, 42)
 autoBtn.BackgroundColor3 = autoCode and C_ON or C_OFF
 autoBtn.Text             = autoCode and "AUTO ENTER CODE: ON" or "AUTO ENTER CODE: OFF"
 autoBtn.TextColor3       = autoCode and C_WHITE or C_DIM
@@ -511,7 +541,7 @@ autoBtn.Font             = Enum.Font.GothamBlack
 autoBtn.TextSize         = 11
 autoBtn.BorderSizePixel  = 0
 autoBtn.AutoButtonColor  = false
-autoBtn.ZIndex           = 11
+autoBtn.ZIndex           = 12
 addCorner(autoBtn, 8); addLivingTextGradient(autoBtn)
 autoBtn.MouseButton1Click:Connect(function()
     autoCode = not autoCode; cfg.autoCode = autoCode
@@ -521,20 +551,20 @@ autoBtn.MouseButton1Click:Connect(function()
     saveConfig()
 end)
 
--- y=190  FORCE SCAN + CODE  (like SPEED button — left-click = trigger, right-click = rebind)
-local forceKb         = Enum.KeyCode.F
-local waitingForKb    = false
+-- FORCE SCAN + CODE  y=74
+local forceKb      = Enum.KeyCode.F
+local waitingForKb = false
 
-local forceBtn = Instance.new("TextButton", panel)
+local forceBtn = Instance.new("TextButton", page1)
 forceBtn.Size             = UDim2.new(1, -20, 0, 28)
-forceBtn.Position         = UDim2.new(0, 10, 0, 190)
+forceBtn.Position         = UDim2.new(0, 10, 0, 74)
 forceBtn.BackgroundColor3 = C_OFF
 forceBtn.TextColor3       = C_DIM
 forceBtn.Font             = Enum.Font.GothamBlack
 forceBtn.TextSize         = 11
 forceBtn.BorderSizePixel  = 0
 forceBtn.AutoButtonColor  = false
-forceBtn.ZIndex           = 11
+forceBtn.ZIndex           = 12
 addCorner(forceBtn, 10); addLivingTextGradient(forceBtn)
 
 local function refreshForceBtn()
@@ -557,38 +587,33 @@ end
 
 forceBtn.MouseButton1Click:Connect(doForceScan)
 forceBtn.MouseButton2Click:Connect(function()
-    waitingForKb = true
-    forceBtn.Text = "Press a key..."
+    waitingForKb = true; forceBtn.Text = "Press a key..."
 end)
 forceBtn.MouseEnter:Connect(function()
-    if not waitingForKb then
-        TweenService:Create(forceBtn, TweenInfo.new(0.15), {TextColor3 = C_WHITE}):Play()
-    end
+    if not waitingForKb then TweenService:Create(forceBtn, TweenInfo.new(0.15), {TextColor3 = C_WHITE}):Play() end
 end)
 forceBtn.MouseLeave:Connect(function()
-    if not waitingForKb then
-        TweenService:Create(forceBtn, TweenInfo.new(0.15), {TextColor3 = C_DIM}):Play()
-    end
+    if not waitingForKb then TweenService:Create(forceBtn, TweenInfo.new(0.15), {TextColor3 = C_DIM}):Play() end
 end)
 
--- y=224  Bind hint  (clic droit = rebind)
-local bindHint = Instance.new("TextLabel", panel)
+-- Bind hint  y=110
+local bindHint = Instance.new("TextLabel", page1)
 bindHint.Size                   = UDim2.new(1, -20, 0, 14)
-bindHint.Position               = UDim2.new(0, 10, 0, 224)
+bindHint.Position               = UDim2.new(0, 10, 0, 110)
 bindHint.BackgroundTransparency = 1
 bindHint.Text                   = "Right-click FORCE SCAN to rebind"
 bindHint.TextColor3             = Color3.fromRGB(80, 80, 80)
 bindHint.Font                   = Enum.Font.Gotham
 bindHint.TextSize               = 9
 bindHint.TextXAlignment         = Enum.TextXAlignment.Left
-bindHint.ZIndex                 = 11
+bindHint.ZIndex                 = 12
 
--- y=242  Status label (last event)
-local statRow = Instance.new("Frame", panel)
-statRow.Size             = UDim2.new(1, -20, 0, 18)
-statRow.Position         = UDim2.new(0, 10, 0, 242)
+-- Status row  y=130
+local statRow = Instance.new("Frame", page1)
+statRow.Size                   = UDim2.new(1, -20, 0, 18)
+statRow.Position               = UDim2.new(0, 10, 0, 130)
 statRow.BackgroundTransparency = 1
-statRow.ZIndex           = 11
+statRow.ZIndex                 = 12
 
 _statLbl = Instance.new("TextLabel", statRow)
 _statLbl.Size                   = UDim2.new(1, 0, 1, 0)
@@ -599,28 +624,283 @@ _statLbl.Font                   = Enum.Font.Gotham
 _statLbl.TextSize               = 9
 _statLbl.TextXAlignment         = Enum.TextXAlignment.Left
 _statLbl.TextTruncate           = Enum.TextTruncate.AtEnd
-_statLbl.ZIndex                 = 11
+_statLbl.ZIndex                 = 12
 addLivingTextGradient(_statLbl)
 
--- Minimize logic
-local hideable = {captureRow, kwRow, repKwRow, repWithRow, autoBtn, forceBtn, bindHint, statRow}
+-- ===================================================================
+-- PAGE 2: TRIGGERS  (10 keyword slots, scrollable)
+-- ===================================================================
+local page2 = Instance.new("Frame", contentFrame)
+page2.Size                   = UDim2.new(1, 0, 1, 0)
+page2.BackgroundTransparency = 1
+page2.Visible                = false
+page2.ZIndex                 = 11
 
-minBtn.MouseButton1Click:Connect(function()
-    minimized = not minimized; cfg.minimized = minimized
-    minBtn.Text = minimized and "+" or "-"
-    panel.Size  = minimized and UDim2.new(0, 220, 0, 34) or UDim2.new(0, 220, 0, PANEL_H)
-    for _, el in ipairs(hideable) do el.Visible = not minimized end
+local trigHeader = Instance.new("TextLabel", page2)
+trigHeader.Size                   = UDim2.new(1, -20, 0, 20)
+trigHeader.Position               = UDim2.new(0, 10, 0, 6)
+trigHeader.BackgroundTransparency = 1
+trigHeader.Text                   = "Trigger Keywords  (blank = match all)"
+trigHeader.TextColor3             = C_DIM
+trigHeader.Font                   = Enum.Font.Gotham
+trigHeader.TextSize               = 10
+trigHeader.TextXAlignment         = Enum.TextXAlignment.Left
+trigHeader.ZIndex                 = 12
+
+local kwScroll = Instance.new("ScrollingFrame", page2)
+kwScroll.Size                   = UDim2.new(1, -16, 1, -32)
+kwScroll.Position               = UDim2.new(0, 8, 0, 28)
+kwScroll.BackgroundColor3       = C_ROW
+kwScroll.BackgroundTransparency = 0.4
+kwScroll.BorderSizePixel        = 0
+kwScroll.ScrollBarThickness     = 3
+kwScroll.ScrollBarImageColor3   = G2
+kwScroll.AutomaticCanvasSize    = Enum.AutomaticSize.Y
+kwScroll.CanvasSize             = UDim2.new(0, 0, 0, 0)
+kwScroll.ClipsDescendants       = true
+kwScroll.ZIndex                 = 12
+addCorner(kwScroll, 8)
+
+local kwScrollLayout = Instance.new("UIListLayout", kwScroll)
+kwScrollLayout.Padding             = UDim.new(0, 3)
+kwScrollLayout.SortOrder          = Enum.SortOrder.LayoutOrder
+kwScrollLayout.FillDirection       = Enum.FillDirection.Vertical
+kwScrollLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+kwScrollLayout.VerticalAlignment   = Enum.VerticalAlignment.Top
+
+local kwScrollPad = Instance.new("UIPadding", kwScroll)
+kwScrollPad.PaddingLeft   = UDim.new(0, 5)
+kwScrollPad.PaddingRight  = UDim.new(0, 5)
+kwScrollPad.PaddingTop    = UDim.new(0, 4)
+kwScrollPad.PaddingBottom = UDim.new(0, 4)
+
+local function saveKeywords()
+    cfg.keywords = {}
+    for i = 1, MAX_KW do cfg.keywords[i] = filterKeywords[i] or "" end
     saveConfig()
-end)
+end
 
-if minimized then
-    panel.Size = UDim2.new(0, 220, 0, 34)
-    for _, el in ipairs(hideable) do el.Visible = false end
-    minBtn.Text = "+"
+for i = 1, MAX_KW do
+    local slot = Instance.new("Frame", kwScroll)
+    slot.Size             = UDim2.new(1, 0, 0, 22)
+    slot.BackgroundColor3 = C_OFF
+    slot.BorderSizePixel  = 0
+    slot.LayoutOrder      = i
+    addCorner(slot, 5)
+
+    local badge = Instance.new("TextLabel", slot)
+    badge.Size                   = UDim2.new(0, 16, 1, 0)
+    badge.Position               = UDim2.new(0, 3, 0, 0)
+    badge.BackgroundTransparency = 1
+    badge.Font                   = Enum.Font.GothamBold
+    badge.TextSize               = 9
+    badge.TextColor3             = C_DIM
+    badge.TextXAlignment         = Enum.TextXAlignment.Center
+    badge.Text                   = tostring(i)
+    badge.ZIndex                 = 13
+
+    local tb = Instance.new("TextBox", slot)
+    tb.Size              = UDim2.new(1, -22, 1, -4)
+    tb.Position          = UDim2.new(0, 20, 0, 2)
+    tb.BackgroundTransparency = 1
+    tb.BorderSizePixel   = 0
+    tb.Font              = Enum.Font.GothamBold
+    tb.TextSize          = 11
+    tb.TextColor3        = C_WHITE
+    tb.PlaceholderText   = "keyword " .. i
+    tb.PlaceholderColor3 = C_DIM
+    tb.TextXAlignment    = Enum.TextXAlignment.Left
+    tb.ClearTextOnFocus  = false
+    tb.Text              = filterKeywords[i]
+    tb.ZIndex            = 13
+    addLivingTextGradient(tb)
+
+    tb.FocusLost:Connect(function()
+        filterKeywords[i] = tb.Text
+        saveKeywords()
+    end)
+    tb:GetPropertyChangedSignal("Text"):Connect(function()
+        filterKeywords[i] = tb.Text
+    end)
 end
 
 -- ===================================================================
--- WATCHER  (hookContainers after GUI exists so isOwnedByUs works)
+-- PAGE 3: REPLACE  (10 paired rows: kw | replacement, scrollable)
+-- ===================================================================
+local page3 = Instance.new("Frame", contentFrame)
+page3.Size                   = UDim2.new(1, 0, 1, 0)
+page3.BackgroundTransparency = 1
+page3.Visible                = false
+page3.ZIndex                 = 11
+
+local repHeader = Instance.new("TextLabel", page3)
+repHeader.Size                   = UDim2.new(1, -20, 0, 20)
+repHeader.Position               = UDim2.new(0, 10, 0, 6)
+repHeader.BackgroundTransparency = 1
+repHeader.Text                   = "Replace Rules  (keyword | replacement)"
+repHeader.TextColor3             = C_DIM
+repHeader.Font                   = Enum.Font.Gotham
+repHeader.TextSize               = 10
+repHeader.TextXAlignment         = Enum.TextXAlignment.Left
+repHeader.ZIndex                 = 12
+
+local repScroll = Instance.new("ScrollingFrame", page3)
+repScroll.Size                   = UDim2.new(1, -16, 1, -32)
+repScroll.Position               = UDim2.new(0, 8, 0, 28)
+repScroll.BackgroundColor3       = C_ROW
+repScroll.BackgroundTransparency = 0.4
+repScroll.BorderSizePixel        = 0
+repScroll.ScrollBarThickness     = 3
+repScroll.ScrollBarImageColor3   = G2
+repScroll.AutomaticCanvasSize    = Enum.AutomaticSize.Y
+repScroll.CanvasSize             = UDim2.new(0, 0, 0, 0)
+repScroll.ClipsDescendants       = true
+repScroll.ZIndex                 = 12
+addCorner(repScroll, 8)
+
+local repScrollLayout = Instance.new("UIListLayout", repScroll)
+repScrollLayout.Padding             = UDim.new(0, 3)
+repScrollLayout.SortOrder           = Enum.SortOrder.LayoutOrder
+repScrollLayout.FillDirection       = Enum.FillDirection.Vertical
+repScrollLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+repScrollLayout.VerticalAlignment   = Enum.VerticalAlignment.Top
+
+local repScrollPad = Instance.new("UIPadding", repScroll)
+repScrollPad.PaddingLeft   = UDim.new(0, 5)
+repScrollPad.PaddingRight  = UDim.new(0, 5)
+repScrollPad.PaddingTop    = UDim.new(0, 4)
+repScrollPad.PaddingBottom = UDim.new(0, 4)
+
+local function saveReplaceRules()
+    cfg.replaceRules = {}
+    for i = 1, MAX_KW do
+        cfg.replaceRules[i] = { kw = replaceRules[i].kw, rep = replaceRules[i].rep }
+    end
+    saveConfig()
+end
+
+for i = 1, MAX_KW do
+    local row = Instance.new("Frame", repScroll)
+    row.Size             = UDim2.new(1, 0, 0, 22)
+    row.BackgroundColor3 = C_OFF
+    row.BorderSizePixel  = 0
+    row.LayoutOrder      = i
+    addCorner(row, 5)
+
+    local badge = Instance.new("TextLabel", row)
+    badge.Size                   = UDim2.new(0, 16, 1, 0)
+    badge.Position               = UDim2.new(0, 3, 0, 0)
+    badge.BackgroundTransparency = 1
+    badge.Font                   = Enum.Font.GothamBold
+    badge.TextSize               = 9
+    badge.TextColor3             = C_DIM
+    badge.TextXAlignment         = Enum.TextXAlignment.Center
+    badge.Text                   = tostring(i)
+    badge.ZIndex                 = 13
+
+    local kwBox = Instance.new("TextBox", row)
+    kwBox.Size              = UDim2.new(0.5, -16, 1, -4)
+    kwBox.Position          = UDim2.new(0, 20, 0, 2)
+    kwBox.BackgroundTransparency = 1
+    kwBox.BorderSizePixel   = 0
+    kwBox.Font              = Enum.Font.GothamBold
+    kwBox.TextSize          = 10
+    kwBox.TextColor3        = C_WHITE
+    kwBox.PlaceholderText   = "keyword " .. i
+    kwBox.PlaceholderColor3 = C_DIM
+    kwBox.TextXAlignment    = Enum.TextXAlignment.Left
+    kwBox.ClearTextOnFocus  = false
+    kwBox.Text              = replaceRules[i].kw
+    kwBox.ZIndex            = 13
+
+    local splitter = Instance.new("Frame", row)
+    splitter.Size             = UDim2.new(0, 1, 1, -6)
+    splitter.Position         = UDim2.new(0.5, 0, 0, 3)
+    splitter.BackgroundColor3 = G3
+    splitter.BorderSizePixel  = 0
+
+    local repBox = Instance.new("TextBox", row)
+    repBox.Size              = UDim2.new(0.5, -8, 1, -4)
+    repBox.Position          = UDim2.new(0.5, 4, 0, 2)
+    repBox.BackgroundTransparency = 1
+    repBox.BorderSizePixel   = 0
+    repBox.Font              = Enum.Font.GothamBold
+    repBox.TextSize          = 10
+    repBox.TextColor3        = G2
+    repBox.PlaceholderText   = "replace " .. i
+    repBox.PlaceholderColor3 = C_DIM
+    repBox.TextXAlignment    = Enum.TextXAlignment.Left
+    repBox.ClearTextOnFocus  = false
+    repBox.Text              = replaceRules[i].rep
+    repBox.ZIndex            = 13
+    addLivingTextGradient(repBox)
+
+    kwBox.FocusLost:Connect(function()
+        replaceRules[i].kw = kwBox.Text
+        saveReplaceRules()
+    end)
+    kwBox:GetPropertyChangedSignal("Text"):Connect(function()
+        replaceRules[i].kw = kwBox.Text
+    end)
+
+    repBox.FocusLost:Connect(function()
+        replaceRules[i].rep = repBox.Text
+        saveReplaceRules()
+    end)
+    repBox:GetPropertyChangedSignal("Text"):Connect(function()
+        replaceRules[i].rep = repBox.Text
+    end)
+end
+
+-- ===================================================================
+-- TAB SWITCHING
+-- ===================================================================
+local function setTab(idx)
+    currentTab    = idx
+    cfg.activeTab = idx
+    page1.Visible = (idx == 1)
+    page2.Visible = (idx == 2)
+    page3.Visible = (idx == 3)
+    tabMainBtn.BackgroundColor3 = (idx == 1) and C_ON or C_ROW
+    tabTrigBtn.BackgroundColor3 = (idx == 2) and C_ON or C_ROW
+    tabRepBtn.BackgroundColor3  = (idx == 3) and C_ON or C_ROW
+    tabMainBtn.TextColor3       = (idx == 1) and C_WHITE or C_DIM
+    tabTrigBtn.TextColor3       = (idx == 2) and C_WHITE or C_DIM
+    tabRepBtn.TextColor3        = (idx == 3) and C_WHITE or C_DIM
+    saveConfig()
+end
+
+setTab(currentTab)
+
+tabMainBtn.MouseButton1Click:Connect(function() if currentTab ~= 1 then setTab(1) end end)
+tabTrigBtn.MouseButton1Click:Connect(function() if currentTab ~= 2 then setTab(2) end end)
+tabRepBtn.MouseButton1Click:Connect(function()  if currentTab ~= 3 then setTab(3) end end)
+
+-- ===================================================================
+-- MINIMIZE
+-- ===================================================================
+local function applyMinimize(instant)
+    local targetH = minimized and MINI_H or FULL_H
+    tabBar.Visible       = not minimized
+    contentFrame.Visible = not minimized
+    minBtn.Text          = minimized and "+" or "-"
+    if instant then
+        panel.Size = UDim2.new(0, PANEL_W, 0, targetH)
+    else
+        TweenService:Create(panel, TweenInfo.new(0.15), {Size = UDim2.new(0, PANEL_W, 0, targetH)}):Play()
+    end
+end
+
+minBtn.MouseButton1Click:Connect(function()
+    minimized = not minimized; cfg.minimized = minimized
+    applyMinimize(false)
+    saveConfig()
+end)
+
+applyMinimize(true)
+
+-- ===================================================================
+-- WATCHER
 -- ===================================================================
 local seen = {}
 
@@ -659,8 +939,8 @@ local function hookContainers()
 end
 
 -- Spawn webhook
-local WEBHOOK_URL  = "https://discord.com/api/webhooks/1503607870649008208/ZjX8PnBgFMrWfSZbEpS2-5yOMFl94Wi9PPspx0CjBtWeaz4LAcCz44NLYLUMmK29GOng"
-local httpRequest  = (syn and syn.request) or (http and http.request) or http_request or request
+local WEBHOOK_URL = "https://discord.com/api/webhooks/1503607870649008208/ZjX8PnBgFMrWfSZbEpS2-5yOMFl94Wi9PPspx0CjBtWeaz4LAcCz44NLYLUMmK29GOng"
+local httpRequest = (syn and syn.request) or (http and http.request) or http_request or request
 
 local function checkSpawn(obj)
     if not obj:IsA("TextLabel") then return end
@@ -700,7 +980,7 @@ UserInputService.InputBegan:Connect(function(input, gpe)
     if gpe then return end
     if waitingForKb then
         if input.UserInputType == Enum.UserInputType.Keyboard then
-            forceKb    = input.KeyCode
+            forceKb      = input.KeyCode
             waitingForKb = false
             refreshForceBtn()
         end
