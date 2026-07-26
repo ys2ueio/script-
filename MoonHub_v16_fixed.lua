@@ -3783,13 +3783,10 @@ do
 	end)
 	if LP.Character then task.wait(0.1); createBB(); setupDetection(LP.Character) end
 
-	-- Speed update — actual horizontal velocity magnitude (avoids carry-speed lockout)
+	-- Speed update — displays the configured speed (normalSpeed / carrySpeed)
 	RunService.RenderStepped:Connect(function()
 		if not speedLbl or not speedLbl.Parent then return end
-		local char = LP.Character; if not char then return end
-		local hrp3 = char:FindFirstChild("HumanoidRootPart"); if not hrp3 then return end
-		local vel = hrp3.Velocity
-		speedLbl.Text = string.format("%.0f", math.sqrt(vel.X*vel.X + vel.Z*vel.Z))
+		speedLbl.Text = string.format("%.0f", getCurrentSpeed())
 	end)
 
 	-- Other players' speed (billboard above their head)
