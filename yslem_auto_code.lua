@@ -10,7 +10,7 @@ local PlayerGui         = LP:WaitForChild("PlayerGui")
 -- ===================================================================
 -- CONFIG  (persisted)
 -- ===================================================================
-local CFG_PATH = "moon_autocode_cfg.json"
+local CFG_PATH = "yslem_autocode_cfg.json"
 local cfg = {
     autoCode     = true,
     captureCount = 0,          -- 0=instant single-notif, N=collect N parts after trigger
@@ -144,7 +144,7 @@ end
 -- GUI ROOT
 -- ===================================================================
 local gui = Instance.new("ScreenGui")
-gui.Name           = "MoonAutoCode"
+gui.Name           = "YslemAutoCode"
 gui.ResetOnSpawn   = false
 gui.IgnoreGuiInset = true
 gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
@@ -548,7 +548,7 @@ local titleLbl = Instance.new("TextLabel", panel)
 titleLbl.Size                   = UDim2.new(1, -40, 0, TITLE_H)
 titleLbl.Position               = UDim2.new(0, 10, 0, 0)
 titleLbl.BackgroundTransparency = 1
-titleLbl.Text                   = "MOON AUTO CODE"
+titleLbl.Text                   = "YSLEM AUTO CODE"
 titleLbl.TextColor3             = C_WHITE
 titleLbl.Font                   = Enum.Font.GothamBlack
 titleLbl.TextSize               = 13
@@ -1245,6 +1245,6 @@ UserInputService.InputBegan:Connect(function(input, gpe)
     if input.KeyCode == forceKb then doForceScan() end
 end)
 
-_G.moonAutoCode = { setLastCode = setLastCode }
+_G.yslemAutoCode = { setLastCode = setLastCode }
 
-print("[MOON AUTO CODE] by Yslem — Loaded | MT hook: " .. tostring(_mtHooked))
+print("[YSLEM AUTO CODE] by Yslem — Loaded | MT hook: " .. tostring(_mtHooked))

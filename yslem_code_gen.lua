@@ -6,7 +6,7 @@ local LP               = Players.LocalPlayer
 local PlayerGui        = LP:WaitForChild("PlayerGui")
 
 -- ===================================================================
--- COLOUR / STYLE  (Moon black theme)
+-- COLOUR / STYLE  (Yslem black theme)
 -- ===================================================================
 local C_BG    = Color3.fromRGB(0, 0, 0)
 local C_ON    = Color3.fromRGB(30, 30, 30)
@@ -68,7 +68,7 @@ end)
 -- GUI ROOT
 -- ===================================================================
 local gui = Instance.new("ScreenGui")
-gui.Name           = "MoonCodeGen"
+gui.Name           = "YslemCodeGen"
 gui.ResetOnSpawn   = false
 gui.IgnoreGuiInset = true
 gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
@@ -179,7 +179,7 @@ local titleLbl = Instance.new("TextLabel", panel)
 titleLbl.Size                   = UDim2.new(1, -40, 0, 28)
 titleLbl.Position               = UDim2.new(0, 10, 0, 0)
 titleLbl.BackgroundTransparency = 1
-titleLbl.Text                   = "MOON CODE GEN"
+titleLbl.Text                   = "YSLEM CODE GEN"
 titleLbl.TextColor3             = C_WHITE
 titleLbl.Font                   = Enum.Font.GothamBlack
 titleLbl.TextSize               = 13
@@ -295,8 +295,8 @@ end)
 sendBtn.MouseButton1Click:Connect(function()
     local t = customBox.Text
     if t == "" then return end
-    if _G.moonAutoCode and _G.moonAutoCode.setLastCode then
-        _G.moonAutoCode.setLastCode(t)
+    if _G.yslemAutoCode and _G.yslemAutoCode.setLastCode then
+        _G.yslemAutoCode.setLastCode(t)
     end
     TweenService:Create(sendBtn, TweenInfo.new(0.1), {BackgroundColor3 = C_GREEN}):Play()
     task.delay(0.2, function()
@@ -371,4 +371,4 @@ minBtn.MouseButton1Click:Connect(function()
     end
 end)
 
-print("[MOON CODE GEN] by Yslem — Loaded")
+print("[YSLEM CODE GEN] by Yslem — Loaded")
