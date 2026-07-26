@@ -4108,18 +4108,37 @@ local function MH_resetAll()
 		if r.laggerCarrySpeed then r.laggerCarrySpeed.Text="24.5" end
 	end)
 	for _, entry in pairs(_G._MH_allToggles or {}) do
-		pcall(function() entry.set(false) end)
+		pcall(function()
+			entry.set(false)
+			if entry.onToggle then entry.onToggle(false) end
+		end)
 	end
 	if _G._MH_autoSave then _G._MH_autoSave() end
 end
 
 local function MH_resetBtnPos()
-	for k in pairs(_floatPositions) do _floatPositions[k]=nil end
-	for id in pairs(_floatBtns) do
-		pcall(function() _floatBtns[id].frame:Destroy() end)
-		_floatBtns[id]=nil
+	-- Clear saved positions
+	for k in pairs(_floatPositions) do _floatPositions[k] = nil end
+	-- Move active float buttons to default grid positions (without destroying them)
+	local _GAP = 3
+	local _blockW = FLOAT_SZ * 2 + _GAP
+	for id, entry in pairs(_floatBtns) do
+		pcall(function()
+			local pos
+			if id == "antibat" then
+				pos = UDim2.new(1, -(_blockW + 12), 0, 40)
+			else
+				local idx = _floatGridIndex(id) - 1
+				local col = idx % 2
+				local row = math.floor(idx / 2)
+				local topOffset = 40 + FLOAT_SZ + _GAP
+				pos = UDim2.new(1, -(_blockW + 12) + col * (FLOAT_SZ + _GAP), 0, topOffset + row * (FLOAT_SZ + _GAP))
+			end
+			entry.frame.Position = pos
+		end)
 	end
-	local defaults={
+	-- Reset main windows to default positions
+	local winDefaults = {
 		main        = UDim2.new(0.5,-WIN_W/2,0.5,-137),
 		mini        = UDim2.new(0,20,0,140),
 		speed       = UDim2.new(1,-256,0,210),
@@ -4127,7 +4146,7 @@ local function MH_resetBtnPos()
 		speedbypass = UDim2.new(1,-256,0,210),
 	}
 	for id, frame in pairs(_G._MH_positions or {}) do
-		if defaults[id] then pcall(function() frame.Position=defaults[id] end) end
+		if winDefaults[id] then pcall(function() frame.Position = winDefaults[id] end) end
 	end
 	if _G._MH_autoSave then _G._MH_autoSave() end
 end
