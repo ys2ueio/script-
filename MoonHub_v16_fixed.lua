@@ -2312,29 +2312,51 @@ local function _sStopAutoTPDown()
 end
 
 -- ===================================================================
--- MELEE BODY LOCK
+-- MELEE BODY LOCK (Vanish Body Lock: rotation lock, faces away from nearest target)
 -- ===================================================================
 local MeleeBodyLock = {active=false, conn=nil}
+local function mbl_nearest(root)
+	local best, bestD = nil, math.huge
+	for _, p in ipairs(Players:GetPlayers()) do
+		if p ~= LP and p.Character then
+			local tr = p.Character:FindFirstChild("HumanoidRootPart")
+			local h  = p.Character:FindFirstChildOfClass("Humanoid")
+			if tr and h and h.Health > 0 then
+				local d = (tr.Position - root.Position).Magnitude
+				if d < bestD then bestD = d; best = tr end
+			end
+		end
+	end
+	return best
+end
 function MeleeBodyLock.start()
 	if MeleeBodyLock.conn then MeleeBodyLock.conn:Disconnect() end
 	MeleeBodyLock.active = true
+	local hum0 = LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
+	if hum0 then hum0.AutoRotate = false end
 	MeleeBodyLock.conn = RunService.Heartbeat:Connect(function()
 		if not MeleeBodyLock.active then return end
-		local root = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart"); if not root then return end
-		local target = _av3Nearest(root); if not target or not target.Character then return end
-		local tr = target.Character:FindFirstChild("HumanoidRootPart"); if not tr then return end
-		pcall(function()
-			if sethiddenproperty then sethiddenproperty(root, "PhysicsRepRootPart", tr) end
-			local targetPos = tr.Position + Vector3.new(0, 0.9, 0)
-			if (root.Position - targetPos).Magnitude > 8 then root.CFrame = CFrame.new(targetPos) end
-			workspace.CurrentCamera.CFrame = CFrame.new(workspace.CurrentCamera.CFrame.Position, tr.Position)
-			_av3Hit()
-		end)
+		local char = LP.Character; if not char then return end
+		local root = char:FindFirstChild("HumanoidRootPart"); if not root then return end
+		local hum = char:FindFirstChildOfClass("Humanoid"); if not hum then return end
+		local targetRoot = mbl_nearest(root); if not targetRoot then return end
+		local myPos = root.Position
+		local targetPos = targetRoot.Position
+		local direction = Vector3.new(targetPos.X - myPos.X, 0, targetPos.Z - myPos.Z)
+		if direction.Magnitude > 0.5 then
+			local angle = math.atan2(direction.X, direction.Z)
+			angle = angle + math.pi
+			root.CFrame = CFrame.new(myPos) * CFrame.Angles(0, angle, 0)
+			hum.AutoRotate = false
+		end
 	end)
 end
 function MeleeBodyLock.stop()
 	if MeleeBodyLock.conn then MeleeBodyLock.conn:Disconnect(); MeleeBodyLock.conn = nil end
 	MeleeBodyLock.active = false
+	local char = LP.Character
+	local hum = char and char:FindFirstChildOfClass("Humanoid")
+	if hum then hum.AutoRotate = true end
 end
 
 
