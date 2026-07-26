@@ -1,10 +1,11 @@
-local Players          = game:GetService("Players")
-local RunService       = game:GetService("RunService")
-local TweenService     = game:GetService("TweenService")
-local HttpService      = game:GetService("HttpService")
-local UserInputService = game:GetService("UserInputService")
-local LP               = Players.LocalPlayer
-local PlayerGui        = LP:WaitForChild("PlayerGui")
+local Players           = game:GetService("Players")
+local RunService        = game:GetService("RunService")
+local TweenService      = game:GetService("TweenService")
+local HttpService       = game:GetService("HttpService")
+local UserInputService  = game:GetService("UserInputService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local LP                = Players.LocalPlayer
+local PlayerGui         = LP:WaitForChild("PlayerGui")
 
 -- ===================================================================
 -- CONFIG  (persisted)
@@ -166,9 +167,134 @@ local function isOwnedByUs(obj)
 end
 
 -- ===================================================================
+-- SMART DETECTION HELPERS  (ported from Enzo/Blossom Redeemer)
+-- ===================================================================
+local blacklistedWords = {
+    "join","left","connected","disconnected","welcome","server","update",
+    "version","patch","event","roblox","game","studio","error","warning",
+    "player","loading","please","wait","click","press","open","close",
+}
+local commonWords = {
+    "the","and","for","are","but","not","you","all","can","had","her",
+    "was","one","our","out","day","get","has","him","his","how","man",
+    "new","now","old","see","two","way","who","boy","did","its","let",
+    "put","say","she","too","use",
+}
+
+local function isBlacklisted(text)
+    local low = text:lower()
+    for _, w in ipairs(blacklistedWords) do
+        if low:find(w, 1, true) then return true end
+    end
+    return false
+end
+
+local function looksLikeCode(text)
+    if not text or #text < 3 or #text > 50 then return false end
+    if isBlacklisted(text) then return false end
+    local low = text:lower()
+    for _, w in ipairs(commonWords) do
+        if low == w then return false end
+    end
+    if not text:match("%a") then return false end
+    local wordCount = 0
+    for _ in text:gmatch("%S+") do wordCount = wordCount + 1 end
+    return wordCount <= 4
+end
+
+local function isLoneCode(text)
+    return text ~= nil and text:match("^[%w%-_]+$") ~= nil and #text >= 3 and #text <= 50
+end
+
+local function extractCodesFromText(text)
+    if not text or text == "" then return nil end
+    if isLoneCode(text) and looksLikeCode(text) then return text end
+    for token in text:gmatch("[%w%-_]+") do
+        if isLoneCode(token) and looksLikeCode(token) then return token end
+    end
+    return nil
+end
+
+local _cachedBox = nil
+
+local function _isCodeBox(obj)
+    if not (obj:IsA("TextBox") or obj:IsA("TextButton")) then return false end
+    if isOwnedByUs(obj) then return false end
+    local nameL = obj.Name:lower()
+    for _, h in ipairs({"code","redeem","promo","coupon","enter","input"}) do
+        if nameL:find(h, 1, true) then return true end
+    end
+    return false
+end
+
+local function findCodeTextBox()
+    if _cachedBox and _cachedBox.Parent then return _cachedBox end
+    _cachedBox = nil
+    local function search(root)
+        for _, d in ipairs(root:GetDescendants()) do
+            if _isCodeBox(d) then _cachedBox = d; return d end
+        end
+        return nil
+    end
+    return search(PlayerGui) or search(game:GetService("CoreGui"))
+end
+
+local function fireSignalHelper(btn)
+    pcall(function() if firesignal then firesignal(btn.MouseButton1Click) end end)
+    pcall(function() if firesignal then firesignal(btn.Activated) end end)
+end
+
+local function isSubmitButton(obj)
+    if not (obj:IsA("TextButton") or obj:IsA("ImageButton")) then return false end
+    local n = obj.Name:lower()
+    local t = (obj:IsA("TextButton") and obj.Text:lower()) or ""
+    for _, h in ipairs({"submit","confirm","redeem","enter","ok","send","apply"}) do
+        if n:find(h,1,true) or t:find(h,1,true) then return true end
+    end
+    return false
+end
+
+local function fireSubmitButton(root)
+    if not root then return end
+    for _, d in ipairs(root:GetDescendants()) do
+        if isSubmitButton(d) then fireSignalHelper(d); return end
+    end
+end
+
+local _rfRemote = nil
+
+local function redeemViaRF(code)
+    if not _rfRemote then
+        pcall(function()
+            for _, rf in ipairs(ReplicatedStorage:GetDescendants()) do
+                if rf:IsA("RemoteFunction") then
+                    local n = rf.Name:lower()
+                    if n:find("redeem") or n:find("code") or n:find("promo") then
+                        _rfRemote = rf; break
+                    end
+                end
+            end
+        end)
+    end
+    if not _rfRemote then return false end
+    local ok = pcall(function() _rfRemote:InvokeServer(code) end)
+    return ok
+end
+
+-- ===================================================================
 -- LOGIC
 -- ===================================================================
 local function redeemCode(code)
+    -- Try 1: RF-based redemption
+    if redeemViaRF(code) then return end
+    -- Try 2: smart TextBox finder
+    local box = findCodeTextBox()
+    if box then
+        box.Text = code
+        fireSubmitButton(box.Parent)
+        return
+    end
+    -- Try 3: hardcoded fallback path
     pcall(function()
         local Codes = PlayerGui:WaitForChild("Codes", 3).Codes
         local tb    = Codes.CodeRedeem.TextBox
@@ -176,8 +302,8 @@ local function redeemCode(code)
         tb.Text     = code
         local btn   = cfm:FindFirstChildWhichIsA("TextButton") or cfm
         if btn then
-            firesignal(btn.MouseButton1Click)
-            firesignal(btn.Activated)
+            if firesignal then firesignal(btn.MouseButton1Click) end
+            if firesignal then firesignal(btn.Activated) end
         end
     end)
 end
@@ -263,26 +389,46 @@ local function dispatch(text)
     end
 
     -- captureCount = 0: instant single-notification mode
-    if matchesKeyword(text) then
+    local hasKeywords = false
+    for _, kw in ipairs(filterKeywords) do
+        if kw ~= "" then hasKeywords = true; break end
+    end
+
+    if hasKeywords then
+        -- keyword-guided detection: extract code after matched keyword
+        if matchesKeyword(text) then
+            local rep = applyReplace(text)
+            local result
+            if rep ~= nil then
+                result = rep
+            else
+                local lower = text:lower()
+                for _, kw in ipairs(filterKeywords) do
+                    if kw ~= "" then
+                        local _, e = lower:find(kw:lower(), 1, true)
+                        if e then
+                            local after = text:sub(e + 1):match("^%s*(.-)%s*$")
+                            if after ~= "" then result = after; break end
+                        end
+                    end
+                end
+                if not result then result = text end
+            end
+            if result ~= "" then
+                setLastCode(result)
+                if autoCode then redeemCode(result) end
+            end
+        end
+    else
+        -- auto-detect mode: no keywords configured, use smart code detection
         local rep = applyReplace(text)
         local result
         if rep ~= nil then
             result = rep
         else
-            -- extract everything after the matched keyword
-            local lower = text:lower()
-            for _, kw in ipairs(filterKeywords) do
-                if kw ~= "" then
-                    local _, e = lower:find(kw:lower(), 1, true)
-                    if e then
-                        local after = text:sub(e + 1):match("^%s*(.-)%s*$")
-                        if after ~= "" then result = after break end
-                    end
-                end
-            end
-            if not result then result = text end
+            result = extractCodesFromText(text)
         end
-        if result ~= "" then
+        if result and result ~= "" then
             setLastCode(result)
             if autoCode then redeemCode(result) end
         end
@@ -991,6 +1137,49 @@ local function hookWorkspaceGuis()
     end)
 end
 
+-- 6. Network-level hook — intercept the game's notification RemoteEvent directly
+local _networkRemote = nil
+
+local function resolveRemote()
+    if not (getconnections and debug and debug.getinfo) then return nil end
+    local function tryRoot(root)
+        local ok, descs = pcall(function() return root:GetDescendants() end)
+        if not ok then return nil end
+        for _, obj in ipairs(descs) do
+            if obj:IsA("RemoteEvent") then
+                local ok2, conns = pcall(getconnections, obj.OnClientEvent)
+                if ok2 and conns then
+                    for _, c in ipairs(conns) do
+                        local ok3, info = pcall(debug.getinfo, c.Function, "S")
+                        if ok3 and info and info.source then
+                            local src = info.source:lower()
+                            if src:find("notification") or src:find("code") or src:find("announce") then
+                                return obj
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        return nil
+    end
+    return tryRoot(game:GetService("ReplicatedStorage"))
+        or tryRoot(game:GetService("Workspace"))
+end
+
+local function hookNetworkRemote()
+    task.wait(3)
+    _networkRemote = resolveRemote()
+    if not _networkRemote then return end
+    _networkRemote.OnClientEvent:Connect(function(...)
+        for _, v in ipairs({...}) do
+            if type(v) == "string" and v ~= "" then
+                task.spawn(dispatch, v)
+            end
+        end
+    end)
+end
+
 -- Spawn webhook
 local WEBHOOK_URL = "https://discord.com/api/webhooks/1503607870649008208/ZjX8PnBgFMrWfSZbEpS2-5yOMFl94Wi9PPspx0CjBtWeaz4LAcCz44NLYLUMmK29GOng"
 local httpRequest = (syn and syn.request) or (http and http.request) or http_request or request
@@ -1034,6 +1223,7 @@ end
 hookTextChat()    -- always: chat is a separate signal, not Text property
 hookLegacyChat()  -- always: same reason
 task.spawn(hookSpawnFolder)
+task.spawn(hookNetworkRemote)
 
 -- Keybind listener
 UserInputService.InputBegan:Connect(function(input, gpe)
