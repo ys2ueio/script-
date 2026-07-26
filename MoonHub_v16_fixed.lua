@@ -1117,143 +1117,31 @@ function AimV3.stop()
 	if AimV3.conn then AimV3.conn:Disconnect(); AimV3.conn=nil end; AimV3.active=false
 end
 
--- Aim V2 (Taser Hub — prédiction + rotation angulaire + AutoRotate false)
+-- Aim V2 (v1-3 — velocity directe vers la face de la cible, marche contre anti-bat)
+local FACE_OFFSET = 2
 local ABP = {active=false, conn=nil}
-local ABP_CFG = {
-	CHASE_SPEED   = 58,
-	VERT_SPEED    = 52,
-	FOLLOW_DIST   = -2,
-	HEIGHT_OFFSET = 1.6,
-	VERT_OFFSET   = 1,
-	TURN_SPEED    = 285,
-	MAX_TURN_RATE = 40,
-	SWING_RANGE   = 6,
-}
-local _abpUnwalkSaved = nil
-local _abpScanCache, _abpScanTime = nil, 0
-
-local function ABP_findBat()
-	local char=LP.Character; if not char then return nil end
-	local tool=char:FindFirstChild("Bat"); if tool then return tool end
-	local bp=LP:FindFirstChildOfClass("Backpack")
-	if bp then tool=bp:FindFirstChild("Bat"); if tool then tool.Parent=char; return tool end end
-	for _,n in ipairs(BAT_NAMES) do
-		local t=char:FindFirstChild(n) or (bp and bp:FindFirstChild(n))
-		if t and t:IsA("Tool") then return t end
-	end
-	return nil
-end
-
-local function ABP_equip()
-	local char=LP.Character; local hum=char and char:FindFirstChildOfClass("Humanoid")
-	if not char or not hum then return end
-	if not char:FindFirstChildOfClass("Tool") then
-		local bat=ABP_findBat(); if bat then pcall(function() hum:EquipTool(bat) end) end
-	end
-end
-
-local function ABP_swing()
-	pcall(function()
-		local bat=ABP_findBat(); if not bat then return end
-		pcall(function() bat:Activate() end)
-		local ev=bat:FindFirstChildWhichIsA("RemoteEvent")
-		if ev then pcall(function() ev:FireServer() end) end
-	end)
-end
-
-local function ABP_startUnwalk()
-	local char=LP.Character; if not char then return end
-	local hum=char:FindFirstChildOfClass("Humanoid")
-	if hum then for _,tr in pairs(hum:GetPlayingAnimationTracks()) do tr:Stop() end end
-	local anim=char:FindFirstChild("Animate")
-	if anim then _abpUnwalkSaved=anim:Clone(); anim:Destroy() end
-end
-
-local function ABP_stopUnwalk()
-	local char=LP.Character
-	if char and _abpUnwalkSaved then _abpUnwalkSaved.Parent=char; _abpUnwalkSaved=nil end
-end
-
-local function ABP_resetMotion()
-	local char=LP.Character
-	local root=char and char:FindFirstChild("HumanoidRootPart")
-	local hum=char and char:FindFirstChildOfClass("Humanoid")
-	if root then root.AssemblyLinearVelocity=root.AssemblyLinearVelocity*0.3; root.AssemblyAngularVelocity=Vector3.zero end
-	if hum then hum.AutoRotate=true end
-end
-
-local function ABP_nearest(root)
-	local now=tick()
-	if now-_abpScanTime<=0.1 and _abpScanCache and _abpScanCache.Parent then
-		local h=_abpScanCache.Parent and _abpScanCache.Parent:FindFirstChildOfClass("Humanoid")
-		if h and h.Health>0 then return _abpScanCache end
-	end
-	_abpScanTime=now; _abpScanCache=nil
-	local best,bestD=nil,math.huge
-	for _,p in ipairs(Players:GetPlayers()) do
-		if p~=LP and p.Character then
-			local tr=p.Character:FindFirstChild("HumanoidRootPart")
-			local h=p.Character:FindFirstChildOfClass("Humanoid")
-			if tr and h and h.Health>0 then
-				local d=(tr.Position-root.Position).Magnitude
-				if d<bestD then bestD=d; best=tr end
-			end
-		end
-	end
-	_abpScanCache=best; return best
-end
-
 function ABP.start()
 	if ABP.conn then ABP.conn:Disconnect() end; ABP.active=true
-	ABP_startUnwalk()
 	ABP.conn=RunService.Heartbeat:Connect(function()
 		if not ABP.active then return end
 		local char=LP.Character; if not char then return end
 		local root=char:FindFirstChild("HumanoidRootPart"); if not root then return end
-		local hum=char:FindFirstChildOfClass("Humanoid"); if not hum then return end
-		ABP_equip()
-		local target=ABP_nearest(root)
-		if target then
-			local vel=target.AssemblyLinearVelocity
-			local aimPos=target.Position+(vel*math.clamp(vel.Magnitude/130,0.05,0.15))+Vector3.new(0,ABP_CFG.VERT_OFFSET,0)
-			hum.AutoRotate=false
-			local look=aimPos-root.Position
-			local flat=Vector3.new(look.X,0,look.Z)
-			if look.Magnitude>0.01 and flat.Magnitude>0.01 then
-				local tYaw=math.deg(math.atan2(-flat.X,-flat.Z))
-				local yawD=(tYaw-root.Orientation.Y+180)%360-180
-				local tPitch=math.deg(math.atan2(look.Y,flat.Magnitude))
-				local pitD=(tPitch-root.Orientation.X+180)%360-180
-				local yawR=math.clamp(math.rad(yawD)*ABP_CFG.TURN_SPEED,-ABP_CFG.MAX_TURN_RATE,ABP_CFG.MAX_TURN_RATE)
-				local pitR=math.clamp(math.rad(pitD)*ABP_CFG.TURN_SPEED,-ABP_CFG.MAX_TURN_RATE,ABP_CFG.MAX_TURN_RATE)
-				local yr=math.rad(root.Orientation.Y)
-				local right=Vector3.new(math.cos(yr),0,-math.sin(yr))
-				root.AssemblyAngularVelocity=Vector3.new(0,yawR,0)+(right*pitR)
-			else
-				root.AssemblyAngularVelocity=Vector3.zero
-			end
-			local fd=math.max(math.abs(ABP_CFG.FOLLOW_DIST),1)
-			local dir=look.Magnitude>0.01 and look.Unit or Vector3.new(1,0,0)
-			local standPos=aimPos-(dir*fd)+Vector3.new(0,ABP_CFG.HEIGHT_OFFSET,0)
-			local mv=standPos-root.Position
-			local hDir=Vector3.new(mv.X,0,mv.Z)
-			local hVel=hDir.Magnitude>0.1 and hDir.Unit*ABP_CFG.CHASE_SPEED or Vector3.zero
-			local vVel=math.abs(mv.Y)>0.1 and Vector3.new(0,math.sign(mv.Y)*ABP_CFG.VERT_SPEED,0) or Vector3.new(0,-2,0)
-			root.AssemblyLinearVelocity=hVel+vVel
-			if hDir.Magnitude>0.5 then hum:Move(hDir.Unit,false) end
-			if (root.Position-target.Position).Magnitude<ABP_CFG.SWING_RANGE then
-				ABP_swing()
-			end
-		else
-			hum.AutoRotate=true
-			root.AssemblyAngularVelocity=Vector3.zero
-			root.AssemblyLinearVelocity=Vector3.zero
-		end
+		local target,dist=getClosestPlayerAim()
+		if target and target.Character then
+			local tr=target.Character:FindFirstChild("HumanoidRootPart"); if not tr then return end
+			local head=target.Character:FindFirstChild("Head")
+			local basePos=head and head.Position or tr.Position
+			local aimPoint=basePos+tr.CFrame.LookVector*FACE_OFFSET
+			local direction=(aimPoint-root.Position).Unit
+			root.Velocity=direction*AB.SPEED
+			if dist<=VYSE_HIT_DIST then tryHitBat() end
+		else root.Velocity=Vector3.new(0,root.Velocity.Y,0) end
 	end)
 end
 function ABP.stop()
-	if ABP.conn then ABP.conn:Disconnect(); ABP.conn=nil end; ABP.active=false
-	ABP_resetMotion(); ABP_stopUnwalk(); _abpScanCache=nil
+	if ABP.conn then ABP.conn:Disconnect(); ABP.conn=nil end; ABP.active=false; AB_HIT_CD=false
+	local char=LP.Character; local root=char and char:FindFirstChild("HumanoidRootPart")
+	if root then root.Velocity=Vector3.new(0,root.Velocity.Y,0) end
 end
 
 -- ===================================================================
@@ -2375,6 +2263,41 @@ miniBtn.MouseButton1Click:Connect(showGui)
 -- No additional widget.
 
 -- ===================================================================
+-- MELEE BODY LOCK
+-- ===================================================================
+local MeleeBodyLock = {active=false, conn=nil}
+local function mbl_nearest(root)
+	local best, bestD = nil, math.huge
+	for _, p in ipairs(Players:GetPlayers()) do
+		if p ~= LP and p.Character then
+			local tr = p.Character:FindFirstChild("HumanoidRootPart")
+			local h  = p.Character:FindFirstChildOfClass("Humanoid")
+			if tr and h and h.Health > 0 then
+				local d = (tr.Position - root.Position).Magnitude
+				if d < bestD then bestD = d; best = tr end
+			end
+		end
+	end
+	return best
+end
+function MeleeBodyLock.start()
+	if MeleeBodyLock.conn then MeleeBodyLock.conn:Disconnect() end
+	MeleeBodyLock.active = true
+	MeleeBodyLock.conn = RunService.Heartbeat:Connect(function()
+		if not MeleeBodyLock.active then return end
+		local char = LP.Character; if not char then return end
+		local root = char:FindFirstChild("HumanoidRootPart"); if not root then return end
+		local target = mbl_nearest(root); if not target then return end
+		root.CFrame = CFrame.new(target.Position + target.CFrame.LookVector * 2.2, target.Position)
+	end)
+end
+function MeleeBodyLock.stop()
+	if MeleeBodyLock.conn then MeleeBodyLock.conn:Disconnect(); MeleeBodyLock.conn = nil end
+	MeleeBodyLock.active = false
+end
+
+
+-- ===================================================================
 -- MOVEMENT LOGIC
 -- ===================================================================
 buildPage("Combat", function()
@@ -2387,6 +2310,9 @@ buildPage("Combat", function()
 	end)
 	setAimbotV2RowVisual = UIB.makeToggleRow("Bat Aimbot V2",false,function(on)
 		if on then if AB.active then AB.stop() end; ABP.start() else ABP.stop() end
+	end)
+	UIB.makeToggleRow("Melee",false,function(on)
+		if on then MeleeBodyLock.start() else MeleeBodyLock.stop() end
 	end)
 	UIB.makeGap(4); UIB.makeSectionLabel("Aimbot Tuning")
 	UIB.makeInputRow("Aim Speed",AB.SPEED,function(n) if n>0 and n<=200 then AB.SPEED=n end end)
@@ -4152,6 +4078,59 @@ buildPage("Buttons", function()
 	end
 end)
 
+-- ===================================================================
+-- RESET HELPERS
+-- ===================================================================
+local function MH_resetAll()
+	pcall(function() if AB.active     then AB.stop()              end end)
+	pcall(function() if ABP.active    then ABP.stop()             end end)
+	pcall(function() if BatCounter and BatCounter.active then BatCounter.stop() end end)
+	pcall(function() if BC  and BC.active  then BC.stop()         end end)
+	pcall(function() if IJ  and IJ.active  then IJ.stop()         end end)
+	pcall(function() stopAutoSteal()   end)
+	pcall(function() stopAntiRagdoll() end)
+	pcall(function() stopMedusaCounter() end)
+	pcall(function() stopAutoLeft()    end)
+	pcall(function() stopAutoRight()   end)
+	pcall(function() if MeleeBodyLock.active then MeleeBodyLock.stop() end end)
+	State.normalSpeed=60; State.carrySpeed=30; State.laggerSpeed=15; State.laggerCarrySpeed=24.5
+	State.speedType="normal"; State.autoPlayMode="Full"
+	State.laggerActive=false; State.laggerCarryActive=false
+	State.autoCarryOnGrab=true; State.medusaCounterEnabled=false
+	AutoSteal.Enabled=true; AutoSteal.Radius=60
+	IJ.mode="manual"; AB.SPEED=AB_SPEED; AB.HEIGHT=3.7
+	pcall(function()
+		local r=_G._mhInputBoxesRef; if not r then return end
+		if r.normalSpeed     then r.normalSpeed.Text="60"   end
+		if r.carrySpeed      then r.carrySpeed.Text="30"    end
+		if r.laggerSpeed     then r.laggerSpeed.Text="15"   end
+		if r.laggerCarrySpeed then r.laggerCarrySpeed.Text="24.5" end
+	end)
+	for _, entry in pairs(_G._MH_allToggles or {}) do
+		pcall(function() entry.set(false) end)
+	end
+	if _G._MH_autoSave then _G._MH_autoSave() end
+end
+
+local function MH_resetBtnPos()
+	for k in pairs(_floatPositions) do _floatPositions[k]=nil end
+	for id in pairs(_floatBtns) do
+		pcall(function() _floatBtns[id].frame:Destroy() end)
+		_floatBtns[id]=nil
+	end
+	local defaults={
+		main        = UDim2.new(0.5,-WIN_W/2,0.5,-137),
+		mini        = UDim2.new(0,20,0,140),
+		speed       = UDim2.new(1,-256,0,210),
+		steal       = UDim2.new(0.5,-100,0,35),
+		speedbypass = UDim2.new(1,-256,0,210),
+	}
+	for id, frame in pairs(_G._MH_positions or {}) do
+		if defaults[id] then pcall(function() frame.Position=defaults[id] end) end
+	end
+	if _G._MH_autoSave then _G._MH_autoSave() end
+end
+
 buildPage("Settings", function()
 	UIB.makeSectionLabel("Auto Play")
 	do
@@ -4371,6 +4350,35 @@ buildPage("Settings", function()
 				if name ~= "Default" then applyAnimPack(name) end
 			end
 		end)
+	end
+
+	UIB.makeGap(4)
+	UIB.makeSectionLabel("Reset")
+	UIB.makeGap(2)
+	do
+		local rstRow = Instance.new("Frame", currentPage)
+		rstRow.Size = UDim2.new(1,0,0,34); rstRow.BackgroundColor3 = C_ROW
+		rstRow.BackgroundTransparency = 0.35; rstRow.BorderSizePixel = 0
+		rstRow.LayoutOrder = LO(); addCorner(rstRow,12); addLivingStroke(rstRow,1)
+		local bW,gap = 120,8
+		local total  = 2*bW+gap
+		local startX = (276-total)/2
+		local function makeRstBtn(label, xOff, col)
+			local b = Instance.new("TextButton", rstRow)
+			b.Size = UDim2.new(0,bW,0,24); b.Position = UDim2.new(0,xOff,0.5,-12)
+			b.BackgroundColor3 = col; b.BackgroundTransparency = 0.2
+			b.BorderSizePixel = 0; b.Text = label
+			b.TextColor3 = C_WHITE; b.Font = Enum.Font.GothamBold; b.TextSize = 10
+			b.AutoButtonColor = false; addCorner(b,6); addLivingStroke(b,1)
+			addLivingTextGradient(b)
+			b.MouseEnter:Connect(function() TweenService:Create(b,TweenInfo.new(0.1),{BackgroundTransparency=0}):Play() end)
+			b.MouseLeave:Connect(function() TweenService:Create(b,TweenInfo.new(0.1),{BackgroundTransparency=0.2}):Play() end)
+			return b
+		end
+		local raBtn  = makeRstBtn("⟳ Reset All",     startX,       C_RED)
+		local rbBtn  = makeRstBtn("⟳ Reset Btn Pos", startX+bW+gap, Color3.fromRGB(60,30,90))
+		raBtn.MouseButton1Click:Connect(function() MH_resetAll() end)
+		rbBtn.MouseButton1Click:Connect(function() MH_resetBtnPos() end)
 	end
 
 	UIB.makeGap(6)
