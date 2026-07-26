@@ -243,7 +243,7 @@ addCorner(pill, 18)
 addLivingStroke(pill, 1.5)
 
 _pillLbl = Instance.new("TextLabel", pill)
-_pillLbl.Size                   = UDim2.new(1, -32, 1, 0)
+_pillLbl.Size                   = UDim2.new(0.56, -16, 1, 0)
 _pillLbl.Position               = UDim2.new(0, 16, 0, 0)
 _pillLbl.BackgroundTransparency = 1
 _pillLbl.Text                   = "SCANNING"
@@ -253,6 +253,40 @@ _pillLbl.TextSize               = 13
 _pillLbl.TextXAlignment         = Enum.TextXAlignment.Left
 _pillLbl.ZIndex                 = 5
 addLivingTextGradient(_pillLbl)
+
+local pillInfo = Instance.new("TextLabel", pill)
+pillInfo.Size                   = UDim2.new(0.44, -16, 1, 0)
+pillInfo.Position               = UDim2.new(0.56, 0, 0, 0)
+pillInfo.BackgroundTransparency = 1
+pillInfo.Text                   = "0 FPS | 0ms"
+pillInfo.TextColor3             = C_WHITE
+pillInfo.Font                   = Enum.Font.GothamBold
+pillInfo.TextSize               = 13
+pillInfo.TextXAlignment         = Enum.TextXAlignment.Right
+pillInfo.ZIndex                 = 5
+addLivingTextGradient(pillInfo)
+
+-- FPS / Ping loop (exact test_speed.lua)
+local frameCount, lastFpsTime, lastFps, lastPing = 0, tick(), 60, 0
+local function refreshPillInfo() pillInfo.Text = lastFps .. " FPS | " .. lastPing .. "ms" end
+RunService.RenderStepped:Connect(function()
+    frameCount = frameCount + 1
+    local now = tick()
+    if now - lastFpsTime >= 1 then
+        lastFps = math.floor(frameCount / (now - lastFpsTime))
+        frameCount = 0; lastFpsTime = now; refreshPillInfo()
+    end
+end)
+task.spawn(function()
+    local Stats = game:GetService("Stats")
+    while true do task.wait(0.5); pcall(function()
+        local ns  = Stats:FindFirstChild("Network")
+        local sci = ns and ns:FindFirstChild("ServerStatsItem")
+        local dp  = sci and sci:FindFirstChild("Data Ping")
+        lastPing  = dp and math.floor(dp:GetValue() or 0) or 0
+        refreshPillInfo()
+    end) end
+end)
 
 -- ===================================================================
 -- MAIN PANEL  (identical frame to test_speed.lua)
@@ -524,7 +558,7 @@ end
 forceBtn.MouseButton1Click:Connect(doForceScan)
 forceBtn.MouseButton2Click:Connect(function()
     waitingForKb = true
-    forceBtn.Text = "Appuie sur une touche..."
+    forceBtn.Text = "Press a key..."
 end)
 forceBtn.MouseEnter:Connect(function()
     if not waitingForKb then
@@ -542,7 +576,7 @@ local bindHint = Instance.new("TextLabel", panel)
 bindHint.Size                   = UDim2.new(1, -20, 0, 14)
 bindHint.Position               = UDim2.new(0, 10, 0, 224)
 bindHint.BackgroundTransparency = 1
-bindHint.Text                   = "Clic droit sur FORCE SCAN pour rebind"
+bindHint.Text                   = "Right-click FORCE SCAN to rebind"
 bindHint.TextColor3             = Color3.fromRGB(80, 80, 80)
 bindHint.Font                   = Enum.Font.Gotham
 bindHint.TextSize               = 9
@@ -661,7 +695,7 @@ end
 hookContainers()
 task.spawn(hookSpawnFolder)
 
--- Keybind listener (exact pattern de test_speed.lua)
+-- Keybind listener
 UserInputService.InputBegan:Connect(function(input, gpe)
     if gpe then return end
     if waitingForKb then
