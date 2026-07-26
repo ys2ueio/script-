@@ -2314,7 +2314,7 @@ end
 -- ===================================================================
 -- MELEE BODY LOCK
 -- ===================================================================
-local MeleeBodyLock = {active=false, conn=nil}
+local MeleeBodyLock = {active=false, conn=nil, SPEED=60, STOP_DIST=2.5}
 local function mbl_nearest(root)
 	local best, bestD = nil, math.huge
 	for _, p in ipairs(Players:GetPlayers()) do
@@ -2337,12 +2337,22 @@ function MeleeBodyLock.start()
 		local char = LP.Character; if not char then return end
 		local root = char:FindFirstChild("HumanoidRootPart"); if not root then return end
 		local target = mbl_nearest(root); if not target then return end
-		root.CFrame = CFrame.new(target.Position - target.CFrame.LookVector * 1.5, target.Position)
+		local aimPos = target.Position - target.CFrame.LookVector * MeleeBodyLock.STOP_DIST
+		local diff = aimPos - root.Position
+		local dist = diff.Magnitude
+		if dist > MeleeBodyLock.STOP_DIST then
+			root.Velocity = diff.Unit * MeleeBodyLock.SPEED
+		else
+			root.Velocity = Vector3.new(0, root.Velocity.Y, 0)
+		end
 	end)
 end
 function MeleeBodyLock.stop()
 	if MeleeBodyLock.conn then MeleeBodyLock.conn:Disconnect(); MeleeBodyLock.conn = nil end
 	MeleeBodyLock.active = false
+	local char = LP.Character
+	local root = char and char:FindFirstChild("HumanoidRootPart")
+	if root then root.Velocity = Vector3.new(0, root.Velocity.Y, 0) end
 end
 
 
