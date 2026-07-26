@@ -2447,9 +2447,10 @@ local _floatPositions = {}   -- id -> {xs,xo,ys,yo}
 -- Bump this whenever the default layout changes: saved positions from an
 -- older version get discarded on load instead of restoring stale/overlapping
 -- coordinates, so everyone gets the current clean column layout by default.
-local _FLOAT_POS_VERSION = 9
+local _FLOAT_POS_VERSION = 10
 local _floatLocked    = false
 local FLOAT_SZ = 44
+local FLOAT_WIDE_H = 30  -- height of wide buttons (antibat, melee) — slimmer than grid buttons
 
 -- Declared here (before buildPage Settings) so the Speed
 -- Bypass / Lagger toggles can reference the widgets built further
@@ -3480,7 +3481,7 @@ local function makeFloatButton(id)
 	local blockW = FLOAT_SZ * 2 + GAP
 	if id == "antibat" then
 		-- Wide standalone button, top of the block.
-		btn.Size = UDim2.new(0, blockW, 0, FLOAT_SZ)
+		btn.Size = UDim2.new(0, blockW, 0, FLOAT_WIDE_H)
 		if saved then
 			btn.Position = UDim2.new(saved[1], saved[2], saved[3], saved[4])
 		else
@@ -3488,11 +3489,11 @@ local function makeFloatButton(id)
 		end
 	elseif id == "melee" then
 		-- Wide standalone button, bottom of the block (mirrors antibat).
-		btn.Size = UDim2.new(0, blockW, 0, FLOAT_SZ)
+		btn.Size = UDim2.new(0, blockW, 0, FLOAT_WIDE_H)
 		if saved then
 			btn.Position = UDim2.new(saved[1], saved[2], saved[3], saved[4])
 		else
-			local topOffset = 8 + FLOAT_SZ + GAP
+			local topOffset = 8 + FLOAT_WIDE_H + GAP
 			btn.Position = UDim2.new(blockX, -(blockW + 12), 0, topOffset + 4 * (FLOAT_SZ + GAP))
 		end
 	else
@@ -3504,7 +3505,7 @@ local function makeFloatButton(id)
 			local idx = _floatGridIndex(id) - 1
 			local col = idx % 2
 			local row = math.floor(idx / 2)
-			local topOffset = 8 + FLOAT_SZ + GAP
+			local topOffset = 8 + FLOAT_WIDE_H + GAP
 			btn.Position = UDim2.new(blockX, -(blockW + 12) + col * (FLOAT_SZ + GAP), 0, topOffset + row * (FLOAT_SZ + GAP))
 		end
 	end
@@ -3796,10 +3797,13 @@ do
 	end)
 	if LP.Character then task.wait(0.1); createBB(); setupDetection(LP.Character) end
 
-	-- Speed update — displays the configured speed (normalSpeed / carrySpeed)
+	-- Speed update — actual horizontal velocity magnitude (raw_59 approach)
 	RunService.RenderStepped:Connect(function()
 		if not speedLbl or not speedLbl.Parent then return end
-		speedLbl.Text = string.format("%.0f", getCurrentSpeed())
+		local char = LP.Character; if not char then return end
+		local hrp3 = char:FindFirstChild("HumanoidRootPart"); if not hrp3 then return end
+		local hs = Vector3.new(hrp3.Velocity.X, 0, hrp3.Velocity.Z).Magnitude
+		speedLbl.Text = string.format("%.1f", hs)
 	end)
 
 	-- Other players' speed (billboard above their head)
@@ -4209,13 +4213,13 @@ local function MH_resetBtnPos()
 			if id == "antibat" then
 				pos = UDim2.new(1, -(_blockW + 12), 0, 8)
 			elseif id == "melee" then
-				local topOffset = 8 + FLOAT_SZ + _GAP
+				local topOffset = 8 + FLOAT_WIDE_H + _GAP
 				pos = UDim2.new(1, -(_blockW + 12), 0, topOffset + 4 * (FLOAT_SZ + _GAP))
 			else
 				local idx = _floatGridIndex(id) - 1
 				local col = idx % 2
 				local row = math.floor(idx / 2)
-				local topOffset = 8 + FLOAT_SZ + _GAP
+				local topOffset = 8 + FLOAT_WIDE_H + _GAP
 				pos = UDim2.new(1, -(_blockW + 12) + col * (FLOAT_SZ + _GAP), 0, topOffset + row * (FLOAT_SZ + _GAP))
 			end
 			entry.frame.Position = pos
