@@ -4039,12 +4039,11 @@ local function MH_load()
 			if _G._mhInputBoxesRef.laggerCarrySpeed then _G._mhInputBoxesRef.laggerCarrySpeed.Text=tostring(data.laggerCarrySpeed) end end
 		if data.speedType=="normal" or data.speedType=="carry" then State.speedType=data.speedType end
 
-		-- Only config VALUES are restored here (speeds, keybinds, radius,
-		-- mode...) — ON/OFF feature states are never auto-restarted, to
-		-- match the "everything OFF at execution" policy. The user
-		-- re-enables whichever features they want each session.
 		if data.aimSpeed then AB.SPEED=data.aimSpeed end
-		if data.infJumpMode=="manual" or data.infJumpMode=="hold" then IJ.mode=data.infJumpMode end
+		if data.infJumpMode=="manual" or data.infJumpMode=="hold" then
+				IJ.mode=data.infJumpMode
+				if setJumpModeUI then setJumpModeUI() end
+			end
 		if data.grabRadius then AutoSteal.Radius=data.grabRadius end
 		if data.autoPlayMode then
 			if setAutoPlayModeUI then setAutoPlayModeUI(data.autoPlayMode)
@@ -4075,6 +4074,16 @@ local function MH_load()
 			end
 		end
 
+		-- Float button positions must be loaded BEFORE toggle restore so that
+		-- when a toggle re-spawns a floating button it reads the saved position
+		-- at creation time instead of landing at the default grid slot.
+		-- Positions from an older layout version are discarded.
+		if type(data.floatPositions) == "table" and data.floatPosV == _FLOAT_POS_VERSION then
+			for id, pos in pairs(data.floatPositions) do
+				_floatPositions[id] = pos
+			end
+		end
+
 		-- Toggle rows: restore ON state and re-activate the underlying feature.
 		if type(data.toggles) == "table" then
 			for key, on in pairs(data.toggles) do
@@ -4098,18 +4107,6 @@ local function MH_load()
 			end
 		end
 
-		-- Floating buttons: positions first, then spawn, then lock.
-		-- Positions saved under an older layout version are discarded so
-		-- buttons don't restore to stale/overlapping coordinates.
-		if type(data.floatPositions) == "table" and data.floatPosV == _FLOAT_POS_VERSION then
-			for id, pos in pairs(data.floatPositions) do
-				_floatPositions[id] = pos
-			end
-		end
-		-- Floating buttons never auto-spawn from a saved session — matches
-		-- the "everything OFF at execution" policy. The user re-toggles
-		-- whichever ones they want each time (positions are still remembered
-		-- once they do, via floatPositions above).
 		if type(data.uiLocked) == "boolean" and data.uiLocked then
 			setDragLock(true)
 			lockTitleBtn.Text = "🔒"; lockTitleBtn.TextColor3 = C_RED
