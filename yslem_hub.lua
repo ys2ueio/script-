@@ -398,35 +398,139 @@ local C_YSLEM   = Color3.fromRGB(168,85,247)
 local C_PINK    = Color3.fromRGB(236,72,153)
 
 -- ===================================================================
--- AUTO-SAVE CONFIG
+-- SAVE / LOAD  (Moon Hub pattern — per-user file, full restore)
 -- ===================================================================
+local SAVE_FILE   = "yslemhub_" .. tostring(LP.UserId) .. ".json"
 local saveDebounce = false
 local MobileButtons = {Visible=true, Locked=true, Containers={}, Buttons={}}
 
 autoSaveConfig = function()
 	if saveDebounce then return end
 	saveDebounce = true
-	task.delay(0.5, function()
-		local cfg = {
-			normalSpeed=State.normalSpeed, carrySpeed=State.carrySpeed,
-			laggerSpeed=State.laggerSpeed, laggerCarrySpeed=State.laggerCarrySpeed,
-			speedType=State.speedType, laggerActive=State.laggerActive, laggerCarryActive=State.laggerCarryActive,
-			autoBatToggled=State.autoBatToggled,
-			autoLeftEnabled=State.autoLeftEnabled, autoRightEnabled=State.autoRightEnabled,
-			autoStealEnabled=AutoSteal.Enabled, grabRadius=AutoSteal.Radius, grabDuration=AutoSteal.Duration,
-			autoCarryOnGrab=State.autoCarryOnGrab,
-			infJump=State.infJumpEnabled, infJumpMode=State.infJumpMode,
-			antiRagdoll=State.antiRagdollEnabled, fpsBoost=State.fpsBoostEnabled,
-			medusaCounter=State.medusaCounterEnabled, unwalkEnabled=State.unwalkEnabled,
-			autoTpDown=State.autoTpDownEnabled, autoTpDownY=State.autoTpDownY,
-			mobileVisible=MobileButtons.Visible, mobileLocked=MobileButtons.Locked,
-			keyAutoLeft=State.keyAutoLeft.Name, keyAutoRight=State.keyAutoRight.Name,
-			keyDropBR=State.keyDropBR.Name, keyTpDown=State.keyTpDown.Name, keyAutoBat=State.keyAutoBat.Name,
-		}
-		pcall(function() writefile("YslemHubConfig.json", HttpService:JSONEncode(cfg)) end)
+	task.spawn(function()
+		task.wait(0.5)
+		local ok = pcall(function()
+			local data = {
+				-- Speeds
+				normalSpeed      = State.normalSpeed,
+				carrySpeed       = State.carrySpeed,
+				laggerSpeed      = State.laggerSpeed,
+				laggerCarrySpeed = State.laggerCarrySpeed,
+				-- Speed mode
+				speedType         = State.speedType,
+				laggerActive      = State.laggerActive,
+				laggerCarryActive = State.laggerCarryActive,
+				-- Feature toggles
+				autoBatToggled       = State.autoBatToggled,
+				infJumpEnabled       = State.infJumpEnabled,
+				infJumpMode          = State.infJumpMode,
+				antiRagdollEnabled   = State.antiRagdollEnabled,
+				fpsBoostEnabled      = State.fpsBoostEnabled,
+				medusaCounterEnabled = State.medusaCounterEnabled,
+				unwalkEnabled        = State.unwalkEnabled,
+				autoCarryOnGrab      = State.autoCarryOnGrab,
+				autoTpDownEnabled    = State.autoTpDownEnabled,
+				autoTpDownY          = State.autoTpDownY,
+				autoLeftEnabled      = State.autoLeftEnabled,
+				autoRightEnabled     = State.autoRightEnabled,
+				-- Auto steal
+				autoStealEnabled = AutoSteal.Enabled,
+				grabRadius       = AutoSteal.Radius,
+				grabDuration     = AutoSteal.Duration,
+				-- Mobile
+				mobileVisible = MobileButtons.Visible,
+				mobileLocked  = MobileButtons.Locked,
+				-- Keybinds
+				keyAutoLeft  = State.keyAutoLeft.Name,
+				keyAutoRight = State.keyAutoRight.Name,
+				keyDropBR    = State.keyDropBR.Name,
+				keyTpDown    = State.keyTpDown.Name,
+				keyAutoBat   = State.keyAutoBat.Name,
+			}
+			if writefile then
+				writefile(SAVE_FILE, HttpService:JSONEncode(data))
+				print("[Yslem Hub] Saved → " .. SAVE_FILE)
+			else
+				warn("[Yslem Hub] writefile unavailable — executor does not support saving")
+			end
+		end)
+		if not ok then warn("[Yslem Hub] autoSaveConfig error") end
 		saveDebounce = false
 	end)
 end
+
+local function loadConfig()
+	if type(readfile) ~= "function" or type(isfile) ~= "function" then return end
+	local fok, exists = pcall(isfile, SAVE_FILE)
+	if not fok or not exists then
+		print("[Yslem Hub] No save found for " .. LP.Name .. " — using defaults")
+		return
+	end
+	local rok, raw = pcall(readfile, SAVE_FILE)
+	if not rok or not raw then return end
+	local dok, data = pcall(function() return HttpService:JSONDecode(raw) end)
+	if not dok or type(data) ~= "table" then warn("[Yslem Hub] Save corrupted"); return end
+	print("[Yslem Hub] Loaded ← " .. SAVE_FILE)
+
+	pcall(function()
+		-- Speeds
+		if data.normalSpeed      then State.normalSpeed      = data.normalSpeed      end
+		if data.carrySpeed       then State.carrySpeed       = data.carrySpeed       end
+		if data.laggerSpeed      then State.laggerSpeed      = data.laggerSpeed      end
+		if data.laggerCarrySpeed then State.laggerCarrySpeed = data.laggerCarrySpeed end
+
+		-- Speed type
+		if data.speedType == "carry" or data.speedType == "normal" then
+			State.speedType = data.speedType
+		end
+
+		-- Grab config
+		if data.grabRadius   then AutoSteal.Radius   = data.grabRadius   end
+		if data.grabDuration then AutoSteal.Duration = data.grabDuration end
+
+		-- Simple booleans
+		if data.autoCarryOnGrab ~= nil then State.autoCarryOnGrab = data.autoCarryOnGrab end
+		if data.infJumpMode     ~= nil then State.infJumpMode      = data.infJumpMode     end
+		if data.autoTpDownY     ~= nil then State.autoTpDownY      = data.autoTpDownY     end
+		if data.mobileVisible   ~= nil then MobileButtons.Visible  = data.mobileVisible   end
+		if data.mobileLocked    ~= nil then MobileButtons.Locked    = data.mobileLocked    end
+
+		-- Keybinds
+		local function kc(name)
+			local ok2, v = pcall(function() return Enum.KeyCode[name] end)
+			return (ok2 and v) or Enum.KeyCode.Unknown
+		end
+		if data.keyAutoLeft  then State.keyAutoLeft  = kc(data.keyAutoLeft)  end
+		if data.keyAutoRight then State.keyAutoRight = kc(data.keyAutoRight) end
+		if data.keyDropBR    then State.keyDropBR    = kc(data.keyDropBR)    end
+		if data.keyTpDown    then State.keyTpDown    = kc(data.keyTpDown)    end
+		if data.keyAutoBat   then State.keyAutoBat   = kc(data.keyAutoBat)   end
+
+		-- Re-activate features that were ON (Moon pattern: restore → restart)
+		if data.laggerActive then
+			State.laggerActive = true; AutoSteal.Enabled = true; startAutoSteal()
+		elseif data.laggerCarryActive then
+			State.laggerCarryActive = true; AutoSteal.Enabled = true; startAutoSteal()
+		elseif data.autoStealEnabled then
+			AutoSteal.Enabled = true; startAutoSteal()
+		end
+		if data.antiRagdollEnabled   then State.antiRagdollEnabled   = true; startAntiRagdoll() end
+		if data.fpsBoostEnabled      then State.fpsBoostEnabled      = true; applyFPSBoost()    end
+		if data.medusaCounterEnabled then
+			State.medusaCounterEnabled = true
+			if setupMedusaCounter and LP.Character then setupMedusaCounter(LP.Character) end
+		end
+		if data.infJumpEnabled  then State.infJumpEnabled  = true; if setInfJump      then setInfJump(true)      end end
+		if data.autoBatToggled  then State.autoBatToggled  = true; if setAutoBat       then setAutoBat(true)       end end
+		if data.unwalkEnabled   then State.unwalkEnabled   = true; if setUnwalkToggle  then setUnwalkToggle(true)  end end
+		if data.autoTpDownEnabled then State.autoTpDownEnabled=true; if setAutoTpDown  then setAutoTpDown(true)    end end
+
+		-- Refresh UI toggles after everything is set
+		if refreshUIToggles then refreshUIToggles() end
+	end)
+end
+
+_G.YslemHub_load = loadConfig   -- expose so GUI builder can call it after building UI
 
 -- ===================================================================
 -- SPEED HELPERS
@@ -692,4 +796,5 @@ applyFPSBoost = function()
 	workspace.DescendantAdded:Connect(function(v) if State.fpsBoostEnabled then task.spawn(processObj,v) end end)
 end
 
+loadConfig()
 print("[Yslem Hub v2] Script loaded successfully!")
