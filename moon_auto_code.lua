@@ -271,50 +271,16 @@ addCorner(pill, 18)
 addLivingStroke(pill, 1.5)
 
 _pillLbl = Instance.new("TextLabel", pill)
-_pillLbl.Size                   = UDim2.new(0.56, -16, 1, 0)
-_pillLbl.Position               = UDim2.new(0, 16, 0, 0)
+_pillLbl.Size                   = UDim2.new(1, -16, 1, 0)
+_pillLbl.Position               = UDim2.new(0, 8, 0, 0)
 _pillLbl.BackgroundTransparency = 1
 _pillLbl.Text                   = "SCANNING"
 _pillLbl.TextColor3             = C_WHITE
 _pillLbl.Font                   = Enum.Font.GothamBlack
 _pillLbl.TextSize               = 13
-_pillLbl.TextXAlignment         = Enum.TextXAlignment.Left
+_pillLbl.TextXAlignment         = Enum.TextXAlignment.Center
 _pillLbl.ZIndex                 = 5
 addLivingTextGradient(_pillLbl)
-
-local pillInfo = Instance.new("TextLabel", pill)
-pillInfo.Size                   = UDim2.new(0.44, -16, 1, 0)
-pillInfo.Position               = UDim2.new(0.56, 0, 0, 0)
-pillInfo.BackgroundTransparency = 1
-pillInfo.Text                   = "0 FPS | 0ms"
-pillInfo.TextColor3             = C_WHITE
-pillInfo.Font                   = Enum.Font.GothamBold
-pillInfo.TextSize               = 13
-pillInfo.TextXAlignment         = Enum.TextXAlignment.Right
-pillInfo.ZIndex                 = 5
-addLivingTextGradient(pillInfo)
-
--- FPS / Ping loop (exact test_speed.lua)
-local frameCount, lastFpsTime, lastFps, lastPing = 0, tick(), 60, 0
-local function refreshPillInfo() pillInfo.Text = lastFps .. " FPS | " .. lastPing .. "ms" end
-RunService.RenderStepped:Connect(function()
-    frameCount = frameCount + 1
-    local now = tick()
-    if now - lastFpsTime >= 1 then
-        lastFps = math.floor(frameCount / (now - lastFpsTime))
-        frameCount = 0; lastFpsTime = now; refreshPillInfo()
-    end
-end)
-task.spawn(function()
-    local Stats = game:GetService("Stats")
-    while true do task.wait(0.5); pcall(function()
-        local ns  = Stats:FindFirstChild("Network")
-        local sci = ns and ns:FindFirstChild("ServerStatsItem")
-        local dp  = sci and sci:FindFirstChild("Data Ping")
-        lastPing  = dp and math.floor(dp:GetValue() or 0) or 0
-        refreshPillInfo()
-    end) end
-end)
 
 -- ===================================================================
 -- MAIN PANEL
@@ -799,7 +765,7 @@ for i = 1, MAX_KW do
     badge.ZIndex                 = 13
 
     local kwBox = Instance.new("TextBox", row)
-    kwBox.Size              = UDim2.new(0.5, -16, 1, -4)
+    kwBox.Size              = UDim2.new(0.5, -25, 1, -4)
     kwBox.Position          = UDim2.new(0, 20, 0, 2)
     kwBox.BackgroundTransparency = 1
     kwBox.BorderSizePixel   = 0
@@ -815,13 +781,13 @@ for i = 1, MAX_KW do
 
     local splitter = Instance.new("Frame", row)
     splitter.Size             = UDim2.new(0, 1, 1, -6)
-    splitter.Position         = UDim2.new(0.5, 0, 0, 3)
+    splitter.Position         = UDim2.new(0.5, -1, 0, 3)
     splitter.BackgroundColor3 = G3
     splitter.BorderSizePixel  = 0
 
     local repBox = Instance.new("TextBox", row)
-    repBox.Size              = UDim2.new(0.5, -8, 1, -4)
-    repBox.Position          = UDim2.new(0.5, 4, 0, 2)
+    repBox.Size              = UDim2.new(0.5, -9, 1, -4)
+    repBox.Position          = UDim2.new(0.5, 3, 0, 2)
     repBox.BackgroundTransparency = 1
     repBox.BorderSizePixel   = 0
     repBox.Font              = Enum.Font.GothamBold
