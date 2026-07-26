@@ -320,6 +320,17 @@ _pillLbl.TextXAlignment         = Enum.TextXAlignment.Center
 _pillLbl.ZIndex                 = 5
 addLivingTextGradient(_pillLbl)
 
+local pillByLbl = Instance.new("TextLabel", pillWidget)
+pillByLbl.Size                   = UDim2.new(1, 0, 0, 10)
+pillByLbl.Position               = UDim2.new(0, 0, 1, 3)
+pillByLbl.BackgroundTransparency = 1
+pillByLbl.Text                   = "by Yslem"
+pillByLbl.TextColor3             = C_DIM
+pillByLbl.Font                   = Enum.Font.Gotham
+pillByLbl.TextSize               = 8
+pillByLbl.TextXAlignment         = Enum.TextXAlignment.Center
+pillByLbl.ZIndex                 = 5
+
 -- ===================================================================
 -- MAIN PANEL
 -- ===================================================================
@@ -392,6 +403,18 @@ titleLbl.TextSize               = 13
 titleLbl.TextXAlignment         = Enum.TextXAlignment.Left
 titleLbl.ZIndex                 = 15
 addLivingTextGradient(titleLbl)
+
+-- By Yslem watermark (title bar, right side)
+local byLbl = Instance.new("TextLabel", panel)
+byLbl.Size                   = UDim2.new(0, 64, 0, TITLE_H)
+byLbl.Position               = UDim2.new(1, -88, 0, 0)
+byLbl.BackgroundTransparency = 1
+byLbl.Text                   = "by Yslem"
+byLbl.TextColor3             = C_DIM
+byLbl.Font                   = Enum.Font.Gotham
+byLbl.TextSize               = 9
+byLbl.TextXAlignment         = Enum.TextXAlignment.Right
+byLbl.ZIndex                 = 15
 
 -- ===================================================================
 -- TAB BAR
@@ -870,6 +893,31 @@ end
 -- SIGNAL HOOKS  (all possible code delivery channels)
 -- ===================================================================
 
+-- 0. Metatable hook — intercepts ALL Text property assignments instantly (VON method)
+local function hookMetatable()
+    if not (getrawmetatable and setreadonly and newcclosure) then return false end
+    local ok, mt = pcall(getrawmetatable, game)
+    if not ok or not mt then return false end
+    local oldNI = mt.__newindex
+    if not oldNI then return false end
+    if not pcall(setreadonly, mt, false) then return false end
+    mt.__newindex = newcclosure(function(self, key, value)
+        if key == "Text" and type(value) == "string" and #value > 0 and #value <= 300 then
+            local ok2, isText = pcall(function()
+                return self:IsA("TextLabel") or self:IsA("TextButton") or self:IsA("TextBox")
+            end)
+            if ok2 and isText then
+                task.spawn(function()
+                    if not isOwnedByUs(self) then dispatch(value) end
+                end)
+            end
+        end
+        return oldNI(self, key, value)
+    end)
+    pcall(setreadonly, mt, true)
+    return true
+end
+
 -- 1. PlayerGui — watch EVERY ScreenGui / Frame, existing + future
 local function hookPlayerGui()
     for _, child in ipairs(PlayerGui:GetChildren()) do
@@ -976,11 +1024,15 @@ local function hookSpawnFolder()
     folder.ChildAdded:Connect(function(obj) task.wait(); checkSpawn(obj) end)
 end
 
-hookPlayerGui()
-hookCoreGui()
-hookTextChat()
-hookLegacyChat()
-hookWorkspaceGuis()
+local _mtHooked = hookMetatable()
+if not _mtHooked then
+    -- metatable hook unavailable: fall back to signal-based watchers
+    hookPlayerGui()
+    hookCoreGui()
+    hookWorkspaceGuis()
+end
+hookTextChat()    -- always: chat is a separate signal, not Text property
+hookLegacyChat()  -- always: same reason
 task.spawn(hookSpawnFolder)
 
 -- Keybind listener
@@ -999,4 +1051,4 @@ end)
 
 _G.moonAutoCode = { setLastCode = setLastCode }
 
-print("[MOON AUTO CODE] Loaded")
+print("[MOON AUTO CODE] by Yslem — Loaded | MT hook: " .. tostring(_mtHooked))

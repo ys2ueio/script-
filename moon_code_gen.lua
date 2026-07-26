@@ -192,7 +192,7 @@ local subLbl = Instance.new("TextLabel", panel)
 subLbl.Size                   = UDim2.new(1, -20, 0, 14)
 subLbl.Position               = UDim2.new(0, 10, 0, 28)
 subLbl.BackgroundTransparency = 1
-subLbl.Text                   = "Notification injector — test auto code"
+subLbl.Text                   = "Notification injector  ·  by Yslem"
 subLbl.TextColor3             = C_DIM
 subLbl.Font                   = Enum.Font.Gotham
 subLbl.TextSize               = 9
@@ -371,4 +371,4 @@ minBtn.MouseButton1Click:Connect(function()
     end
 end)
 
-print("[MOON CODE GEN] Loaded — injecting into PlayerGui.TopNotification")
+print("[MOON CODE GEN] by Yslem — Loaded")
