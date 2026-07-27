@@ -2504,7 +2504,7 @@ local _floatPositions = {}   -- id -> {xs,xo,ys,yo}
 -- Bump this whenever the default layout changes: saved positions from an
 -- older version get discarded on load instead of restoring stale/overlapping
 -- coordinates, so everyone gets the current clean column layout by default.
-local _FLOAT_POS_VERSION = 12
+local _FLOAT_POS_VERSION = 13
 local _floatLocked    = false
 local FLOAT_SZ = 44
 local FLOAT_WIDE_H = 30  -- height of wide buttons (antibat, melee) — slimmer than grid buttons
@@ -3562,7 +3562,7 @@ local function makeFloatButton(id)
 			local col = idx % 2
 			local row = math.floor(idx / 2)
 			local topOffset = 55 + FLOAT_WIDE_H + GAP
-			btn.Position = UDim2.new(0, 12 + col * (FLOAT_SZ + GAP), 0, topOffset + row * (FLOAT_SZ + GAP))
+			btn.Position = UDim2.new(1, -(blockW + 12) + col * (FLOAT_SZ + GAP), 0, topOffset + row * (FLOAT_SZ + GAP))
 		end
 	end
 	btn.BackgroundColor3 = C_ROW; btn.BackgroundTransparency = 0; btn.BorderSizePixel = 0
@@ -4276,7 +4276,7 @@ local function MH_resetBtnPos()
 				local col = idx % 2
 				local row = math.floor(idx / 2)
 				local topOffset = 55 + FLOAT_WIDE_H + _GAP
-				pos = UDim2.new(0, 12 + col * (FLOAT_SZ + _GAP), 0, topOffset + row * (FLOAT_SZ + _GAP))
+				pos = UDim2.new(1, -(_blockW + 12) + col * (FLOAT_SZ + _GAP), 0, topOffset + row * (FLOAT_SZ + _GAP))
 			end
 			entry.frame.Position = pos
 		end)
