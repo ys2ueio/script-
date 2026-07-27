@@ -122,14 +122,28 @@ local function applyTheme(newName)
 			end
 		end)
 	end
-	if _G._MH_speedLblRef and _G._MH_speedLblRef.Parent then
-		local k = _tColKey(_G._MH_speedLblRef.TextColor3, oldName)
-		if k then _G._MH_speedLblRef.TextColor3 = new[k] end
+	-- steal fill gradient: swap between blue shimmer (default) and grey shimmer (noir)
+	if _G._MH_stealFillGradRef and _G._MH_stealFillGradRef.Parent then
+		if newName == "noir" then
+			_G._MH_stealFillGradRef.Color = ColorSequence.new({
+				ColorSequenceKeypoint.new(0,    Color3.fromRGB(20,  20,  20)),
+				ColorSequenceKeypoint.new(0.25, Color3.fromRGB(90,  90,  90)),
+				ColorSequenceKeypoint.new(0.5,  Color3.fromRGB(200, 200, 200)),
+				ColorSequenceKeypoint.new(0.75, Color3.fromRGB(90,  90,  90)),
+				ColorSequenceKeypoint.new(1,    Color3.fromRGB(20,  20,  20)),
+			})
+		else
+			_G._MH_stealFillGradRef.Color = ColorSequence.new({
+				ColorSequenceKeypoint.new(0,    Color3.fromRGB(10,  30,  90)),
+				ColorSequenceKeypoint.new(0.25, Color3.fromRGB(40,  110, 230)),
+				ColorSequenceKeypoint.new(0.5,  Color3.fromRGB(150, 210, 255)),
+				ColorSequenceKeypoint.new(0.75, Color3.fromRGB(40,  110, 230)),
+				ColorSequenceKeypoint.new(1,    Color3.fromRGB(10,  30,  90)),
+			})
+		end
 	end
-	if _G._MH_timerLblRef and _G._MH_timerLblRef.Parent then
-		local k = _tColKey(_G._MH_timerLblRef.TextColor3, oldName)
-		if k then _G._MH_timerLblRef.TextColor3 = new[k] end
-	end
+	-- steal status label gradient: swap ready color on theme change
+	if _G._MH_stealReadyColorFn then pcall(_G._MH_stealReadyColorFn) end
 	if _G_updateThemeUI then _G_updateThemeUI(newName) end
 end
 
@@ -3599,6 +3613,7 @@ stealFillGrad.Color=ColorSequence.new({
 	ColorSequenceKeypoint.new(1,    Color3.fromRGB(10,  30,  90)),
 })
 table.insert(_livingGradients, stealFillGrad)
+_G._MH_stealFillGradRef = stealFillGrad
 local stealEdge=Instance.new("Frame",stealFill)
 stealEdge.AnchorPoint=Vector2.new(1,0.5); stealEdge.Size=UDim2.new(0,4,1,-6); stealEdge.Position=UDim2.new(1,0,0.5,0)
 stealEdge.BackgroundColor3=C_WHITE; stealEdge.BorderSizePixel=0; stealEdge.ZIndex=2; addCorner(stealEdge,2)
@@ -3609,16 +3624,27 @@ stealPctLbl.TextColor3=C_MOON2; stealPctLbl.Font=Enum.Font.GothamBlack; stealPct
 stealPctLbl.TextXAlignment=Enum.TextXAlignment.Right; stealPctLbl.ZIndex=6
 AutoSteal.ProgressFill=stealFill; AutoSteal.ProgressText=stealPctLbl; AutoSteal.Widget=stealWidget; AutoSteal.StatusLabel=stealLabel
 task.spawn(function() task.wait(0.6); if AutoSteal.SetReadyColor then AutoSteal.SetReadyColor("READY") end end)
+local _lastReadyState = "READY"
 local function _setReadyColor(state)
+	_lastReadyState = state or _lastReadyState
 	local lbl = AutoSteal.StatusLabel; if not lbl then return end
-	local isReady = (state == "READY")
+	local isReady = (_lastReadyState == "READY")
+	local isNoir = (_currentTheme == "noir")
 	local col = isReady and C_MOON or C_RED
 	lbl.TextColor3 = col
-	-- Change the label's animated gradient
 	local g = lbl:FindFirstChildOfClass("UIGradient")
 	if g then
-		local c1 = isReady and Color3.fromRGB(20,70,140)  or Color3.fromRGB(120,20,20)
-		local c2 = isReady and Color3.fromRGB(120,180,255) or Color3.fromRGB(255,100,100)
+		local c1, c2
+		if isReady and isNoir then
+			c1 = Color3.fromRGB(80,  80,  80)
+			c2 = Color3.fromRGB(210, 210, 210)
+		elseif isReady then
+			c1 = Color3.fromRGB(20,  70,  140)
+			c2 = Color3.fromRGB(120, 180, 255)
+		else
+			c1 = Color3.fromRGB(120, 20,  20)
+			c2 = Color3.fromRGB(255, 100, 100)
+		end
 		g.Color = ColorSequence.new({
 			ColorSequenceKeypoint.new(0,    c2),
 			ColorSequenceKeypoint.new(0.25, c1),
@@ -3629,6 +3655,7 @@ local function _setReadyColor(state)
 	end
 end
 AutoSteal.SetReadyColor = _setReadyColor
+_G._MH_stealReadyColorFn = function() _setReadyColor(nil) end
 local Stats=game:GetService("Stats")
 local frameCount,lastFpsTime,lastFps,lastPing=0,tick(),60,nil
 local function refreshInfoLabel()
@@ -3936,19 +3963,13 @@ do
 		bbGui.Size = UDim2.new(0,130,0,52)
 		bbGui.StudsOffset = Vector3.new(0,3.5,0)
 		bbGui.AlwaysOnTop = true
-		-- Background card with rounded corners
-		local bbCard = Instance.new("Frame", bbGui)
-		bbCard.Size = UDim2.new(1,0,1,0); bbCard.BackgroundColor3 = Color3.fromRGB(0,0,0)
-		bbCard.BackgroundTransparency = 0.45; bbCard.BorderSizePixel = 0
-		Instance.new("UICorner", bbCard).CornerRadius = UDim.new(0, 10)
-		addGreyStroke(bbCard, 1)
 		-- "speed" label (above)
-		speedLbl = Instance.new("TextLabel", bbCard)
+		speedLbl = Instance.new("TextLabel", bbGui)
 		speedLbl.Size = UDim2.new(1,0,0,26)
 		speedLbl.Position = UDim2.new(0,0,0,0)
 		speedLbl.BackgroundTransparency = 1
 		speedLbl.Text = "Speed: 0"
-		speedLbl.TextColor3 = Color3.fromRGB(200, 200, 200)
+		speedLbl.TextColor3 = Color3.new(1,1,1)
 		speedLbl.TextScaled = false
 		speedLbl.TextSize = 19
 		speedLbl.Font = Enum.Font.GothamBlack
@@ -3956,12 +3977,12 @@ do
 		speedLbl.TextXAlignment = Enum.TextXAlignment.Center
 		addGreyShimmer(speedLbl)
 		-- READY!! / timer label (below)
-		timerLbl = Instance.new("TextLabel", bbCard)
+		timerLbl = Instance.new("TextLabel", bbGui)
 		timerLbl.Size = UDim2.new(1,0,0,28)
 		timerLbl.Position = UDim2.new(0,0,0,24)
 		timerLbl.BackgroundTransparency = 1
 		timerLbl.Text = "READY!!"
-		timerLbl.TextColor3 = Color3.fromRGB(200, 200, 200)
+		timerLbl.TextColor3 = Color3.new(1,1,1)
 		timerLbl.TextScaled = true
 		timerLbl.Font = Enum.Font.GothamBlack
 		timerLbl.TextStrokeTransparency = 1
@@ -3974,7 +3995,7 @@ do
 		if not timerLbl then createBB(); if not timerLbl then return end end
 		if not stunActive then
 			timerLbl.Text = "READY!!"
-			timerLbl.TextColor3 = C_MOON
+			timerLbl.TextColor3 = Color3.new(1,1,1)
 			return
 		end
 		local rem = math.max(0, STUN_DURATION-(tick()-stunStartTime))
@@ -3982,7 +4003,7 @@ do
 			stunActive = false
 			if stunConn then stunConn:Disconnect(); stunConn = nil end
 			timerLbl.Text = "READY!!"
-			timerLbl.TextColor3 = C_MOON
+			timerLbl.TextColor3 = Color3.new(1,1,1)
 			return
 		end
 		local sec = math.ceil(rem)
@@ -4708,7 +4729,7 @@ buildPage("Settings", function()
 	end
 
 	UIB.makeGap(4)
-	UIB.makeSectionLabel("Thème")
+	UIB.makeSectionLabel("Theme")
 	UIB.makeGap(2)
 	do
 		local thRow = Instance.new("Frame", currentPage)
@@ -4717,7 +4738,7 @@ buildPage("Settings", function()
 		thRow.LayoutOrder = LO(); addCorner(thRow,12); addLivingStroke(thRow,1)
 		local thLbl = Instance.new("TextLabel", thRow)
 		thLbl.Size = UDim2.new(0,80,1,0); thLbl.Position = UDim2.new(0,14,0,0)
-		thLbl.BackgroundTransparency = 1; thLbl.Text = "Couleurs"
+		thLbl.BackgroundTransparency = 1; thLbl.Text = "Colors"
 		thLbl.TextColor3 = C_WHITE; thLbl.Font = Enum.Font.GothamBold
 		thLbl.TextSize = 10; thLbl.TextXAlignment = Enum.TextXAlignment.Left
 		addLivingTextGradient(thLbl)
@@ -4725,14 +4746,14 @@ buildPage("Settings", function()
 		local defBtn = Instance.new("TextButton", thRow)
 		defBtn.Size = UDim2.new(0,BW,0,BH); defBtn.Position = UDim2.new(1,-(BW*2+14),0.5,-BH/2)
 		defBtn.BackgroundColor3 = C_MOON; defBtn.BackgroundTransparency = 0.1
-		defBtn.BorderSizePixel = 0; defBtn.Text = "Défaut"
+		defBtn.BorderSizePixel = 0; defBtn.Text = "Default"
 		defBtn.TextColor3 = Color3.fromRGB(0,10,20)
 		defBtn.Font = Enum.Font.GothamBold; defBtn.TextSize = 9
 		defBtn.AutoButtonColor = false; addCorner(defBtn,6); addLivingStroke(defBtn,1)
 		local noirBtn = Instance.new("TextButton", thRow)
 		noirBtn.Size = UDim2.new(0,BW,0,BH); noirBtn.Position = UDim2.new(1,-(BW+6),0.5,-BH/2)
 		noirBtn.BackgroundColor3 = C_OFF_BG; noirBtn.BackgroundTransparency = 0.3
-		noirBtn.BorderSizePixel = 0; noirBtn.Text = "Noir"
+		noirBtn.BorderSizePixel = 0; noirBtn.Text = "Dark"
 		noirBtn.TextColor3 = C_DIM
 		noirBtn.Font = Enum.Font.GothamBold; noirBtn.TextSize = 9
 		noirBtn.AutoButtonColor = false; addCorner(noirBtn,6)
