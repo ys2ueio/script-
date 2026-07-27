@@ -3854,7 +3854,7 @@ local function makeFloatButton(id)
 	end)
 
 	_floatBtns[id] = {frame = btn, setActive = setActive}
-	setActive(false)  -- always start OFF; periodic sync picks up real state after 0.3s
+	if def.isActive then setActive(def.isActive()) end
 	return _floatBtns[id]
 end
 
@@ -4418,7 +4418,21 @@ local function MH_load()
 			applyTheme(data.theme)
 		end
 
-		-- Toggles: intentionally not restored on load — all features start OFF each session.
+		-- Toggle rows: restore saved state (ON and OFF) including defaults-ON features.
+		if type(data.toggles) == "table" then
+			for key, on in pairs(data.toggles) do
+				local entry = _G._MH_allToggles and _G._MH_allToggles[key]
+				if entry then
+					if on then
+						if entry.onToggle then pcall(entry.onToggle, true) end
+						entry.set(true)
+					else
+						if entry.onToggle then pcall(entry.onToggle, false) end
+						entry.set(false)
+					end
+				end
+			end
+		end
 
 		if data.kb then
 			local kb = _G.MH_KB
