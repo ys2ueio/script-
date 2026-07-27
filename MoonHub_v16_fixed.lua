@@ -1,8 +1,7 @@
-if _G.MoonHub_Running then
-	warn("[Moon Hub v2] Already running - ignoring re-execution.")
-	return
-end
-_G.MoonHub_Running = true
+-- Opaque per-user namespace: looks like a Roblox internal key, consistent per user
+local _NS = "Rbx" .. tostring(game:GetService("Players").LocalPlayer.UserId % 99991)
+if _G[_NS] then return end   -- already running, silent exit
+_G[_NS] = true
 
 if not game:IsLoaded() then game.Loaded:Wait() end
 
@@ -307,22 +306,17 @@ end)
 -- DESTROY EXISTING
 -- ===================================================================
 local function destroyAllMoonHub()
-	pcall(function()
-		local pg = LP:FindFirstChildOfClass("PlayerGui")
-		if pg then for _, inst in ipairs(pg:GetChildren()) do if inst.Name=="MoonHub" then pcall(function() inst:Destroy() end) end end end
-	end)
-	pcall(function()
-		local cg = game:GetService("CoreGui")
-		for _, inst in ipairs(cg:GetChildren()) do if inst.Name=="MoonHub" then pcall(function() inst:Destroy() end) end end
-	end)
-	pcall(function()
-		if gethui then local hui=gethui(); if hui then for _,inst in ipairs(hui:GetChildren()) do if inst.Name=="MoonHub" then pcall(function() inst:Destroy() end) end end end end
-	end)
-	pcall(function()
-		for _, inst in ipairs(game:GetDescendants()) do
-			if inst.Name=="MoonHub" and inst:IsA("ScreenGui") then pcall(function() inst:Destroy() end) end
-		end
-	end)
+	local function sweep(container)
+		if not container then return end
+		pcall(function()
+			for _, inst in ipairs(container:GetChildren()) do
+				if inst.Name == _NS and inst:IsA("ScreenGui") then pcall(function() inst:Destroy() end) end
+			end
+		end)
+	end
+	sweep(LP:FindFirstChildOfClass("PlayerGui"))
+	sweep(game:GetService("CoreGui"))
+	pcall(function() if gethui then sweep(gethui()) end end)
 end
 destroyAllMoonHub()
 
@@ -338,7 +332,7 @@ local function ensureProxy()
 	if proxy and proxy.Parent == char then return proxy end
 	if proxy then pcall(function() proxy:Destroy() end) end
 	proxy = Instance.new("Part")
-	proxy.Name = "MoonProxy_"..tostring(math.random(1000,9999))
+	proxy.Name = _NS .. tostring(math.random(10,99))
 	proxy.Size = Vector3.new(1,1,1); proxy.Transparency = 1
 	proxy.CanCollide = false; proxy.Massless = true; proxy.Parent = char
 	local weld = Instance.new("Weld")
@@ -1532,16 +1526,23 @@ local _akLastSafe    = nil
 
 local function startAntiKick()
 	if _akActive then return end
-	-- 1. Block :Kick() via __namecall metatable hook
+	-- 1. Block :Kick() via __namecall — wrapped in newcclosure so it passes
+	--    isexecutorclosure() checks; checkcaller() guards against self-calls.
 	pcall(function()
 		local mt = getrawmetatable(LP); if not mt then return end
 		setreadonly(mt, false)
 		_akOldNamecall = mt.__namecall
-		mt.__namecall = function(self, ...)
-			local method = (getnamecallmethod and getnamecallmethod()) or ""
-			if self == LP and tostring(method):lower() == "kick" then return nil end
-			return _akOldNamecall(self, ...)
+		local _raw = _akOldNamecall
+		local _hookBody = function(self, ...)
+			-- only intercept calls coming from game scripts, not from our own code
+			local fromGame = not (checkcaller and checkcaller())
+			if fromGame then
+				local method = tostring(getnamecallmethod and getnamecallmethod() or ""):lower()
+				if self == LP and method == "kick" then return nil end
+			end
+			return _raw(self, ...)
 		end
+		mt.__namecall = (newcclosure and newcclosure(_hookBody)) or _hookBody
 		setreadonly(mt, true)
 		_akMt = mt
 	end)
@@ -1596,7 +1597,7 @@ task.spawn(function() pcall(startAntiKick) end)
 local _MH_buildUI
 _MH_buildUI = function()
 local gui = Instance.new("ScreenGui")
-gui.Name = "MoonHub"; gui.ResetOnSpawn = false; gui.DisplayOrder = 10
+gui.Name = _NS; gui.ResetOnSpawn = false; gui.DisplayOrder = 10
 gui.IgnoreGuiInset = true; gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 table.insert(_themeAllGuis, gui)
 pcall(function()
@@ -2565,7 +2566,7 @@ local function mbl_safeStart(char)
 	mbl_cleanup()
 	-- AlignOrientation applies a torque to reach the desired angle — never overrides position
 	local att = Instance.new("Attachment")
-	att.Name = "MeleeAlignAtt"; att.Parent = root
+	att.Name = "RootAttachment"; att.Parent = root
 	local ao = Instance.new("AlignOrientation")
 	ao.Mode = Enum.OrientationAlignmentMode.OneAttachment
 	ao.Attachment0 = att
@@ -4131,7 +4132,7 @@ do
 			end
 			local head = char:WaitForChild("Head", 5); if not head then return end
 			local bb = Instance.new("BillboardGui", head)
-			bb.Name = "MoonSpeedBB"; bb.Size = UDim2.new(0,110,0,22)
+			bb.Name = _NS .. "_v"; bb.Size = UDim2.new(0,110,0,22)
 			bb.StudsOffset = Vector3.new(0,2.2,0); bb.AlwaysOnTop = true
 			local lbl = Instance.new("TextLabel", bb)
 			lbl.Size = UDim2.new(1,0,1,0); lbl.BackgroundTransparency = 1
@@ -4188,7 +4189,7 @@ end
 local HS      = game:GetService("HttpService")
 local MH_FILE = "rbxdata_mhv3x_" .. tostring(LP.UserId) .. ".json"
 local _saveDebounce = false
-print("[MoonHub] Save file for "..LP.Name.." (UserId "..tostring(LP.UserId).."): "..MH_FILE)
+print("[H] Save file for "..LP.Name.." (UserId "..tostring(LP.UserId).."): "..MH_FILE)
 
 local function ks(e)
 	return {
@@ -4281,12 +4282,12 @@ local function MH_save()
 			}
 			if writefile then
 				writefile(MH_FILE, HS:JSONEncode(data))
-				print("[MoonHub] Config saved → "..MH_FILE)
+				print("[H] Config saved → "..MH_FILE)
 			else
-				warn("[MoonHub] writefile unavailable — executor does not support saving")
+				warn("[H] writefile unavailable — executor does not support saving")
 			end
 		end)
-		if not ok then warn("[MoonHub] MH_save error — missing modules?") end
+		if not ok then warn("[H] MH_save error — missing modules?") end
 		_saveDebounce = false
 	end)
 end
@@ -4295,23 +4296,23 @@ _G._MH_autoSave = MH_save
 -- Loading: pushes values straight into State, the widgets, AND restarts active modules
 local function MH_load()
 	local ok, data = pcall(function()
-		if type(readfile) ~= "function" then warn("[MoonHub] readfile missing on this executor"); return nil end
-		if type(isfile) ~= "function" then warn("[MoonHub] isfile missing on this executor"); return nil end
+		if type(readfile) ~= "function" then warn("[H] readfile missing on this executor"); return nil end
+		if type(isfile) ~= "function" then warn("[H] isfile missing on this executor"); return nil end
 		local fileExists = false
 		local fOk, fErr = pcall(function() fileExists = isfile(MH_FILE) end)
-		if not fOk then warn("[MoonHub] isfile raised an error: "..tostring(fErr)); return nil end
+		if not fOk then warn("[H] isfile raised an error: "..tostring(fErr)); return nil end
 		if not fileExists then return nil end
 		local rOk, rContent = pcall(function() return readfile(MH_FILE) end)
-		if not rOk then warn("[MoonHub] readfile raised an error: "..tostring(rContent)); return nil end
+		if not rOk then warn("[H] readfile raised an error: "..tostring(rContent)); return nil end
 		local dOk, decoded = pcall(function() return HS:JSONDecode(rContent) end)
-		if not dOk then warn("[MoonHub] JSONDecode failed: "..tostring(decoded)); return nil end
+		if not dOk then warn("[H] JSONDecode failed: "..tostring(decoded)); return nil end
 		return decoded
 	end)
 	if not ok or not data then
-		print("[MoonHub] No config found for "..LP.Name.." ("..MH_FILE..") — using defaults")
+		print("[H] No config found for "..LP.Name.." ("..MH_FILE..") — using defaults")
 		return false
 	end
-	print("[MoonHub] Config loaded for "..LP.Name.." ← "..MH_FILE)
+	print("[H] Config loaded for "..LP.Name.." ← "..MH_FILE)
 
 	local loadOk = pcall(function()
 		if data.normalSpeed then State.normalSpeed=data.normalSpeed
@@ -4409,7 +4410,7 @@ local function MH_load()
 			lockTitleBtn.Text = "🔒"; lockTitleBtn.TextColor3 = C_RED
 		end
 	end)
-	if not loadOk then warn("[MoonHub] MH_load failed partway through — check referenced modules") end
+	if not loadOk then warn("[H] MH_load failed partway through — check referenced modules") end
 
 	-- Defer one frame so any float buttons spawned by toggle restore are fully
 	-- registered before we re-apply their active color against the loaded theme.
@@ -5647,7 +5648,7 @@ selectTab("Combat")
 if not _configLoaded and AutoSteal.Enabled then
 	task.spawn(startAutoSteal)
 end
-print("[Moon Hub v2] Loaded.")
+print("[Hub] OK")
 
 -- Auto-save every 10s
 task.spawn(function()
