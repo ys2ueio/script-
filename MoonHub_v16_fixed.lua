@@ -1523,6 +1523,10 @@ local _akMt          = nil
 local _akPosConn     = nil
 local _akDeathConn   = nil
 local _akLastSafe    = nil
+local _akRemoteConns = {}   -- connections from blockRemoteKicks
+local _akCharOldNI   = nil  -- saved __newindex for blockCharacterDestruction restore
+local _akCharMtRef   = nil  -- character metatable ref
+local _akLoopActive  = false -- controls workspace/maxHealth while loops
 
 local function startAntiKick()
 	if _akActive then return end
@@ -1557,13 +1561,14 @@ local function startAntiKick()
 			end
 		end)
 	end
-	-- 3. Position safety (anti-teleport >150 studs while not moving)
+	-- 3. Position safety (anti-teleport >150 studs while not moving) + velocity clamp
 	_akLastSafe = char0 and char0:FindFirstChild("HumanoidRootPart") and char0.HumanoidRootPart.CFrame
 	if _akPosConn then pcall(function() _akPosConn:Disconnect() end) end
 	_akPosConn = RunService.Heartbeat:Connect(function()
-		local c2   = LP.Character;                     if not c2   then return end
-		local r2   = c2:FindFirstChild("HumanoidRootPart"); if not r2   then return end
-		local h2   = c2:FindFirstChildOfClass("Humanoid"); if not h2   then return end
+		local c2   = LP.Character;                          if not c2 then return end
+		local r2   = c2:FindFirstChild("HumanoidRootPart"); if not r2 then return end
+		local h2   = c2:FindFirstChildOfClass("Humanoid");  if not h2 then return end
+		-- position lock
 		if _akLastSafe then
 			local dist = (r2.Position - _akLastSafe.Position).Magnitude
 			if dist > 150 and h2.MoveDirection.Magnitude < 0.1 then
@@ -1574,14 +1579,91 @@ local function startAntiKick()
 		if (r2.Position - ref).Magnitude < 30 then
 			_akLastSafe = r2.CFrame
 		end
+		-- velocity clamp: extreme fall speed → soften; extreme horizontal without input → brake
+		local vel = r2.AssemblyLinearVelocity
+		if vel.Y < -150 then
+			r2.AssemblyLinearVelocity = Vector3.new(vel.X, -50, vel.Z)
+			h2.Health = h2.MaxHealth
+		elseif vel.Magnitude > 300 and h2.MoveDirection.Magnitude < 0.1 then
+			r2.AssemblyLinearVelocity = Vector3.new(0, vel.Y, 0)
+		end
+		-- fall damage prevention: restore health if falling hard
+		if vel.Y < -50 then h2.Health = h2.MaxHealth end
+	end)
+	-- 4. Block OnClientEvent on suspicious-named RemoteEvents in ReplicatedStorage
+	pcall(function()
+		local RS = game:GetService("ReplicatedStorage")
+		local function hookRemote(obj)
+			if not (obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction")) then return end
+			local n = obj.Name:lower()
+			if n:find("kick") or n:find("ban") or n:find("remove") or n:find("disconnect") then
+				pcall(function()
+					if obj:IsA("RemoteEvent") then
+						local c = obj.OnClientEvent:Connect(function() return nil end)
+						_akRemoteConns[#_akRemoteConns+1] = c
+					end
+				end)
+			end
+		end
+		for _, d in ipairs(RS:GetDescendants()) do hookRemote(d) end
+		local c = RS.DescendantAdded:Connect(function(d) pcall(hookRemote, d) end)
+		_akRemoteConns[#_akRemoteConns+1] = c
+	end)
+	-- 5. Block character:Destroy() / Parent = nil via __newindex on character metatable
+	pcall(function()
+		local char5 = LP.Character; if not char5 then return end
+		local cm = getrawmetatable(char5); if not cm then return end
+		setreadonly(cm, false)
+		_akCharOldNI = cm.__newindex
+		local _oldNI = _akCharOldNI
+		cm.__newindex = function(self, key, value)
+			if key == "Parent" and value == nil then return nil end
+			if _oldNI then return _oldNI(self, key, value) end
+			rawset(self, key, value)
+		end
+		setreadonly(cm, true)
+		_akCharMtRef = cm
+	end)
+	-- 6. Workspace monitor + MaxHealth lock — run as cooperative loops
+	_akLoopActive = true
+	task.spawn(function()
+		while _akLoopActive do
+			pcall(function()
+				local c3 = LP.Character; if not c3 then return end
+				if c3.Parent ~= workspace then c3.Parent = workspace end
+				local h3 = c3:FindFirstChildOfClass("Humanoid")
+				if h3 then
+					if h3.MaxHealth ~= 100 then h3.MaxHealth = 100 end
+					if h3.Health <= 0    then h3.Health = h3.MaxHealth end
+				else
+					local nh = Instance.new("Humanoid")
+					nh.Parent = c3
+				end
+			end)
+			task.wait(0.5)
+		end
 	end)
 	_akActive = true
 end
 
 local function stopAntiKick()
 	if not _akActive then return end
+	_akLoopActive = false
 	if _akPosConn   then pcall(function() _akPosConn:Disconnect() end);   _akPosConn   = nil end
 	if _akDeathConn then pcall(function() _akDeathConn:Disconnect() end); _akDeathConn = nil end
+	-- disconnect remote event intercepts
+	for _, c in ipairs(_akRemoteConns) do pcall(function() c:Disconnect() end) end
+	_akRemoteConns = {}
+	-- restore character __newindex
+	if _akCharMtRef and _akCharOldNI ~= nil then
+		pcall(function()
+			setreadonly(_akCharMtRef, false)
+			_akCharMtRef.__newindex = _akCharOldNI
+			setreadonly(_akCharMtRef, true)
+		end)
+		_akCharOldNI = nil; _akCharMtRef = nil
+	end
+	-- restore __namecall
 	if _akMt and _akOldNamecall then
 		pcall(function()
 			setreadonly(_akMt, false)
