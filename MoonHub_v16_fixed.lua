@@ -43,6 +43,11 @@ local C_SILVER  = Color3.fromRGB(210,222,240)
 local C_SILVER2 = Color3.fromRGB(140,165,210)
 local C_RED     = Color3.fromRGB(220,60,60)
 local C_GREEN   = Color3.fromRGB(60,220,120)
+-- Living gradient palette (updated by applyTheme so new buttons always use theme colors)
+local C_DEEP1 = Color3.fromRGB(4,7,16)
+local C_DEEP2 = Color3.fromRGB(14,28,58)
+local C_DEEP3 = Color3.fromRGB(40,80,165)
+local C_DEEP4 = Color3.fromRGB(90,150,255)
 
 -- ===================================================================
 -- THEME SYSTEM (Défaut = bleu, Noir = monochrome)
@@ -193,11 +198,6 @@ end
 -- ===================================================================
 -- LIVING GRADIENTS
 -- ===================================================================
-local C_DEEP1 = Color3.fromRGB(4,7,16)
-local C_DEEP2 = Color3.fromRGB(14,28,58)
-local C_DEEP3 = Color3.fromRGB(40,80,165)
-local C_DEEP4 = Color3.fromRGB(90,150,255)
-
 local _livingGradients = {}
 local _livingStrokes   = {}
 
