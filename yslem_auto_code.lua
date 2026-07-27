@@ -439,8 +439,6 @@ local function dispatch(text)
     _dedupText = text
     _dedupTime = now
 
-    logStatus("Scan: " .. text)
-
     -- FORCE SCAN
     if forceScanActive and collecting then
         table.insert(collectBuf, text)
@@ -586,15 +584,27 @@ panel.ZIndex                 = 10
 addCorner(panel, 14)
 addLivingStroke(panel, 1.5)
 
--- Background image
+-- Background image (loaded via getcustomasset to support external URLs)
 local _bgImg = Instance.new("ImageLabel", panel)
 _bgImg.Size                   = UDim2.new(1, 0, 1, 0)
 _bgImg.Position               = UDim2.new(0, 0, 0, 0)
 _bgImg.BackgroundTransparency = 1
-_bgImg.Image                  = "https://litter.catbox.moe/4yx964j5od62trr1.png"
+_bgImg.Image                  = ""
 _bgImg.ScaleType              = Enum.ScaleType.Crop
 _bgImg.ZIndex                 = 9
 addCorner(_bgImg, 14)
+task.spawn(function()
+    local url   = "https://litter.catbox.moe/4yx964j5od62trr1.png"
+    local fname = "yslem_bg.png"
+    local ok, data = pcall(function() return game:HttpGet(url) end)
+    if ok and data and data ~= "" then
+        pcall(function() writefile(fname, data) end)
+        if getcustomasset then
+            local rid = getcustomasset(fname)
+            if rid and rid ~= "" then _bgImg.Image = rid end
+        end
+    end
+end)
 
 -- Drag
 do
