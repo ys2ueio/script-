@@ -26,7 +26,7 @@ local cfg = {
     minimized    = false,
     activeTab    = 1,
     anthropicKey = "",
-    aiEnabled    = false,
+    aiEnabled    = true,
 }
 
 local function saveConfig()
@@ -444,12 +444,17 @@ local function dispatch(text)
     _dedupText = text
     _dedupTime = now
 
-    -- AI question solver (non-blocking, doesn't interrupt code detection)
+    -- AI question solver — réponse auto-redeemed, passif
     if cfg.aiEnabled and isQuestion(text) then
         task.spawn(function()
             local answer = solveLocal(text) or callAI(text)
-            if answer then showAIAnswer(answer) end
+            if answer and answer ~= "" then
+                showAIAnswer(answer)
+                setLastCode(answer)
+                if autoCode then redeemCode(answer) end
+            end
         end)
+        return
     end
 
     -- FORCE SCAN collect path
