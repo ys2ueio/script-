@@ -14,7 +14,7 @@ local CFG_PATH = "yslem_autocode_cfg.json"
 local cfg = {
     autoCode     = true,
     redeemDelay  = 3,       -- secondes d'attente après dernier texte avant auto-redeem
-    captureCount = 0,       -- 0 = mode timer, N = collecter exactement N parties
+    captureCount = 4,       -- 0 = mode timer, N = collecter exactement N parties
     keywords     = { "code is","","","","","","","","","" },
     replaceRules = {
         {kw="admin war", rep="jandel"},
@@ -104,7 +104,7 @@ end)
 -- ===================================================================
 local MAX_KW       = 10
 local autoCode     = cfg.autoCode == true
-local captureCount = cfg.captureCount or 0
+local captureCount = cfg.captureCount or 4
 local redeemDelay  = cfg.redeemDelay or 3
 
 local filterKeywords = {}
@@ -210,11 +210,6 @@ local commonWords = {
     "was","one","our","out","day","get","has","him","his","how","man",
     "new","now","old","see","two","way","who","boy","did","its","let",
     "put","say","she","too","use",
-}
-
-local BAD_GUI = {
-    "backpack","inventory","chatmain","bubblechat","overhead",
-    "nametag","leaderboard","hudgui","chat","playerchat",
 }
 
 local function isBlacklisted(text)
@@ -455,30 +450,33 @@ local function dispatch(text)
         return
     end
 
-    -- captureCount > 0: mode N parties
+    -- captureCount > 0: mode N parties (comme auto_code_typer)
     if captureCount > 0 then
         if collecting then
+            -- Un nouveau keyword reset la collecte
             if matchesKeyword(text) then
                 collectBuf = {}; collectRemain = captureCount
+                logStatus("Keyword reset → collect " .. captureCount)
                 setScanState("COLLECTING " .. captureCount)
                 return
             end
             local rep = applyReplace(text)
-            table.insert(collectBuf, rep ~= nil and rep or text)
+            local part = rep ~= nil and rep or text
+            table.insert(collectBuf, part)
             collectRemain = collectRemain - 1
             setScanState("COLLECTING " .. collectRemain)
+            logStatus("Part " .. (#collectBuf) .. ": " .. part)
             if collectRemain <= 0 then
                 local result = table.concat(collectBuf)
                 if result ~= "" then
                     logStatus("Code → " .. result)
-                    setLastCode(result)
-                    if autoCode then appendToBox(result) end
+                    addPending(result)
                 end
                 collecting = false; collectBuf = {}; collectRemain = 0
-                setScanState("SCANNING")
             end
         else
             if matchesKeyword(text) then
+                logStatus("Keyword: " .. text)
                 collecting = true; collectBuf = {}; collectRemain = captureCount
                 setScanState("COLLECTING " .. captureCount)
             end
@@ -1229,12 +1227,6 @@ local seen = {}
 local function watchObject(obj)
     if seen[obj] then return end
     if isOwnedByUs(obj) then return end
-    -- Skip BAD_GUI containers (chat, HUD, overhead names, etc.)
-    local _n  = (obj.Name or ""):lower()
-    local _pn = ((obj.Parent and obj.Parent.Name) or ""):lower()
-    for _, b in ipairs(BAD_GUI) do
-        if _n:find(b, 1, true) or _pn:find(b, 1, true) then return end
-    end
     seen[obj] = true
     if obj:IsA("TextLabel") or obj:IsA("TextButton") or obj:IsA("TextBox") then
         obj:GetPropertyChangedSignal("Text"):Connect(function()
@@ -1282,10 +1274,18 @@ local function hookMetatable()
     return true
 end
 
--- 1. PlayerGui
-local function hookPlayerGui()
-    for _, child in ipairs(PlayerGui:GetChildren()) do task.spawn(watchObject, child) end
-    PlayerGui.ChildAdded:Connect(function(child) task.spawn(watchObject, child) end)
+-- 1. TopNotification container (exact same approach as auto_code_typer)
+local function hookContainers()
+    local names = { "TopNotification" }
+    for _, name in ipairs(names) do
+        local c = PlayerGui:FindFirstChild(name)
+        if c then task.spawn(watchObject, c) end
+    end
+    PlayerGui.ChildAdded:Connect(function(child)
+        for _, name in ipairs(names) do
+            if child.Name == name then task.spawn(watchObject, child) end
+        end
+    end)
 end
 
 -- 2. CoreGui
@@ -1451,8 +1451,8 @@ end
 
 -- Activate hooks
 local _mtHooked = hookMetatable()
+hookContainers()      -- TopNotification toujours (comme auto_code_typer)
 if not _mtHooked then
-    hookPlayerGui()
     hookCoreGui()
     hookWorkspaceGuis()
 end
