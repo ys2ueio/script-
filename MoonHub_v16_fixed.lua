@@ -92,6 +92,7 @@ local function applyTheme(newName)
 	C_ON_BG   = new.on_bg; C_BORDER  = new.border
 	C_SILVER  = new.silver; C_SILVER2 = new.silver2
 	C_DIM     = new.dim;   C_TABIDLE = new.moon2
+	C_DEEP3   = new.d3;    C_DEEP4   = new.d4
 	for _, guiRoot in ipairs(_themeAllGuis) do
 		pcall(function()
 			for _, inst in ipairs(guiRoot:GetDescendants()) do
@@ -145,6 +146,8 @@ local function applyTheme(newName)
 	-- steal status label gradient: swap ready color on theme change
 	if _G._MH_stealReadyColorFn then pcall(_G._MH_stealReadyColorFn) end
 	if _G_updateThemeUI then _G_updateThemeUI(newName) end
+	-- re-color existing float buttons so active-state uses the new C_ON_BG
+	if _G._MH_refreshFloatActiveColors then pcall(_G._MH_refreshFloatActiveColors) end
 end
 
 -- ===================================================================
@@ -3828,6 +3831,22 @@ task.spawn(function()
 	end
 end)
 
+-- Force-refresh all float button background colors against current C_ON_BG.
+-- Called by applyTheme and at end of MH_load so theme switches / load order
+-- can never leave buttons in the wrong color.
+_G._MH_refreshFloatActiveColors = function()
+	for id, entry in pairs(_floatBtns) do
+		local def = _floatDefs[id]
+		if def and entry.frame and entry.frame.Parent then
+			if def.isActive and not def.momentary then
+				entry.setActive(def.isActive())
+			else
+				entry.setActive(false)
+			end
+		end
+	end
+end
+
 -- ── Action registration ──────────────────────────────────────
 _floatDefs.antibat = {
 	label = "ANTIBAT\nAIMBOT",
@@ -4349,6 +4368,12 @@ local function MH_load()
 		end
 	end)
 	if not loadOk then warn("[MoonHub] MH_load failed partway through — check referenced modules") end
+
+	-- Defer one frame so any float buttons spawned by toggle restore are fully
+	-- registered before we re-apply their active color against the loaded theme.
+	task.defer(function()
+		if _G._MH_refreshFloatActiveColors then _G._MH_refreshFloatActiveColors() end
+	end)
 
 	return true
 end
