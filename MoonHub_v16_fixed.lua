@@ -4308,6 +4308,13 @@ local function MH_load()
 			end
 		end
 
+		-- Theme must be applied BEFORE toggle restore: TweenService captures C_ON_BG
+		-- by value at Create() time, so restoring toggles before applyTheme would
+		-- bake the default-blue into all pill tweens even in noir mode.
+		if data.theme == "default" or data.theme == "noir" then
+			applyTheme(data.theme)
+		end
+
 		-- Toggle rows: restore saved state (ON and OFF) including defaults-ON features.
 		if type(data.toggles) == "table" then
 			for key, on in pairs(data.toggles) do
@@ -4322,9 +4329,6 @@ local function MH_load()
 					end
 				end
 			end
-		end
-		if data.theme == "default" or data.theme == "noir" then
-			applyTheme(data.theme)
 		end
 
 		if data.kb then
