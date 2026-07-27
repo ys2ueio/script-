@@ -2533,9 +2533,10 @@ local function _sStopAutoTPDown()
 end
 
 -- ===================================================================
--- MELEE BODY LOCK (Vanish Body Lock: rotation lock, faces away from nearest target)
+-- MELEE BODY LOCK (AlignOrientation: torque-based rotation, no CFrame override = no death)
 -- ===================================================================
-local MeleeBodyLock = {active=false, conn=nil, charConn=nil}
+local MeleeBodyLock = {active=false, conn=nil, charConn=nil, ao=nil, att=nil}
+
 local function mbl_nearest(root)
 	local best, bestD = nil, math.huge
 	for _, p in ipairs(Players:GetPlayers()) do
@@ -2550,11 +2551,30 @@ local function mbl_nearest(root)
 	end
 	return best
 end
+
+local function mbl_cleanup()
+	if MeleeBodyLock.ao  then pcall(function() MeleeBodyLock.ao:Destroy()  end); MeleeBodyLock.ao  = nil end
+	if MeleeBodyLock.att then pcall(function() MeleeBodyLock.att:Destroy() end); MeleeBodyLock.att = nil end
+end
+
 local function mbl_safeStart(char)
 	char = char or LP.Character; if not char then return end
+	local root = char:FindFirstChild("HumanoidRootPart"); if not root then return end
 	local hum0 = char:FindFirstChildOfClass("Humanoid")
 	if hum0 then hum0.AutoRotate = false end
+	mbl_cleanup()
+	-- AlignOrientation applies a torque to reach the desired angle — never overrides position
+	local att = Instance.new("Attachment")
+	att.Name = "MeleeAlignAtt"; att.Parent = root
+	local ao = Instance.new("AlignOrientation")
+	ao.Mode = Enum.OrientationAlignmentMode.OneAttachment
+	ao.Attachment0 = att
+	ao.RigidityEnabled = true
+	ao.Parent = root
+	MeleeBodyLock.ao  = ao
+	MeleeBodyLock.att = att
 end
+
 function MeleeBodyLock.start()
 	if MeleeBodyLock.conn then MeleeBodyLock.conn:Disconnect() end
 	MeleeBodyLock.active = true
@@ -2568,34 +2588,37 @@ function MeleeBodyLock.start()
 		if not MeleeBodyLock.active then return end
 		local char = LP.Character; if not char then return end
 		local root = char:FindFirstChild("HumanoidRootPart"); if not root then return end
-		local hum = char:FindFirstChildOfClass("Humanoid"); if not hum then return end
-		local st = hum:GetState()
-		if st == Enum.HumanoidStateType.Physics
-		or st == Enum.HumanoidStateType.Ragdoll
+		local hum  = char:FindFirstChildOfClass("Humanoid");  if not hum  then return end
+		local st   = hum:GetState()
+		if st == Enum.HumanoidStateType.Ragdoll
 		or st == Enum.HumanoidStateType.FallingDown
 		or hum.PlatformStand then _smoothAngle = nil; return end
+		-- Re-create constraint if character respawned or constraint was destroyed
+		local ao = MeleeBodyLock.ao
+		if not ao or not ao.Parent then mbl_safeStart(char); ao = MeleeBodyLock.ao end
+		if not ao then return end
 		local targetRoot = mbl_nearest(root); if not targetRoot then return end
 		local myPos = root.Position
 		local dir = Vector3.new(targetRoot.Position.X - myPos.X, 0, targetRoot.Position.Z - myPos.Z)
 		if dir.Magnitude < 0.5 then return end
+		-- Face AWAY from target (melee back-turn)
 		local targetAngle = math.atan2(dir.X, dir.Z) + math.pi
 		if _smoothAngle == nil then _smoothAngle = targetAngle end
-		-- Lerp angle via shortest arc
 		local diff = ((targetAngle - _smoothAngle + math.pi) % (2*math.pi)) - math.pi
 		_smoothAngle = _smoothAngle + diff * 0.25
-		-- Preserve velocity so CFrame override doesn't disrupt physics
-		local vel = root.AssemblyLinearVelocity
-		root.CFrame = CFrame.new(myPos) * CFrame.Angles(0, _smoothAngle, 0)
-		root.AssemblyLinearVelocity = vel
+		-- Apply desired orientation via AlignOrientation (world-space CFrame)
+		ao.CFrame = CFrame.Angles(0, _smoothAngle, 0)
 		hum.AutoRotate = false
 	end)
 end
+
 function MeleeBodyLock.stop()
-	if MeleeBodyLock.conn then MeleeBodyLock.conn:Disconnect(); MeleeBodyLock.conn = nil end
+	if MeleeBodyLock.conn    then MeleeBodyLock.conn:Disconnect();    MeleeBodyLock.conn    = nil end
 	if MeleeBodyLock.charConn then MeleeBodyLock.charConn:Disconnect(); MeleeBodyLock.charConn = nil end
 	MeleeBodyLock.active = false
+	mbl_cleanup()
 	local char = LP.Character
-	local hum = char and char:FindFirstChildOfClass("Humanoid")
+	local hum  = char and char:FindFirstChildOfClass("Humanoid")
 	if hum then hum.AutoRotate = true end
 end
 
