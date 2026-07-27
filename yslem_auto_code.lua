@@ -691,12 +691,23 @@ local MINI_H    = TITLE_H
 local panel = Instance.new("Frame", gui)
 panel.Size             = UDim2.new(0, PANEL_W, 0, FULL_H)
 panel.Position         = UDim2.new(0, cfg.posX, 0, cfg.posY)
-panel.BackgroundColor3 = C_BG
+panel.BackgroundColor3       = C_BG
+panel.BackgroundTransparency = 1
 panel.BorderSizePixel  = 0
 panel.Active           = true
 panel.ZIndex           = 10
 addCorner(panel, 14)
 addLivingStroke(panel, 1.5)
+
+-- Background image
+local _bgImg = Instance.new("ImageLabel", panel)
+_bgImg.Size                   = UDim2.new(1, 0, 1, 0)
+_bgImg.Position               = UDim2.new(0, 0, 0, 0)
+_bgImg.BackgroundTransparency = 1
+_bgImg.Image                  = "https://litter.catbox.moe/bdz0ow2djcz6t1cy.png"
+_bgImg.ScaleType              = Enum.ScaleType.Crop
+_bgImg.ZIndex                 = 9
+addCorner(_bgImg, 14)
 
 -- Drag
 do
