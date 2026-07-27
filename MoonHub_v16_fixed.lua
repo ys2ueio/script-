@@ -171,6 +171,31 @@ local function applyTheme(newName)
 			end
 		end
 	end
+	-- stun timer billboard (local player) lives in Workspace, update manually
+	for _, lbl in ipairs({_G._MH_speedLblRef, _G._MH_timerLblRef}) do
+		if lbl and lbl.Parent then
+			local g = lbl:FindFirstChildOfClass("UIGradient")
+			if g then
+				if newName == "noir" then
+					g.Color = ColorSequence.new({
+						ColorSequenceKeypoint.new(0,    Color3.fromRGB(60,  60,  60)),
+						ColorSequenceKeypoint.new(0.25, Color3.fromRGB(230, 230, 230)),
+						ColorSequenceKeypoint.new(0.5,  Color3.fromRGB(140, 140, 140)),
+						ColorSequenceKeypoint.new(0.75, Color3.fromRGB(255, 255, 255)),
+						ColorSequenceKeypoint.new(1,    Color3.fromRGB(60,  60,  60)),
+					})
+				else
+					g.Color = ColorSequence.new({
+						ColorSequenceKeypoint.new(0,    C_DEEP3),
+						ColorSequenceKeypoint.new(0.25, C_DEEP4),
+						ColorSequenceKeypoint.new(0.5,  C_DEEP3),
+						ColorSequenceKeypoint.new(0.75, C_DEEP4),
+						ColorSequenceKeypoint.new(1,    C_DEEP3),
+					})
+				end
+			end
+		end
+	end
 end
 
 -- ===================================================================
@@ -3829,7 +3854,7 @@ local function makeFloatButton(id)
 	end)
 
 	_floatBtns[id] = {frame = btn, setActive = setActive}
-	if def.isActive then setActive(def.isActive()) end
+	setActive(false)  -- always start OFF; periodic sync picks up real state after 0.3s
 	return _floatBtns[id]
 end
 
@@ -4393,21 +4418,7 @@ local function MH_load()
 			applyTheme(data.theme)
 		end
 
-		-- Toggle rows: restore saved state (ON and OFF) including defaults-ON features.
-		if type(data.toggles) == "table" then
-			for key, on in pairs(data.toggles) do
-				local entry = _G._MH_allToggles and _G._MH_allToggles[key]
-				if entry then
-					if on then
-						if entry.onToggle then pcall(entry.onToggle, true) end
-						entry.set(true)
-					else
-						if entry.onToggle then pcall(entry.onToggle, false) end
-						entry.set(false)
-					end
-				end
-			end
-		end
+		-- Toggles: intentionally not restored on load — all features start OFF each session.
 
 		if data.kb then
 			local kb = _G.MH_KB
