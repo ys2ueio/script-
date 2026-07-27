@@ -153,6 +153,25 @@ local function applyTheme(newName)
 	if _G_updateThemeUI then _G_updateThemeUI(newName) end
 	-- re-color existing float buttons so active-state uses the new C_ON_BG
 	if _G._MH_refreshFloatActiveColors then pcall(_G._MH_refreshFloatActiveColors) end
+	-- player speed billboards live in Workspace (not in _themeAllGuis), update manually
+	local psb = _G._MH_playerSpeedBBs
+	if type(psb) == "table" then
+		for _, data in pairs(psb) do
+			if data.lbl and data.lbl.Parent then
+				data.lbl.TextColor3 = C_MOON2
+				local g = data.lbl:FindFirstChildOfClass("UIGradient")
+				if g then
+					g.Color = ColorSequence.new({
+						ColorSequenceKeypoint.new(0,    C_DEEP4),
+						ColorSequenceKeypoint.new(0.25, C_DEEP3),
+						ColorSequenceKeypoint.new(0.5,  C_DEEP4),
+						ColorSequenceKeypoint.new(0.75, C_DEEP3),
+						ColorSequenceKeypoint.new(1,    C_DEEP4),
+					})
+				end
+			end
+		end
+	end
 end
 
 -- ===================================================================
