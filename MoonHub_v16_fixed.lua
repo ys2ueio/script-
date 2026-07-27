@@ -2366,7 +2366,7 @@ end
 -- ===================================================================
 -- MELEE BODY LOCK (Vanish Body Lock: rotation lock, faces away from nearest target)
 -- ===================================================================
-local MeleeBodyLock = {active=false, conn=nil}
+local MeleeBodyLock = {active=false, conn=nil, charConn=nil}
 local function mbl_nearest(root)
 	local best, bestD = nil, math.huge
 	for _, p in ipairs(Players:GetPlayers()) do
@@ -2381,16 +2381,31 @@ local function mbl_nearest(root)
 	end
 	return best
 end
+local function mbl_safeStart(char)
+	char = char or LP.Character; if not char then return end
+	local hum0 = char:FindFirstChildOfClass("Humanoid")
+	if hum0 then hum0.AutoRotate = false end
+end
 function MeleeBodyLock.start()
 	if MeleeBodyLock.conn then MeleeBodyLock.conn:Disconnect() end
 	MeleeBodyLock.active = true
-	local hum0 = LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
-	if hum0 then hum0.AutoRotate = false end
+	mbl_safeStart()
+	-- Restore AutoRotate on respawn then re-lock
+	if MeleeBodyLock.charConn then MeleeBodyLock.charConn:Disconnect() end
+	MeleeBodyLock.charConn = LP.CharacterAdded:Connect(function(c)
+		if MeleeBodyLock.active then task.wait(0.3); mbl_safeStart(c) end
+	end)
 	MeleeBodyLock.conn = RunService.Heartbeat:Connect(function()
 		if not MeleeBodyLock.active then return end
 		local char = LP.Character; if not char then return end
 		local root = char:FindFirstChild("HumanoidRootPart"); if not root then return end
 		local hum = char:FindFirstChildOfClass("Humanoid"); if not hum then return end
+		-- Don't override CFrame during physics/ragdoll — causes deaths
+		local st = hum:GetState()
+		if st == Enum.HumanoidStateType.Physics
+		or st == Enum.HumanoidStateType.Ragdoll
+		or st == Enum.HumanoidStateType.FallingDown
+		or hum.PlatformStand then return end
 		local targetRoot = mbl_nearest(root); if not targetRoot then return end
 		local myPos = root.Position
 		local targetPos = targetRoot.Position
@@ -2405,6 +2420,7 @@ function MeleeBodyLock.start()
 end
 function MeleeBodyLock.stop()
 	if MeleeBodyLock.conn then MeleeBodyLock.conn:Disconnect(); MeleeBodyLock.conn = nil end
+	if MeleeBodyLock.charConn then MeleeBodyLock.charConn:Disconnect(); MeleeBodyLock.charConn = nil end
 	MeleeBodyLock.active = false
 	local char = LP.Character
 	local hum = char and char:FindFirstChildOfClass("Humanoid")
@@ -2504,7 +2520,7 @@ local _floatPositions = {}   -- id -> {xs,xo,ys,yo}
 -- Bump this whenever the default layout changes: saved positions from an
 -- older version get discarded on load instead of restoring stale/overlapping
 -- coordinates, so everyone gets the current clean column layout by default.
-local _FLOAT_POS_VERSION = 13
+local _FLOAT_POS_VERSION = 14
 local _floatLocked    = false
 local FLOAT_SZ = 44
 local FLOAT_WIDE_H = 30  -- height of wide buttons (antibat, melee) — slimmer than grid buttons
@@ -3544,13 +3560,12 @@ local function makeFloatButton(id)
 			btn.Position = UDim2.new(0, 12, 0, 55)
 		end
 	elseif id == "melee" then
-		-- Wide standalone button, bottom of the block (mirrors antibat).
+		-- Wide standalone button, directly below antibat.
 		btn.Size = UDim2.new(0, blockW, 0, FLOAT_WIDE_H)
 		if saved then
 			btn.Position = UDim2.new(saved[1], saved[2], saved[3], saved[4])
 		else
-			local topOffset = 55 + FLOAT_WIDE_H + GAP
-			btn.Position = UDim2.new(0, 12, 0, topOffset + 4 * (FLOAT_SZ + GAP))
+			btn.Position = UDim2.new(0, 12, 0, 55 + FLOAT_WIDE_H + GAP)
 		end
 	else
 		btn.Size = UDim2.new(0, FLOAT_SZ, 0, FLOAT_SZ)
@@ -3782,7 +3797,7 @@ do
 		speedLbl.Position = UDim2.new(0,0,0,0)
 		speedLbl.BackgroundTransparency = 1
 		speedLbl.Text = "Speed: 0"
-		speedLbl.TextColor3 = Color3.fromRGB(255, 255, 255)
+		speedLbl.TextColor3 = C_MOON
 		speedLbl.TextScaled = false
 		speedLbl.TextSize = 19
 		speedLbl.Font = Enum.Font.GothamBlack
@@ -4276,8 +4291,7 @@ local function MH_resetBtnPos()
 			if id == "antibat" then
 				pos = UDim2.new(0, 12, 0, 55)
 			elseif id == "melee" then
-				local topOffset = 55 + FLOAT_WIDE_H + _GAP
-				pos = UDim2.new(0, 12, 0, topOffset + 4 * (FLOAT_SZ + _GAP))
+				pos = UDim2.new(0, 12, 0, 55 + FLOAT_WIDE_H + _GAP)
 			else
 				local idx = _floatGridIndex(id) - 1
 				local col = idx % 2
