@@ -45,15 +45,15 @@ loadConfig()
 -- ===================================================================
 -- COLOUR / STYLE
 -- ===================================================================
-local C_BG    = Color3.fromRGB(0, 0, 0)
-local C_ON    = Color3.fromRGB(30, 30, 30)
-local C_OFF   = Color3.fromRGB(0, 0, 0)
-local C_ROW   = Color3.fromRGB(14, 14, 14)
+local C_BG    = Color3.fromRGB(10, 0, 0)
+local C_ON    = Color3.fromRGB(140, 10, 10)
+local C_OFF   = Color3.fromRGB(10, 0, 0)
+local C_ROW   = Color3.fromRGB(28, 5, 5)
 local C_WHITE = Color3.fromRGB(255, 255, 255)
-local C_DIM   = Color3.fromRGB(130, 130, 130)
-local G1      = Color3.fromRGB(255, 255, 255)
-local G2      = Color3.fromRGB(140, 140, 140)
-local G3      = Color3.fromRGB(50, 50, 50)
+local C_DIM   = Color3.fromRGB(180, 80, 80)
+local G1      = Color3.fromRGB(255, 80, 80)
+local G2      = Color3.fromRGB(200, 20, 20)
+local G3      = Color3.fromRGB(70, 0, 0)
 
 local _livingGradients = {}
 local _livingStrokes   = {}
