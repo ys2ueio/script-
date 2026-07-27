@@ -2761,97 +2761,6 @@ local function _sStopAutoTPDown()
 end
 
 -- ===================================================================
--- MELEE BODY LOCK (AlignOrientation: torque-based rotation, no CFrame override = no death)
--- ===================================================================
-local MeleeBodyLock = {active=false, conn=nil, charConn=nil, ao=nil, att=nil}
-
-local function mbl_nearest(root)
-	local best, bestD = nil, math.huge
-	for _, p in ipairs(Players:GetPlayers()) do
-		if p ~= LP and p.Character then
-			local tr = p.Character:FindFirstChild("HumanoidRootPart")
-			local h  = p.Character:FindFirstChildOfClass("Humanoid")
-			if tr and h and h.Health > 0 then
-				local d = (tr.Position - root.Position).Magnitude
-				if d < bestD then bestD = d; best = tr end
-			end
-		end
-	end
-	return best
-end
-
-local function mbl_cleanup()
-	if MeleeBodyLock.ao  then pcall(function() MeleeBodyLock.ao:Destroy()  end); MeleeBodyLock.ao  = nil end
-	if MeleeBodyLock.att then pcall(function() MeleeBodyLock.att:Destroy() end); MeleeBodyLock.att = nil end
-end
-
-local function mbl_safeStart(char)
-	char = char or LP.Character; if not char then return end
-	local root = char:FindFirstChild("HumanoidRootPart"); if not root then return end
-	local hum0 = char:FindFirstChildOfClass("Humanoid")
-	if hum0 then hum0.AutoRotate = false end
-	mbl_cleanup()
-	-- AlignOrientation applies a torque to reach the desired angle — never overrides position
-	local att = Instance.new("Attachment")
-	att.Name = "RootAttachment"; att.Parent = root
-	local ao = Instance.new("AlignOrientation")
-	ao.Mode = Enum.OrientationAlignmentMode.OneAttachment
-	ao.Attachment0 = att
-	ao.RigidityEnabled = true
-	ao.Parent = root
-	MeleeBodyLock.ao  = ao
-	MeleeBodyLock.att = att
-end
-
-function MeleeBodyLock.start()
-	if MeleeBodyLock.conn then MeleeBodyLock.conn:Disconnect() end
-	MeleeBodyLock.active = true
-	mbl_safeStart()
-	if MeleeBodyLock.charConn then MeleeBodyLock.charConn:Disconnect() end
-	MeleeBodyLock.charConn = LP.CharacterAdded:Connect(function(c)
-		if MeleeBodyLock.active then task.wait(0.3); mbl_safeStart(c) end
-	end)
-	local _smoothAngle = nil
-	MeleeBodyLock.conn = RunService.Heartbeat:Connect(function()
-		if not MeleeBodyLock.active then return end
-		local char = LP.Character; if not char then return end
-		local root = char:FindFirstChild("HumanoidRootPart"); if not root then return end
-		local hum  = char:FindFirstChildOfClass("Humanoid");  if not hum  then return end
-		local st   = hum:GetState()
-		if st == Enum.HumanoidStateType.Ragdoll
-		or st == Enum.HumanoidStateType.FallingDown
-		or hum.PlatformStand then _smoothAngle = nil; return end
-		-- Re-create constraint if character respawned or constraint was destroyed
-		local ao = MeleeBodyLock.ao
-		if not ao or not ao.Parent then mbl_safeStart(char); ao = MeleeBodyLock.ao end
-		if not ao then return end
-		local targetRoot = mbl_nearest(root); if not targetRoot then return end
-		local myPos = root.Position
-		local dir = Vector3.new(targetRoot.Position.X - myPos.X, 0, targetRoot.Position.Z - myPos.Z)
-		if dir.Magnitude < 0.5 then return end
-		-- Face AWAY from target (melee back-turn)
-		local targetAngle = math.atan2(dir.X, dir.Z) + math.pi
-		if _smoothAngle == nil then _smoothAngle = targetAngle end
-		local diff = ((targetAngle - _smoothAngle + math.pi) % (2*math.pi)) - math.pi
-		_smoothAngle = _smoothAngle + diff * 0.25
-		-- Apply desired orientation via AlignOrientation (world-space CFrame)
-		ao.CFrame = CFrame.Angles(0, _smoothAngle, 0)
-		hum.AutoRotate = false
-	end)
-end
-
-function MeleeBodyLock.stop()
-	if MeleeBodyLock.conn    then MeleeBodyLock.conn:Disconnect();    MeleeBodyLock.conn    = nil end
-	if MeleeBodyLock.charConn then MeleeBodyLock.charConn:Disconnect(); MeleeBodyLock.charConn = nil end
-	MeleeBodyLock.active = false
-	mbl_cleanup()
-	local char = LP.Character
-	local hum  = char and char:FindFirstChildOfClass("Humanoid")
-	if hum then hum.AutoRotate = true end
-end
-
-
--- ===================================================================
 -- MOVEMENT LOGIC
 -- ===================================================================
 buildPage("Combat", function()
@@ -2946,7 +2855,7 @@ local _floatPositions = {}   -- id -> {xs,xo,ys,yo}
 local _FLOAT_POS_VERSION = 14
 local _floatLocked    = false
 local FLOAT_SZ = 44
-local FLOAT_WIDE_H = 30  -- height of wide buttons (antibat, melee) — slimmer than grid buttons
+local FLOAT_WIDE_H = 30  -- height of wide button (antibat) — slimmer than grid buttons
 
 -- Declared here (before buildPage Settings) so the Speed
 -- Bypass / Lagger toggles can reference the widgets built further
@@ -3998,14 +3907,6 @@ local function makeFloatButton(id)
 		else
 			btn.Position = UDim2.new(0, 12, 0, 55)
 		end
-	elseif id == "melee" then
-		-- Wide standalone button, directly below antibat.
-		btn.Size = UDim2.new(0, blockW, 0, FLOAT_WIDE_H)
-		if saved then
-			btn.Position = UDim2.new(saved[1], saved[2], saved[3], saved[4])
-		else
-			btn.Position = UDim2.new(0, 12, 0, 55 + FLOAT_WIDE_H + GAP)
-		end
 	else
 		btn.Size = UDim2.new(0, FLOAT_SZ, 0, FLOAT_SZ)
 		if saved then
@@ -4213,14 +4114,7 @@ _floatDefs.aimv2 = {
 	end,
 	isActive = function() return ABP.active end,
 }
-_floatDefs.melee = {
-	label = "MELEE",
-	onClick = function()
-		local on = not MeleeBodyLock.active
-		if on then MeleeBodyLock.start() else MeleeBodyLock.stop() end
-	end,
-	isActive = function() return MeleeBodyLock.active end,
-}
+
 _G._MH_makeFloatButton   = makeFloatButton
 _G._MH_removeFloatButton = removeFloatButton
 _G._MH_setFloatLocked    = setFloatLocked
@@ -4654,7 +4548,7 @@ buildPage("Buttons", function()
 		{id="antibat",     name="Anti Bat Aimbot"},
 		{id="aimbot",      name="Aim Bot"},
 		{id="aimv2",       name="Aim V2"},
-		{id="melee",       name="Melee"},
+
 		{id="dropbr",      name="Drop Brainrot"},
 		{id="autoleft",    name="Auto Left"},
 		{id="autoright",   name="Auto Right"},
@@ -4736,7 +4630,7 @@ local function MH_resetAll()
 	pcall(function() stopMedusaCounter() end)
 	pcall(function() stopAutoLeft()    end)
 	pcall(function() stopAutoRight()   end)
-	pcall(function() if MeleeBodyLock.active then MeleeBodyLock.stop() end end)
+
 	pcall(function() _sStopAutoTPDown() end)
 	State.normalSpeed=60; State.carrySpeed=30; State.laggerSpeed=15; State.laggerCarrySpeed=24.5
 	State.speedType="normal"; State.autoPlayMode="Full"
@@ -4771,8 +4665,6 @@ local function MH_resetBtnPos()
 			local pos
 			if id == "antibat" then
 				pos = UDim2.new(0, 12, 0, 55)
-			elseif id == "melee" then
-				pos = UDim2.new(0, 12, 0, 55 + FLOAT_WIDE_H + _GAP)
 			else
 				local idx = _floatGridIndex(id) - 1
 				local col = idx % 2
