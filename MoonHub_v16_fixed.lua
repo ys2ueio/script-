@@ -4034,6 +4034,15 @@ _floatDefs.aimv2 = {
 	end,
 	isActive = function() return ABP.active end,
 }
+_floatDefs.codedet = {
+	label    = "CODE\nDET",
+	onClick  = function()
+		if _G._MH_CD then
+			if _G._MH_CD.active then _G._MH_CD.stop() else _G._MH_CD.start() end
+		end
+	end,
+	isActive = function() return _G._MH_CD and _G._MH_CD.active or false end,
+}
 
 _G._MH_makeFloatButton   = makeFloatButton
 _G._MH_removeFloatButton = removeFloatButton
@@ -4320,6 +4329,7 @@ local function MH_save()
 					InstantReset  = ks(kb.InstantReset),
 					HideUI        = ks(kb.HideUI),
 				},
+				cdKey = _G._MH_CD and _G._MH_CD.key or nil,
 			}
 			if writefile then
 				writefile(MH_FILE, HS:JSONEncode(data))
@@ -4450,6 +4460,12 @@ local function MH_load()
 			setDragLock(true)
 			lockTitleBtn.Text = "🔒"; lockTitleBtn.TextColor3 = C_RED
 		end
+		if type(data.cdKey) == "string" and data.cdKey ~= "" and _G._MH_CD then
+			_G._MH_CD.key = data.cdKey
+			if _G._MH_CD._keyBox and _G._MH_CD._keyBox.Parent then
+				_G._MH_CD._keyBox.Text = data.cdKey
+			end
+		end
 	end)
 	if not loadOk then warn("[H] MH_load failed partway through — check referenced modules") end
 
@@ -4460,6 +4476,304 @@ local function MH_load()
 	end)
 
 	return true
+end
+
+-- ===================================================================
+-- CODE DETECTOR (auto-detect codes + question solver + Claude AI)
+-- ===================================================================
+do
+	local _CD = {
+		active   = false,
+		key      = "",
+		last     = "",
+		_seen    = {},
+		_focused = nil,
+		_watched = {},
+		_descConn = nil,
+		_rsConn   = nil,
+		_keyBox   = nil,
+	}
+	_G._MH_CD = _CD
+
+	-- ── Knowledge Base ───────────────────────────────────────────────
+	local KB_RARITY_ORDER  = "Common → Rare → Epic → Legendary → Mythic → Brainrot God → Secret → OG"
+	local KB_RAREST        = "Rico Dinero (1+), Lazy Ducky (4+), Spyder Elephant (~25), Arcadragon (~70), John Pork (~80)"
+	local KB_LAUNCH        = "May 15-16, 2025"
+	local KB_FIRST_SECRETS = "Los Tralaleritos, La Vacca Saturno Saturnita (Update 1, May 31 2025)"
+	local KB_MUTATIONS     = "Gold, Diamond (Update 1 May 31), Bloodmoon, Rainbow (June-July 2025)"
+	local KB_DAY1          = "Noobini Pizzanini, Tim Cheese, Trippi Troppi, Tung Tung Tung Sahur, Tralalero Tralala"
+
+	-- ── HUD noise filter ─────────────────────────────────────────────
+	local _HUD_PAT = {
+		"^%d+m%s*%d+s$","^%d+s$","^%d+m$","^%d+h$","^%d+h%s*%d+m$",
+		"^%d+:%d+$","^%d+:%d+:%d+$","^%d+x%s*time","^%d+x$","^x%d+$",
+		"^%d+$","%$%d","m%/s","^%d+%.%d+[bBmMkK]","^%+%d+","^%-%d+","^%d+%%%s*$",
+	}
+	local _HUD_WORDS = {
+		"time","score","level","wave","stage","round","kills","coins","gems",
+		"cash","exp","xp","speed","health","hp","energy","timer","countdown",
+		"seconds","minutes","rebirth","prestige","people","network","sent",
+	}
+	local function isHudNoise(txt)
+		local l = txt:lower():match("^%s*(.-)%s*$")
+		if #l == 0 then return true end
+		for _, p in ipairs(_HUD_PAT) do if l:find(p) then return true end end
+		local wc = 0; for _ in l:gmatch("%S+") do wc = wc+1 end
+		if wc <= 3 then
+			for _, w in ipairs(_HUD_WORDS) do if l:find(w,1,true) then return true end end
+		end
+		if l:match("^%d+[smhSMH]%.?$") then return true end
+		if l:match("^%d+[kKmMbBgGxX]$") then return true end
+		return false
+	end
+
+	-- ── Code extractor ────────────────────────────────────────────────
+	local function extractCode(txt)
+		if isHudNoise(txt) then return nil end
+		local codes = {}
+		for w in txt:gmatch("%S+") do
+			local c = w:gsub("[^A-Za-z0-9_%-]","")
+			if #c >= 4 then
+				local lc = #(c:gsub("[^A-Za-z]",""))
+				if c == c:upper() and lc >= 3
+				and not c:match("^%d+[A-Z]$") and not c:match("^%d+[A-Z][A-Z]$")
+				and not c:match("^[A-Z]%d+$") and not c:match("^[A-Z][A-Z]%d+$") then
+					table.insert(codes, c)
+				end
+			end
+		end
+		return #codes > 0 and table.concat(codes," ") or nil
+	end
+
+	-- ── Question detection ────────────────────────────────────────────
+	local _Q_KW = {
+		"when was","how old","what year","what month","released","release date",
+		"hint","riddle","figure out","guess","first letter","combine","spell",
+		"backwards","rarest","rarity","common","rare","epic","legendary","mythic",
+		"secret","og","brainrot","mutation","update","launch","exist","copies",
+		"valuable","oldest","first","tell me","which month","which year",
+	}
+	local function isQuestion(txt)
+		local l = txt:lower()
+		for _, p in ipairs(_Q_KW) do if l:find(p,1,true) then return true end end
+		return l:find("%?") ~= nil
+	end
+
+	-- ── Local solver ──────────────────────────────────────────────────
+	local function solveLocal(txt)
+		local l = txt:lower()
+		if l:find("highest rarity") or l:find("rarest rarity") then
+			return "The highest rarity is OG."
+		end
+		if l:find("rarity") and (l:find("order") or l:find("list") or l:find("all")) then
+			return KB_RARITY_ORDER
+		end
+		if (l:find("rarest") or l:find("hardest")) and l:find("brainrot") then
+			return "Rarest by copies: " .. KB_RAREST
+		end
+		if l:find("most common") and l:find("brainrot") then
+			return "Noobini Pizzanini with 100 million+ copies."
+		end
+		if l:find("og") and (l:find("example") or l:find("which") or l:find("name")) then
+			return "OG examples: Strawberry Elephant, Spyder Elephant. Most valuable: Strawberry Elephant."
+		end
+		if l:find("most valuable") or (l:find("best") and l:find("og")) then
+			return "Strawberry Elephant"
+		end
+		if (l:find("launch") or l:find("release") or l:find("when"))
+		and (l:find("game") or l:find("brainrot") or l:find("steal")) then
+			return "Steal a Brainrot launched " .. KB_LAUNCH
+		end
+		if l:find("what year") then return "2025" end
+		if l:find("what month") and (l:find("launch") or l:find("release")) then return "May" end
+		if l:find("first secret") then return "First Secrets: " .. KB_FIRST_SECRETS end
+		if l:find("mutation") then return "Mutations: " .. KB_MUTATIONS end
+		if l:find("day.one") or (l:find("oldest") and l:find("brainrot")) then
+			return "Day-one brainrots: " .. KB_DAY1
+		end
+		if l:find("rico dinero")      then return "Rico Dinero — only 1+ copies." end
+		if l:find("lazy ducky")       then return "Lazy Ducky — only 4+ copies." end
+		if l:find("spyder elephant")  then return "Spyder Elephant — OG, ~25 copies." end
+		if l:find("arcadragon")       then return "Arcadragon — ~70 copies." end
+		if l:find("john pork")        then return "John Pork — ~80 copies." end
+		if l:find("strawberry elephant") then return "Strawberry Elephant — most valuable OG." end
+		if l:find("noobini")          then return "Noobini Pizzanini — day-one, 100M+ copies." end
+		if (l:find("month") or l:find("when")) and l:find("releas") then return "MAY" end
+		return nil
+	end
+
+	-- ── Claude AI call ────────────────────────────────────────────────
+	local function callAI(prompt)
+		if not _CD.key or _CD.key == "" or _CD.key:find("placeholder") then return nil end
+		local ok, result = pcall(function()
+			local sys = [[You are an expert on the Roblox game "Steal a Brainrot".
+Facts: Launched May 15-16 2025. Rarities (low to high): Common/Rare/Epic/Legendary/Mythic/Brainrot God/Secret/OG.
+First Secrets (Update 1, May 31 2025): Los Tralaleritos, La Vacca Saturno Saturnita.
+Rarest: Rico Dinero(1+), Lazy Ducky(4+), Spyder Elephant(~25), Arcadragon(~70), John Pork(~80).
+Most common: Noobini Pizzanini 100M+ copies. Best OG: Strawberry Elephant.
+Day-one: Noobini Pizzanini, Tim Cheese, Trippi Troppi, Tung Tung Tung Sahur, Tralalero Tralala.
+Mutations: Gold, Diamond (Update 1), Bloodmoon, Rainbow (June-July 2025).
+Answer ONLY the question asked, max 1-2 sentences. For code riddles output ONLY the code in UPPERCASE.]]
+			local body = HS:JSONEncode({
+				model      = "claude-haiku-4-5-20251001",
+				max_tokens = 60,
+				system     = sys,
+				messages   = {{role="user", content=prompt}},
+			})
+			local resp = HS:RequestAsync({
+				Url    = "https://api.anthropic.com/v1/messages",
+				Method = "POST",
+				Headers = {
+					["Content-Type"]      = "application/json",
+					["x-api-key"]         = _CD.key,
+					["anthropic-version"] = "2023-06-01",
+				},
+				Body = body,
+			})
+			if resp.StatusCode == 200 then
+				local d = HS:JSONDecode(resp.Body)
+				if d and d.content and d.content[1] then return d.content[1].text end
+			end
+			return nil
+		end)
+		if ok and result then
+			local t = tostring(result):match("^%s*(.-)%s*$")
+			return t ~= "" and t or nil
+		end
+		return nil
+	end
+
+	-- ── Toast / last label update ─────────────────────────────────────
+	local function showResult(msg, col)
+		col = col or C_MOON
+		_CD.last = msg
+		if _G._MH_CD_lastLbl and _G._MH_CD_lastLbl.Parent then
+			_G._MH_CD_lastLbl.Text = "Last: " .. msg
+			_G._MH_CD_lastLbl.TextColor3 = col
+		end
+	end
+
+	-- ── Focus tracking ────────────────────────────────────────────────
+	UIS.TextBoxFocused:Connect(function(box) _CD._focused = box end)
+	UIS.TextBoxFocusReleased:Connect(function(box)
+		if _CD._focused == box then _CD._focused = nil end
+	end)
+
+	-- ── Auto-paste into focused TextBox ───────────────────────────────
+	local function pasteAnswer(text)
+		if not text or text == "" then return end
+		showResult(text)
+		if not _CD._focused or not _CD._focused.Parent then return end
+		local cur = _CD._focused.Text or ""
+		_CD._focused.Text = cur == "" and text or (cur .. " " .. text)
+	end
+
+	-- ── Top 20% of screen check ───────────────────────────────────────
+	local function isTopScreen(obj)
+		if not obj or not obj:IsA("GuiObject") then return false end
+		local ok2, pos = pcall(function() return obj.AbsolutePosition end)
+		if not ok2 then return false end
+		local vp = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1024,768)
+		return pos.Y < vp.Y * 0.20
+	end
+
+	-- ── Main text processor ──────────────────────────────────────────
+	local function processText(txt)
+		if not _CD.active then return end
+		if not txt or type(txt) ~= "string" or #txt < 2 then return end
+		if isHudNoise(txt) then return end
+		if _CD._seen[txt] then return end
+		_CD._seen[txt] = true
+		task.delay(20, function() _CD._seen[txt] = nil end)
+
+		if isQuestion(txt) then
+			showResult("Thinking...", C_DIM)
+			local ans = solveLocal(txt)
+			if ans then
+				pasteAnswer(ans)
+				showResult(ans, C_GREEN)
+				return
+			end
+			task.spawn(function()
+				local ai = callAI(txt)
+				if ai then
+					pasteAnswer(ai)
+					showResult("AI: " .. ai, C_GREEN)
+				else
+					showResult("No answer", C_RED)
+				end
+			end)
+			return
+		end
+
+		local code = extractCode(txt)
+		if code then
+			pasteAnswer(code)
+			showResult(code, C_MOON)
+		end
+	end
+
+	-- ── Watch a label ─────────────────────────────────────────────────
+	local function watchLabel(obj)
+		if _CD._watched[obj] then return end
+		_CD._watched[obj] = true
+		obj:GetPropertyChangedSignal("Text"):Connect(function()
+			if obj == _CD._focused then return end
+			if isTopScreen(obj) then processText(obj.Text) end
+		end)
+	end
+
+	-- ── Start ─────────────────────────────────────────────────────────
+	local function startCD()
+		if _CD.active then return end
+		_CD.active = true
+		_CD._seen  = {}
+
+		local pGui = LP.PlayerGui
+		_CD._descConn = pGui.DescendantAdded:Connect(function(obj)
+			task.wait(0.08)
+			if obj:IsA("TextBox") or not obj:IsA("TextLabel") then return end
+			if not isTopScreen(obj) then return end
+			watchLabel(obj)
+			processText(obj.Text)
+		end)
+
+		task.spawn(function()
+			task.wait(1)
+			for _, obj in ipairs(pGui:GetDescendants()) do
+				if obj:IsA("TextLabel") and isTopScreen(obj) then
+					watchLabel(obj)
+					processText(obj.Text)
+				end
+			end
+		end)
+
+		pcall(function()
+			local RS = game:GetService("ReplicatedStorage")
+			local shared = RS:FindFirstChild("Shared")
+			local flags  = shared and shared:FindFirstChild("Flags")
+			local cf     = flags and flags:FindFirstChild("CodesFlags")
+			if cf then
+				_CD._rsConn = cf.ChildAdded:Connect(function(obj)
+					local n = obj.Name or ""
+					if n:match("^[A-Z0-9_%-]+$") and #n >= 3 then
+						pasteAnswer(n); showResult(n, C_MOON)
+					end
+				end)
+			end
+		end)
+	end
+
+	-- ── Stop ──────────────────────────────────────────────────────────
+	local function stopCD()
+		_CD.active = false
+		if _CD._descConn then _CD._descConn:Disconnect(); _CD._descConn = nil end
+		if _CD._rsConn   then _CD._rsConn:Disconnect();   _CD._rsConn   = nil end
+	end
+
+	_CD.start  = startCD
+	_CD.stop   = stopCD
+	_CD.toggle = function() if _CD.active then stopCD() else startCD() end end
 end
 
 local _floatRowSetters = {}
@@ -4475,6 +4789,7 @@ buildPage("Buttons", function()
 		{id="tpdown",      name="TP Down"},
 		{id="battp",       name="Bat TP"},
 		{id="instareset",  name="Instant Reset"},
+		{id="codedet",     name="Code Detector"},
 	}
 
 	-- Select All / Unselect All — tout en haut
@@ -4883,6 +5198,63 @@ buildPage("Settings", function()
 			applyTheme("noir"); if _G._MH_autoSave then _G._MH_autoSave() end
 		end)
 	end
+	UIB.makeGap(4)
+	UIB.makeSectionLabel("Code Detector")
+	UIB.makeToggleRow("Auto Code Detect", false, function(on)
+		if _G._MH_CD then
+			if on then _G._MH_CD.start() else _G._MH_CD.stop() end
+		end
+	end)
+	do
+		-- API key input (text, not numeric)
+		local cdRow = Instance.new("Frame", currentPage)
+		cdRow.Size = UDim2.new(1,0,0,30); cdRow.BackgroundColor3 = C_ROW
+		cdRow.BackgroundTransparency = 0.35; cdRow.BorderSizePixel = 0
+		cdRow.LayoutOrder = LO(); addCorner(cdRow,12); addLivingStroke(cdRow,1)
+		cdRow.MouseEnter:Connect(function() TweenService:Create(cdRow,TweenInfo.new(0.1),{BackgroundTransparency=0.15}):Play() end)
+		cdRow.MouseLeave:Connect(function() TweenService:Create(cdRow,TweenInfo.new(0.1),{BackgroundTransparency=0.35}):Play() end)
+		local cdLbl = Instance.new("TextLabel", cdRow)
+		cdLbl.Size = UDim2.new(0,62,1,0); cdLbl.Position = UDim2.new(0,12,0,0)
+		cdLbl.BackgroundTransparency = 1; cdLbl.Text = "API Key"
+		cdLbl.TextColor3 = C_WHITE; cdLbl.Font = Enum.Font.GothamBold
+		cdLbl.TextSize = 10; cdLbl.TextXAlignment = Enum.TextXAlignment.Left
+		addLivingTextGradient(cdLbl)
+		local cdWrap = Instance.new("Frame", cdRow)
+		cdWrap.Size = UDim2.new(0,128,0,20); cdWrap.Position = UDim2.new(1,-138,0.5,-10)
+		cdWrap.BackgroundColor3 = C_OFF_BG; cdWrap.BackgroundTransparency = 0.1
+		cdWrap.BorderSizePixel = 0; addCorner(cdWrap,8); addLivingStroke(cdWrap,1)
+		local cdBox = Instance.new("TextBox", cdWrap)
+		cdBox.Size = UDim2.new(1,-6,1,0); cdBox.Position = UDim2.new(0,3,0,0)
+		cdBox.BackgroundTransparency = 1
+		cdBox.Text = _G._MH_CD and _G._MH_CD.key or ""
+		cdBox.PlaceholderText = "sk-ant-api03-..."
+		cdBox.TextColor3 = C_SILVER; cdBox.Font = Enum.Font.Gotham; cdBox.TextSize = 8
+		cdBox.ClearTextOnFocus = false; cdBox.TextXAlignment = Enum.TextXAlignment.Center
+		cdBox.FocusLost:Connect(function()
+			if _G._MH_CD then
+				_G._MH_CD.key = cdBox.Text
+				if _G._MH_autoSave then _G._MH_autoSave() end
+			end
+		end)
+		if _G._MH_CD then _G._MH_CD._keyBox = cdBox end
+		makeDivider()
+	end
+	do
+		-- Last detected result display
+		local lastRow = Instance.new("Frame", currentPage)
+		lastRow.Size = UDim2.new(1,0,0,26); lastRow.BackgroundColor3 = C_ROW
+		lastRow.BackgroundTransparency = 0.35; lastRow.BorderSizePixel = 0
+		lastRow.LayoutOrder = LO(); addCorner(lastRow,12); addLivingStroke(lastRow,1)
+		local lastLbl = Instance.new("TextLabel", lastRow)
+		lastLbl.Size = UDim2.new(1,-12,1,0); lastLbl.Position = UDim2.new(0,10,0,0)
+		lastLbl.BackgroundTransparency = 1; lastLbl.Text = "Last: —"
+		lastLbl.TextColor3 = C_DIM; lastLbl.Font = Enum.Font.GothamMedium
+		lastLbl.TextSize = 9; lastLbl.TextXAlignment = Enum.TextXAlignment.Left
+		lastLbl.TextTruncate = Enum.TextTruncate.AtEnd
+		_G._MH_CD_lastLbl = lastLbl
+		makeDivider()
+	end
+
 	UIB.makeGap(4)
 	UIB.makeSectionLabel("Reset")
 	UIB.makeGap(2)
