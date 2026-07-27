@@ -2480,32 +2480,35 @@ function MeleeBodyLock.start()
 	if MeleeBodyLock.conn then MeleeBodyLock.conn:Disconnect() end
 	MeleeBodyLock.active = true
 	mbl_safeStart()
-	-- Restore AutoRotate on respawn then re-lock
 	if MeleeBodyLock.charConn then MeleeBodyLock.charConn:Disconnect() end
 	MeleeBodyLock.charConn = LP.CharacterAdded:Connect(function(c)
 		if MeleeBodyLock.active then task.wait(0.3); mbl_safeStart(c) end
 	end)
+	local _smoothAngle = nil
 	MeleeBodyLock.conn = RunService.Heartbeat:Connect(function()
 		if not MeleeBodyLock.active then return end
 		local char = LP.Character; if not char then return end
 		local root = char:FindFirstChild("HumanoidRootPart"); if not root then return end
 		local hum = char:FindFirstChildOfClass("Humanoid"); if not hum then return end
-		-- Don't override CFrame during physics/ragdoll — causes deaths
 		local st = hum:GetState()
 		if st == Enum.HumanoidStateType.Physics
 		or st == Enum.HumanoidStateType.Ragdoll
 		or st == Enum.HumanoidStateType.FallingDown
-		or hum.PlatformStand then return end
+		or hum.PlatformStand then _smoothAngle = nil; return end
 		local targetRoot = mbl_nearest(root); if not targetRoot then return end
 		local myPos = root.Position
-		local targetPos = targetRoot.Position
-		local direction = Vector3.new(targetPos.X - myPos.X, 0, targetPos.Z - myPos.Z)
-		if direction.Magnitude > 0.5 then
-			local angle = math.atan2(direction.X, direction.Z)
-			angle = angle + math.pi
-			root.CFrame = CFrame.new(myPos) * CFrame.Angles(0, angle, 0)
-			hum.AutoRotate = false
-		end
+		local dir = Vector3.new(targetRoot.Position.X - myPos.X, 0, targetRoot.Position.Z - myPos.Z)
+		if dir.Magnitude < 0.5 then return end
+		local targetAngle = math.atan2(dir.X, dir.Z) + math.pi
+		if _smoothAngle == nil then _smoothAngle = targetAngle end
+		-- Lerp angle via shortest arc
+		local diff = ((targetAngle - _smoothAngle + math.pi) % (2*math.pi)) - math.pi
+		_smoothAngle = _smoothAngle + diff * 0.25
+		-- Preserve velocity so CFrame override doesn't disrupt physics
+		local vel = root.AssemblyLinearVelocity
+		root.CFrame = CFrame.new(myPos) * CFrame.Angles(0, _smoothAngle, 0)
+		root.AssemblyLinearVelocity = vel
+		hum.AutoRotate = false
 	end)
 end
 function MeleeBodyLock.stop()
@@ -3881,7 +3884,7 @@ do
 		bbGui.Size = UDim2.new(0,130,0,52)
 		bbGui.StudsOffset = Vector3.new(0,3.5,0)
 		bbGui.AlwaysOnTop = true
-		-- "speed" label (above) — Moon Hub living-gradient style
+		-- "speed" label (above)
 		speedLbl = Instance.new("TextLabel", bbGui)
 		speedLbl.Size = UDim2.new(1,0,0,26)
 		speedLbl.Position = UDim2.new(0,0,0,0)
@@ -3891,8 +3894,7 @@ do
 		speedLbl.TextScaled = false
 		speedLbl.TextSize = 19
 		speedLbl.Font = Enum.Font.GothamBlack
-		speedLbl.TextStrokeTransparency = 0
-		speedLbl.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+		speedLbl.TextStrokeTransparency = 1
 		speedLbl.TextXAlignment = Enum.TextXAlignment.Center
 		-- READY!! / timer label (below)
 		timerLbl = Instance.new("TextLabel", bbGui)
@@ -3903,9 +3905,7 @@ do
 		timerLbl.TextColor3 = C_MOON
 		timerLbl.TextScaled = true
 		timerLbl.Font = Enum.Font.GothamBlack
-		timerLbl.TextStrokeTransparency = 0.3
-		timerLbl.TextStrokeColor3 = Color3.fromRGB(0,0,0)
-		addLivingTextGradient(timerLbl)
+		timerLbl.TextStrokeTransparency = 1
 		_G._MH_speedLblRef = speedLbl
 		_G._MH_timerLblRef = timerLbl
 	end
