@@ -23,8 +23,10 @@ local cfg = {
     },
     posX      = 16,
     posY      = 80,
-    minimized = false,
-    activeTab = 1,
+    minimized    = false,
+    activeTab    = 1,
+    anthropicKey = "",
+    aiEnabled    = false,
 }
 
 local function saveConfig()
@@ -125,8 +127,9 @@ local lastCode        = ""
 local _dedupText = ""
 local _dedupTime = 0
 
-local _pillLbl    = nil
-local _codeBarLbl = nil
+local _pillLbl     = nil
+local _codeBarLbl  = nil
+local _aiAnswerLbl = nil
 
 local function setScanState(txt)
     if _pillLbl then _pillLbl.Text = txt end
@@ -283,6 +286,98 @@ local function redeemViaRF(code)
 end
 
 -- ===================================================================
+-- AI QUESTION SOLVER  (SDLCPaste)
+-- ===================================================================
+local GAME_KB = {
+    { q="launch",      a="Brainrot Simulator launched in early 2024." },
+    { q="rarest",      a="The rarest brainrots are Prismatic and Cosmic tier." },
+    { q="og",          a="OG brainrots were available at the game launch." },
+    { q="mutation",    a="Mutations are random stat boosts that appear on brainrots." },
+    { q="rarity",      a="Rarities: Common, Uncommon, Rare, Epic, Legendary, Mythic, Prismatic, Cosmic." },
+    { q="update",      a="Check the game Discord or announcements for latest updates." },
+    { q="how many",    a="Check the in-game bestiary for total brainrot counts." },
+    { q="best",        a="Cosmic tier brainrots generally have the best stats." },
+    { q="trade",       a="Trading is done through the in-game trade system." },
+    { q="code",        a="Active codes are announced in the game Discord server." },
+}
+
+local function isHudNoise(txt)
+    if not txt or txt == "" then return true end
+    if txt:match("^%d+$") then return true end
+    if txt:match("^%d+:%d+$") then return true end
+    if txt:match("^%d+%.%d+$") then return true end
+    if txt:match("^[%+%-]?%d") and #txt < 8 then return true end
+    if txt:match("^%d+[kKmMbBgG]?$") then return true end
+    if txt:match("^x%d") then return true end
+    return false
+end
+
+local function isQuestion(txt)
+    if not txt then return false end
+    if txt:find("?") then return true end
+    local low = txt:lower()
+    for _, kw in ipairs({"what is","what are","when did","where is","who is","how do","how many","why is","which is","what's","whats"}) do
+        if low:find(kw, 1, true) then return true end
+    end
+    return false
+end
+
+local function solveLocal(txt)
+    if not txt then return nil end
+    local low = txt:lower()
+    for _, entry in ipairs(GAME_KB) do
+        if low:find(entry.q, 1, true) then return entry.a end
+    end
+    return nil
+end
+
+local function extractCode(txt)
+    if not txt then return nil end
+    for token in txt:gmatch("[A-Z][A-Z0-9%-_]+") do
+        if #token >= 4 then
+            local letters = 0
+            for _ in token:gmatch("%a") do letters = letters + 1 end
+            if letters >= 3 then return token end
+        end
+    end
+    return nil
+end
+
+local function showAIAnswer(answer)
+    if not answer or answer == "" then return end
+    if _aiAnswerLbl then _aiAnswerLbl.Text = answer end
+end
+
+local function callAI(prompt)
+    local key = cfg.anthropicKey or ""
+    if key == "" then return nil end
+    local httpReq = (syn and syn.request) or (http and http.request) or http_request or request
+    if not httpReq then return nil end
+    local ok, resp = pcall(function()
+        return httpReq({
+            Url    = "https://api.anthropic.com/v1/messages",
+            Method = "POST",
+            Headers = {
+                ["Content-Type"]      = "application/json",
+                ["x-api-key"]         = key,
+                ["anthropic-version"] = "2023-06-01",
+            },
+            Body = HttpService:JSONEncode({
+                model      = "claude-sonnet-4-6",
+                max_tokens = 60,
+                messages   = {{ role = "user", content = "SAB game expert. Answer in 1 sentence: " .. prompt }},
+            }),
+        })
+    end)
+    if not ok or not resp or resp.StatusCode ~= 200 then return nil end
+    local ok2, answer = pcall(function()
+        local d = HttpService:JSONDecode(resp.Body)
+        return d.content and d.content[1] and d.content[1].text
+    end)
+    return (ok2 and type(answer) == "string") and answer or nil
+end
+
+-- ===================================================================
 -- LOGIC
 -- ===================================================================
 local function redeemCode(code)
@@ -341,12 +436,21 @@ end
 
 local function dispatch(text)
     if not text or text == "" then return end
+    if isHudNoise(text) then return end
 
     -- deduplicate: same text within 0.4s from dual listeners
     local now = tick()
     if text == _dedupText and (now - _dedupTime) < 0.4 then return end
     _dedupText = text
     _dedupTime = now
+
+    -- AI question solver (non-blocking, doesn't interrupt code detection)
+    if cfg.aiEnabled and isQuestion(text) then
+        task.spawn(function()
+            local answer = solveLocal(text) or callAI(text)
+            if answer then showAIAnswer(answer) end
+        end)
+    end
 
     -- FORCE SCAN collect path
     if forceScanActive and collecting then
@@ -432,7 +536,7 @@ local function dispatch(text)
         if rep ~= nil then
             result = rep
         else
-            result = extractCodesFromText(text)
+            result = extractCode(text) or extractCodesFromText(text)
         end
         if result and result ~= "" then
             setLastCode(result)
@@ -584,11 +688,11 @@ tabBarLayout.SortOrder           = Enum.SortOrder.LayoutOrder
 tabBarLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
 tabBarLayout.VerticalAlignment   = Enum.VerticalAlignment.Center
 
-local currentTab = math.max(1, math.min(3, cfg.activeTab or 1))
+local currentTab = math.max(1, math.min(4, cfg.activeTab or 1))
 
 local function makeTabBtn(label, order)
     local btn = Instance.new("TextButton", tabBar)
-    btn.Size             = UDim2.new(0, 70, 1, -4)
+    btn.Size             = UDim2.new(0, 50, 1, -4)
     btn.LayoutOrder      = order
     btn.BackgroundColor3 = C_ROW
     btn.BorderSizePixel  = 0
@@ -603,9 +707,10 @@ local function makeTabBtn(label, order)
     return btn
 end
 
-local tabMainBtn = makeTabBtn("Main",     1)
-local tabTrigBtn = makeTabBtn("Triggers", 2)
-local tabRepBtn  = makeTabBtn("Replace",  3)
+local tabMainBtn = makeTabBtn("Main", 1)
+local tabTrigBtn = makeTabBtn("Trig", 2)
+local tabRepBtn  = makeTabBtn("Rep",  3)
+local tabAIBtn   = makeTabBtn("AI",   4)
 
 -- ===================================================================
 -- CONTENT FRAME
@@ -970,6 +1075,110 @@ for i = 1, MAX_KW do
 end
 
 -- ===================================================================
+-- PAGE 4: AI
+-- ===================================================================
+local page4 = Instance.new("Frame", contentFrame)
+page4.Size                   = UDim2.new(1, 0, 1, 0)
+page4.BackgroundTransparency = 1
+page4.Visible                = false
+page4.ZIndex                 = 11
+
+-- AI Enabled toggle  y=6
+local aiToggleBtn = Instance.new("TextButton", page4)
+aiToggleBtn.Size             = UDim2.new(1, -20, 0, 24)
+aiToggleBtn.Position         = UDim2.new(0, 10, 0, 6)
+aiToggleBtn.BackgroundColor3 = cfg.aiEnabled and C_ON or C_OFF
+aiToggleBtn.Text             = cfg.aiEnabled and "AI ANSWERS: ON" or "AI ANSWERS: OFF"
+aiToggleBtn.TextColor3       = cfg.aiEnabled and C_WHITE or C_DIM
+aiToggleBtn.Font             = Enum.Font.GothamBlack
+aiToggleBtn.TextSize         = 11
+aiToggleBtn.BorderSizePixel  = 0
+aiToggleBtn.AutoButtonColor  = false
+aiToggleBtn.ZIndex           = 12
+addCorner(aiToggleBtn, 8); addLivingTextGradient(aiToggleBtn)
+aiToggleBtn.MouseButton1Click:Connect(function()
+    cfg.aiEnabled = not cfg.aiEnabled
+    aiToggleBtn.Text       = cfg.aiEnabled and "AI ANSWERS: ON" or "AI ANSWERS: OFF"
+    aiToggleBtn.TextColor3 = cfg.aiEnabled and C_WHITE or C_DIM
+    TweenService:Create(aiToggleBtn, TweenInfo.new(0.15), {BackgroundColor3 = cfg.aiEnabled and C_ON or C_OFF}):Play()
+    saveConfig()
+end)
+
+-- API Key label  y=38
+local apiKeyLbl = Instance.new("TextLabel", page4)
+apiKeyLbl.Size                   = UDim2.new(1, -20, 0, 14)
+apiKeyLbl.Position               = UDim2.new(0, 10, 0, 38)
+apiKeyLbl.BackgroundTransparency = 1
+apiKeyLbl.Text                   = "Claude API Key:"
+apiKeyLbl.TextColor3             = C_DIM
+apiKeyLbl.Font                   = Enum.Font.Gotham
+apiKeyLbl.TextSize               = 10
+apiKeyLbl.TextXAlignment         = Enum.TextXAlignment.Left
+apiKeyLbl.ZIndex                 = 12
+
+-- API Key input  y=54
+local apiKeyFrame = Instance.new("Frame", page4)
+apiKeyFrame.Size             = UDim2.new(1, -20, 0, 28)
+apiKeyFrame.Position         = UDim2.new(0, 10, 0, 54)
+apiKeyFrame.BackgroundColor3 = C_ROW
+apiKeyFrame.BorderSizePixel  = 0
+apiKeyFrame.ZIndex           = 12
+addCorner(apiKeyFrame, 8); addLivingStroke(apiKeyFrame, 1)
+
+local apiKeyBox = Instance.new("TextBox", apiKeyFrame)
+apiKeyBox.Size              = UDim2.new(1, -16, 1, 0)
+apiKeyBox.Position          = UDim2.new(0, 8, 0, 0)
+apiKeyBox.BackgroundTransparency = 1
+apiKeyBox.BorderSizePixel   = 0
+apiKeyBox.Font              = Enum.Font.GothamBold
+apiKeyBox.TextSize          = 10
+apiKeyBox.TextColor3        = C_WHITE
+apiKeyBox.PlaceholderText   = "sk-ant-api03-..."
+apiKeyBox.PlaceholderColor3 = C_DIM
+apiKeyBox.TextXAlignment    = Enum.TextXAlignment.Left
+apiKeyBox.ClearTextOnFocus  = false
+apiKeyBox.Text              = cfg.anthropicKey or ""
+apiKeyBox.ZIndex            = 13
+addLivingTextGradient(apiKeyBox)
+apiKeyBox.FocusLost:Connect(function()
+    cfg.anthropicKey = apiKeyBox.Text
+    saveConfig()
+end)
+
+-- Last Answer label  y=90
+local answerHdrLbl = Instance.new("TextLabel", page4)
+answerHdrLbl.Size                   = UDim2.new(1, -20, 0, 14)
+answerHdrLbl.Position               = UDim2.new(0, 10, 0, 90)
+answerHdrLbl.BackgroundTransparency = 1
+answerHdrLbl.Text                   = "Last AI Answer:"
+answerHdrLbl.TextColor3             = C_DIM
+answerHdrLbl.Font                   = Enum.Font.Gotham
+answerHdrLbl.TextSize               = 10
+answerHdrLbl.TextXAlignment         = Enum.TextXAlignment.Left
+answerHdrLbl.ZIndex                 = 12
+
+-- Answer display  y=106
+local answerFrame = Instance.new("Frame", page4)
+answerFrame.Size             = UDim2.new(1, -20, 0, 52)
+answerFrame.Position         = UDim2.new(0, 10, 0, 106)
+answerFrame.BackgroundColor3 = C_ROW
+answerFrame.BorderSizePixel  = 0
+answerFrame.ZIndex           = 12
+addCorner(answerFrame, 8); addLivingStroke(answerFrame, 1)
+
+_aiAnswerLbl = Instance.new("TextLabel", answerFrame)
+_aiAnswerLbl.Size                   = UDim2.new(1, -16, 1, 0)
+_aiAnswerLbl.Position               = UDim2.new(0, 8, 0, 0)
+_aiAnswerLbl.BackgroundTransparency = 1
+_aiAnswerLbl.Text                   = "No answer yet"
+_aiAnswerLbl.TextColor3             = C_DIM
+_aiAnswerLbl.Font                   = Enum.Font.Gotham
+_aiAnswerLbl.TextSize               = 10
+_aiAnswerLbl.TextXAlignment         = Enum.TextXAlignment.Left
+_aiAnswerLbl.TextWrapped            = true
+_aiAnswerLbl.ZIndex                 = 13
+
+-- ===================================================================
 -- TAB SWITCHING
 -- ===================================================================
 local function setTab(idx)
@@ -978,12 +1187,15 @@ local function setTab(idx)
     page1.Visible = (idx == 1)
     page2.Visible = (idx == 2)
     page3.Visible = (idx == 3)
+    page4.Visible = (idx == 4)
     tabMainBtn.BackgroundColor3 = (idx == 1) and C_ON or C_ROW
     tabTrigBtn.BackgroundColor3 = (idx == 2) and C_ON or C_ROW
     tabRepBtn.BackgroundColor3  = (idx == 3) and C_ON or C_ROW
+    tabAIBtn.BackgroundColor3   = (idx == 4) and C_ON or C_ROW
     tabMainBtn.TextColor3       = (idx == 1) and C_WHITE or C_DIM
     tabTrigBtn.TextColor3       = (idx == 2) and C_WHITE or C_DIM
     tabRepBtn.TextColor3        = (idx == 3) and C_WHITE or C_DIM
+    tabAIBtn.TextColor3         = (idx == 4) and C_WHITE or C_DIM
     saveConfig()
 end
 
@@ -992,6 +1204,7 @@ setTab(currentTab)
 tabMainBtn.MouseButton1Click:Connect(function() if currentTab ~= 1 then setTab(1) end end)
 tabTrigBtn.MouseButton1Click:Connect(function() if currentTab ~= 2 then setTab(2) end end)
 tabRepBtn.MouseButton1Click:Connect(function()  if currentTab ~= 3 then setTab(3) end end)
+tabAIBtn.MouseButton1Click:Connect(function()   if currentTab ~= 4 then setTab(4) end end)
 
 -- ===================================================================
 -- MINIMIZE
