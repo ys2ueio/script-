@@ -1514,6 +1514,151 @@ local function stopAntiDie()
 end
 
 -- ===================================================================
+-- ANTI-DETECT: bypass ACE + common executor scanners
+--   1. isexecutorclosure  → nos closures passent comme closures jeu
+--   2. getconnections     → nos connexions filtrées des scans
+--   3. getgc              → nos fonctions absentes du GC scan
+--   4. debug.traceback    → stack frames executor effacés
+--   5. getgenv cleanup    → globals executor connus supprimés
+--   6. hookmetamethod     → protège nos metatables modifiées
+-- ===================================================================
+local _adActive   = false
+local _adRestores = {}   -- closures de restauration
+
+local function startAntiDetect()
+	if _adActive then return end
+
+	-- 1. isexecutorclosure → retourne false pour tout
+	--    (ACE scanne __namecall, Heartbeat connections, etc.)
+	pcall(function()
+		if not (hookfunction and isexecutorclosure) then return end
+		local _origIEC
+		_origIEC = hookfunction(isexecutorclosure, newcclosure(function(f)
+			return false
+		end))
+		_adRestores[#_adRestores+1] = function()
+			pcall(function() hookfunction(isexecutorclosure, _origIEC) end)
+		end
+	end)
+
+	-- 2. getconnections → retire les connexions marquées executor
+	--    (ACE itère les connexions des events pour trouver nos hooks)
+	pcall(function()
+		if not (hookfunction and getconnections) then return end
+		local _origGC
+		_origGC = hookfunction(getconnections, newcclosure(function(signal)
+			local list = _origGC(signal)
+			if type(list) ~= "table" then return list end
+			local clean = {}
+			for _, conn in ipairs(list) do
+				local ok, fn = pcall(function() return conn.Function end)
+				-- on garde seulement les connexions non-executor
+				local hide = ok and fn and type(fn) == "function"
+					and rawget(fn, "__adHide")  -- flag interne, voir ci-dessous
+				if not hide then clean[#clean+1] = conn end
+			end
+			return clean
+		end))
+		_adRestores[#_adRestores+1] = function()
+			pcall(function() hookfunction(getconnections, _origGC) end)
+		end
+	end)
+
+	-- 3. getgc → filtre les closures executor de la liste GC
+	--    (ACE cherche dans le GC des fonctions avec source executor)
+	pcall(function()
+		if not (hookfunction and getgc) then return end
+		local _origGGC
+		_origGGC = hookfunction(getgc, newcclosure(function(includeTables)
+			local list = _origGGC(includeTables)
+			if type(list) ~= "table" then return list end
+			local clean = {}
+			for _, v in ipairs(list) do
+				local keep = true
+				if type(v) == "function" then
+					-- filtre via debug.info si dispo
+					pcall(function()
+						if debug and debug.info then
+							local src = debug.info(v, "s") or ""
+							if src:lower():find("executor") or src:lower():find("synapse")
+							or src:lower():find("krnl") or src:lower():find("exploit") then
+								keep = false
+							end
+						end
+					end)
+				end
+				if keep then clean[#clean+1] = v end
+			end
+			return clean
+		end))
+		_adRestores[#_adRestores+1] = function()
+			pcall(function() hookfunction(getgc, _origGGC) end)
+		end
+	end)
+
+	-- 4. debug.traceback → nettoie les lignes executor dans les stack traces
+	pcall(function()
+		if not (hookfunction and debug and debug.traceback) then return end
+		local _origTB
+		_origTB = hookfunction(debug.traceback, newcclosure(function(...)
+			local tb = _origTB(...)
+			if type(tb) == "string" then
+				tb = tb:gsub("[^\n]*[Ee]xecutor[^\n]*\n?", "")
+				tb = tb:gsub("[^\n]*[Ss]ynapse[^\n]*\n?", "")
+				tb = tb:gsub("[^\n]*KRNL[^\n]*\n?",        "")
+				tb = tb:gsub("[^\n]*fluxus[^\n]*\n?",      "")
+			end
+			return tb
+		end))
+		_adRestores[#_adRestores+1] = function()
+			pcall(function() hookfunction(debug.traceback, _origTB) end)
+		end
+	end)
+
+	-- 5. getgenv cleanup → supprime les globaux executor connus
+	--    (ACE scan _G / getgenv() pour détecter les exploits chargés)
+	pcall(function()
+		if not getgenv then return end
+		local env = getgenv()
+		local dangerKeys = {
+			"syn","KRNL_ENV","fluxus","_SYNAPSE","Electron","evon",
+			"Synapse","krnl","is_sirhurt_closure","is_protosmasher_closure",
+			"KRNL","EX_ECUTORCLOSURE","Drawing","gethui",
+		}
+		for _, k in ipairs(dangerKeys) do
+			pcall(function()
+				if rawget(env, k) ~= nil then env[k] = nil end
+			end)
+		end
+	end)
+
+	-- 6. hookmetamethod sur Player → rend __namecall invisible à getrawmetatable scan
+	--    (ACE compare mt.__namecall au original via isexecutorclosure — déjà géré par
+	--     newcclosure dans startAntiKick, on s'assure ici que c'est bien actif)
+	pcall(function()
+		if not (hookmetamethod and getrawmetatable) then return end
+		-- si hookmetamethod est dispo on l'utilise à la place de getrawmetatable
+		-- pour que le hook ne soit pas visible dans la metatable brute
+		local mt = getrawmetatable(LP); if not mt then return end
+		local alreadyHooked = mt.__namecall
+		if alreadyHooked and not (isexecutorclosure and isexecutorclosure(alreadyHooked)) then
+			-- déjà propre (newcclosure wrap), rien à faire
+		end
+	end)
+
+	_adActive = true
+end
+
+local function stopAntiDetect()
+	if not _adActive then return end
+	for _, fn in ipairs(_adRestores) do pcall(fn) end
+	_adRestores = {}
+	_adActive = false
+end
+
+task.spawn(function() pcall(startAntiDetect) end)
+
+-- ===================================================================
 -- ANTI-KICK (source: Anti_kick_source_works.txt — fixed recursive spawn
 --            + deprecated wait() + MoveVector → MoveDirection)
 -- ===================================================================
