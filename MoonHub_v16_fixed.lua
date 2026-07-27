@@ -1514,151 +1514,6 @@ local function stopAntiDie()
 end
 
 -- ===================================================================
--- ANTI-DETECT: bypass ACE + common executor scanners
---   1. isexecutorclosure  → nos closures passent comme closures jeu
---   2. getconnections     → nos connexions filtrées des scans
---   3. getgc              → nos fonctions absentes du GC scan
---   4. debug.traceback    → stack frames executor effacés
---   5. getgenv cleanup    → globals executor connus supprimés
---   6. hookmetamethod     → protège nos metatables modifiées
--- ===================================================================
-local _adActive   = false
-local _adRestores = {}   -- closures de restauration
-
-local function startAntiDetect()
-	if _adActive then return end
-
-	-- 1. isexecutorclosure → retourne false pour tout
-	--    (ACE scanne __namecall, Heartbeat connections, etc.)
-	pcall(function()
-		if not (hookfunction and isexecutorclosure) then return end
-		local _origIEC
-		_origIEC = hookfunction(isexecutorclosure, newcclosure(function(f)
-			return false
-		end))
-		_adRestores[#_adRestores+1] = function()
-			pcall(function() hookfunction(isexecutorclosure, _origIEC) end)
-		end
-	end)
-
-	-- 2. getconnections → retire les connexions marquées executor
-	--    (ACE itère les connexions des events pour trouver nos hooks)
-	pcall(function()
-		if not (hookfunction and getconnections) then return end
-		local _origGC
-		_origGC = hookfunction(getconnections, newcclosure(function(signal)
-			local list = _origGC(signal)
-			if type(list) ~= "table" then return list end
-			local clean = {}
-			for _, conn in ipairs(list) do
-				local ok, fn = pcall(function() return conn.Function end)
-				-- on garde seulement les connexions non-executor
-				local hide = ok and fn and type(fn) == "function"
-					and rawget(fn, "__adHide")  -- flag interne, voir ci-dessous
-				if not hide then clean[#clean+1] = conn end
-			end
-			return clean
-		end))
-		_adRestores[#_adRestores+1] = function()
-			pcall(function() hookfunction(getconnections, _origGC) end)
-		end
-	end)
-
-	-- 3. getgc → filtre les closures executor de la liste GC
-	--    (ACE cherche dans le GC des fonctions avec source executor)
-	pcall(function()
-		if not (hookfunction and getgc) then return end
-		local _origGGC
-		_origGGC = hookfunction(getgc, newcclosure(function(includeTables)
-			local list = _origGGC(includeTables)
-			if type(list) ~= "table" then return list end
-			local clean = {}
-			for _, v in ipairs(list) do
-				local keep = true
-				if type(v) == "function" then
-					-- filtre via debug.info si dispo
-					pcall(function()
-						if debug and debug.info then
-							local src = debug.info(v, "s") or ""
-							if src:lower():find("executor") or src:lower():find("synapse")
-							or src:lower():find("krnl") or src:lower():find("exploit") then
-								keep = false
-							end
-						end
-					end)
-				end
-				if keep then clean[#clean+1] = v end
-			end
-			return clean
-		end))
-		_adRestores[#_adRestores+1] = function()
-			pcall(function() hookfunction(getgc, _origGGC) end)
-		end
-	end)
-
-	-- 4. debug.traceback → nettoie les lignes executor dans les stack traces
-	pcall(function()
-		if not (hookfunction and debug and debug.traceback) then return end
-		local _origTB
-		_origTB = hookfunction(debug.traceback, newcclosure(function(...)
-			local tb = _origTB(...)
-			if type(tb) == "string" then
-				tb = tb:gsub("[^\n]*[Ee]xecutor[^\n]*\n?", "")
-				tb = tb:gsub("[^\n]*[Ss]ynapse[^\n]*\n?", "")
-				tb = tb:gsub("[^\n]*KRNL[^\n]*\n?",        "")
-				tb = tb:gsub("[^\n]*fluxus[^\n]*\n?",      "")
-			end
-			return tb
-		end))
-		_adRestores[#_adRestores+1] = function()
-			pcall(function() hookfunction(debug.traceback, _origTB) end)
-		end
-	end)
-
-	-- 5. getgenv cleanup → supprime les globaux executor connus
-	--    (ACE scan _G / getgenv() pour détecter les exploits chargés)
-	pcall(function()
-		if not getgenv then return end
-		local env = getgenv()
-		local dangerKeys = {
-			"syn","KRNL_ENV","fluxus","_SYNAPSE","Electron","evon",
-			"Synapse","krnl","is_sirhurt_closure","is_protosmasher_closure",
-			"KRNL","EX_ECUTORCLOSURE","Drawing","gethui",
-		}
-		for _, k in ipairs(dangerKeys) do
-			pcall(function()
-				if rawget(env, k) ~= nil then env[k] = nil end
-			end)
-		end
-	end)
-
-	-- 6. hookmetamethod sur Player → rend __namecall invisible à getrawmetatable scan
-	--    (ACE compare mt.__namecall au original via isexecutorclosure — déjà géré par
-	--     newcclosure dans startAntiKick, on s'assure ici que c'est bien actif)
-	pcall(function()
-		if not (hookmetamethod and getrawmetatable) then return end
-		-- si hookmetamethod est dispo on l'utilise à la place de getrawmetatable
-		-- pour que le hook ne soit pas visible dans la metatable brute
-		local mt = getrawmetatable(LP); if not mt then return end
-		local alreadyHooked = mt.__namecall
-		if alreadyHooked and not (isexecutorclosure and isexecutorclosure(alreadyHooked)) then
-			-- déjà propre (newcclosure wrap), rien à faire
-		end
-	end)
-
-	_adActive = true
-end
-
-local function stopAntiDetect()
-	if not _adActive then return end
-	for _, fn in ipairs(_adRestores) do pcall(fn) end
-	_adRestores = {}
-	_adActive = false
-end
-
-task.spawn(function() pcall(startAntiDetect) end)
-
--- ===================================================================
 -- ANTI-KICK (source: Anti_kick_source_works.txt — fixed recursive spawn
 --            + deprecated wait() + MoveVector → MoveDirection)
 -- ===================================================================
@@ -1675,8 +1530,7 @@ local _akLoopActive  = false -- controls workspace/maxHealth while loops
 
 local function startAntiKick()
 	if _akActive then return end
-	-- 1. Block :Kick() via __namecall — wrapped in newcclosure so it passes
-	--    isexecutorclosure() checks; checkcaller() guards against self-calls.
+	-- 1. Block :Kick() via __namecall
 	pcall(function()
 		local mt = getrawmetatable(LP); if not mt then return end
 		setreadonly(mt, false)
@@ -4068,95 +3922,80 @@ _floatDefs.battp = {
 }
 
 -- ===================================================================
--- INSTA RESET — logique complète (ACE)
---   Méthode 1 : remote spécifique jeu (RE/ + GUID)
---   Méthode 2 : LP:LoadCharacter() après 0.3s
---   Méthode 3 : hum.Health = 0 après 0.8s
---   Détection : hookfunction FireServer + scan actif + DescendantAdded
+-- INSTA RESET — logique ACE exacte (AceCursedInstaReset)
 -- ===================================================================
 do
 	local IR_GUID        = "f888ee6e-c86d-46e1-93d7-0639d6635d42"
 	local IR_resetRemote = nil
 
-	-- Scan actif : cherche le remote déjà présent dans le jeu
-	local function IR_scan()
-		if IR_resetRemote then return end
-		for _, svc in ipairs({game:GetService("ReplicatedStorage"), workspace, game:GetService("Players")}) do
-			pcall(function()
-				for _, v in ipairs(svc:GetDescendants()) do
-					if v:IsA("RemoteEvent") and type(v.Name) == "string" and v.Name:sub(1,3) == "RE/" then
-						IR_resetRemote = v; return
-					end
-				end
-			end)
-			if IR_resetRemote then break end
-		end
-	end
-
-	-- Hook FireServer : capture le remote dès sa première utilisation
+	-- Hook FireServer : capture le remote dès sa première utilisation (newcclosure = invisible)
 	pcall(function()
-		local o_
-		o_ = hookfunction(Instance.new("RemoteEvent").FireServer, newcclosure(function(self, ...)
-			if not IR_resetRemote and type(self.Name) == "string" and self.Name:sub(1,3) == "RE/" then
+		if not (hookfunction and newcclosure) then return end
+		local oldFire
+		oldFire = hookfunction(Instance.new("RemoteEvent").FireServer, newcclosure(function(self, ...)
+			if not IR_resetRemote and typeof(self) == "Instance"
+			and self:IsA("RemoteEvent") and self.Name:sub(1,3) == "RE/" then
 				IR_resetRemote = self
 			end
-			return o_(self, ...)
+			return oldFire(self, ...)
 		end))
 	end)
 
-	-- DescendantAdded : capture le remote s'il apparaît après l'injection
-	task.spawn(function()
-		for _, svc in ipairs({game:GetService("ReplicatedStorage"), workspace}) do
-			pcall(function()
-				svc.DescendantAdded:Connect(function(v)
-					if not IR_resetRemote and v:IsA("RemoteEvent")
-					and type(v.Name) == "string" and v.Name:sub(1,3) == "RE/" then
-						IR_resetRemote = v
-					end
-				end)
-			end)
-		end
-	end)
-
-	-- Scan immédiat au cas où le script est injecté tard
-	task.spawn(IR_scan)
-
 	local function instareset()
-		-- Dernière chance de trouver le remote si pas encore vu
-		if not IR_resetRemote then IR_scan() end
-
-		local oldChar = LP.Character
-		local deadline = tick() + 5
-
-		-- Méthode 1 : remote propre au jeu (instantané côté serveur)
-		if IR_resetRemote then
-			task.spawn(function()
-				while (LP.Character == oldChar or not LP.Character) and tick() < deadline do
-					pcall(function() IR_resetRemote:FireServer(IR_GUID, LP, "balloon") end)
-					task.wait(0.05)
+		-- Fallback scan ReplicatedStorage si le remote n'a pas encore été intercepté
+		if not IR_resetRemote then
+			for _, desc in ipairs(ReplicatedStorage:GetDescendants()) do
+				if desc:IsA("RemoteEvent") and desc.Name:sub(1,3) == "RE/" then
+					IR_resetRemote = desc
+					break
 				end
-			end)
+			end
+		end
+		if not IR_resetRemote then return end
+
+		local character = LP.Character
+		local humanoid  = character and character:FindFirstChildOfClass("Humanoid")
+
+		-- Si déjà mort : un seul fire et on sort
+		if humanoid and humanoid.Health <= 0 then
+			pcall(function() IR_resetRemote:FireServer(IR_GUID, LP, "balloon") end)
+			return
 		end
 
-		-- Méthode 2 : LP:LoadCharacter() si toujours en vie après 0.3s
-		task.delay(0.3, function()
-			if LP.Character ~= oldChar then return end
-			pcall(function() LP:LoadCharacter() end)
-		end)
+		-- Watch 3 signaux pour détecter le reset dès qu'il se produit
+		local resetDetected = false
+		local resetConns    = {}
+		if humanoid then
+			table.insert(resetConns, humanoid.Died:Connect(function()
+				resetDetected = true
+			end))
+			table.insert(resetConns, humanoid:GetPropertyChangedSignal("Health"):Connect(function()
+				if humanoid.Health <= 0 then resetDetected = true end
+			end))
+		end
+		if character then
+			table.insert(resetConns, character.AncestryChanged:Connect(function(_, parent)
+				if not parent then resetDetected = true end
+			end))
+		end
 
-		-- Méthode 3 : tuer le humanoid directement après 0.8s
-		task.delay(0.8, function()
-			if LP.Character ~= oldChar then return end
-			local char = LP.Character; if not char then return end
-			local hum  = char:FindFirstChildOfClass("Humanoid"); if not hum then return end
-			pcall(function() hum.Health = 0 end)
+		-- 10 essais à 0.05s — s'arrête dès que resetDetected
+		task.spawn(function()
+			for _ = 1, 10 do
+				if resetDetected then break end
+				pcall(function() IR_resetRemote:FireServer(IR_GUID, LP, "balloon") end)
+				task.wait(0.05)
+			end
+			for _, conn in ipairs(resetConns) do
+				pcall(function() conn:Disconnect() end)
+			end
 		end)
 	end
 
 	_G.MH_instareset = instareset
 
 	_floatDefs.instareset = {
-		label = "INSTANT\nRESET",
+		label    = "INSTANT\nRESET",
 		onClick  = instareset,
 		momentary = true,
 	}
