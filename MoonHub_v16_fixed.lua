@@ -215,6 +215,37 @@ local function addLivingStroke(parent, thickness)
 	return stroke, g
 end
 
+local function addGreyShimmer(label)
+	local g = Instance.new("UIGradient", label)
+	g.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0,    Color3.fromRGB(60,  60,  60)),
+		ColorSequenceKeypoint.new(0.25, Color3.fromRGB(230, 230, 230)),
+		ColorSequenceKeypoint.new(0.5,  Color3.fromRGB(140, 140, 140)),
+		ColorSequenceKeypoint.new(0.75, Color3.fromRGB(255, 255, 255)),
+		ColorSequenceKeypoint.new(1,    Color3.fromRGB(60,  60,  60)),
+	})
+	g.Rotation = 0
+	table.insert(_livingGradients, g)
+	return g
+end
+
+local function addGreyStroke(parent, thickness)
+	local stroke = Instance.new("UIStroke", parent)
+	stroke.Thickness = thickness or 1.5
+	stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	stroke.Color = Color3.fromRGB(100, 100, 100)
+	local g = Instance.new("UIGradient", stroke)
+	g.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0,    Color3.fromRGB(10,  10,  10)),
+		ColorSequenceKeypoint.new(0.3,  Color3.fromRGB(220, 220, 220)),
+		ColorSequenceKeypoint.new(0.5,  Color3.fromRGB(10,  10,  10)),
+		ColorSequenceKeypoint.new(0.7,  Color3.fromRGB(220, 220, 220)),
+		ColorSequenceKeypoint.new(1,    Color3.fromRGB(10,  10,  10)),
+	})
+	table.insert(_livingStrokes, g)
+	return stroke, g
+end
+
 local _livingRotationSpeed = 0.6
 local _purgeCounter = 0
 RunService.RenderStepped:Connect(function()
@@ -2276,6 +2307,12 @@ function UIB.makeToggleRow(label, defaultOn, onToggle)
 	end
 	local clk = Instance.new("TextButton", row)
 	clk.Size = UDim2.new(1,0,1,0); clk.BackgroundTransparency = 1; clk.Text = ""
+	clk.MouseButton1Down:Connect(function()
+		TweenService:Create(row, TweenInfo.new(0.07, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundTransparency = 0}):Play()
+	end)
+	clk.MouseButton1Up:Connect(function()
+		TweenService:Create(row, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundTransparency = 0.35}):Play()
+	end)
 	clk.MouseButton1Click:Connect(function()
 		isOn = not isOn; setV(isOn)
 		if onToggle then onToggle(isOn) end
@@ -2331,6 +2368,12 @@ for i, name in ipairs(TABS) do
 	lbl.Size = UDim2.new(1,0,1,0); lbl.BackgroundTransparency = 1; lbl.Text = name
 	lbl.TextColor3 = C_TABIDLE; lbl.Font = Enum.Font.GothamBold; lbl.TextSize = 10; lbl.ZIndex = 6
 	tabButtons[name] = {frame=btn, lbl=lbl}
+	btn.MouseButton1Down:Connect(function()
+		TweenService:Create(btn, TweenInfo.new(0.07, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundTransparency = 0.1}):Play()
+	end)
+	btn.MouseButton1Up:Connect(function()
+		TweenService:Create(btn, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundTransparency = 0.5}):Play()
+	end)
 	btn.MouseButton1Click:Connect(function() selectTab(name) end)
 end
 
@@ -3549,10 +3592,13 @@ stealFill.BackgroundTransparency=0.72; stealFill.BorderSizePixel=0; stealFill.ZI
 addCorner(stealFill,18)
 local stealFillGrad=Instance.new("UIGradient",stealFill)
 stealFillGrad.Color=ColorSequence.new({
-	ColorSequenceKeypoint.new(0,Color3.fromRGB(10,50,68)),
-	ColorSequenceKeypoint.new(0.85,C_MOON),
-	ColorSequenceKeypoint.new(1,C_SILVER),
+	ColorSequenceKeypoint.new(0,    Color3.fromRGB(10,  30,  90)),
+	ColorSequenceKeypoint.new(0.25, Color3.fromRGB(40,  110, 230)),
+	ColorSequenceKeypoint.new(0.5,  Color3.fromRGB(150, 210, 255)),
+	ColorSequenceKeypoint.new(0.75, Color3.fromRGB(40,  110, 230)),
+	ColorSequenceKeypoint.new(1,    Color3.fromRGB(10,  30,  90)),
 })
+table.insert(_livingGradients, stealFillGrad)
 local stealEdge=Instance.new("Frame",stealFill)
 stealEdge.AnchorPoint=Vector2.new(1,0.5); stealEdge.Size=UDim2.new(0,4,1,-6); stealEdge.Position=UDim2.new(1,0,0.5,0)
 stealEdge.BackgroundColor3=C_WHITE; stealEdge.BorderSizePixel=0; stealEdge.ZIndex=2; addCorner(stealEdge,2)
@@ -3711,6 +3757,12 @@ local function makeFloatButton(id)
 		end
 	end)
 
+	btn.MouseButton1Down:Connect(function()
+		TweenService:Create(btn, TweenInfo.new(0.07, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundTransparency = 0.5}):Play()
+	end)
+	btn.MouseButton1Up:Connect(function()
+		TweenService:Create(btn, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundTransparency = 0}):Play()
+	end)
 	btn.MouseButton1Click:Connect(function()
 		if def.onClick then def.onClick() end
 		if def.momentary then
@@ -3884,28 +3936,36 @@ do
 		bbGui.Size = UDim2.new(0,130,0,52)
 		bbGui.StudsOffset = Vector3.new(0,3.5,0)
 		bbGui.AlwaysOnTop = true
+		-- Background card with rounded corners
+		local bbCard = Instance.new("Frame", bbGui)
+		bbCard.Size = UDim2.new(1,0,1,0); bbCard.BackgroundColor3 = Color3.fromRGB(0,0,0)
+		bbCard.BackgroundTransparency = 0.45; bbCard.BorderSizePixel = 0
+		Instance.new("UICorner", bbCard).CornerRadius = UDim.new(0, 10)
+		addGreyStroke(bbCard, 1)
 		-- "speed" label (above)
-		speedLbl = Instance.new("TextLabel", bbGui)
+		speedLbl = Instance.new("TextLabel", bbCard)
 		speedLbl.Size = UDim2.new(1,0,0,26)
 		speedLbl.Position = UDim2.new(0,0,0,0)
 		speedLbl.BackgroundTransparency = 1
 		speedLbl.Text = "Speed: 0"
-		speedLbl.TextColor3 = C_MOON
+		speedLbl.TextColor3 = Color3.fromRGB(200, 200, 200)
 		speedLbl.TextScaled = false
 		speedLbl.TextSize = 19
 		speedLbl.Font = Enum.Font.GothamBlack
 		speedLbl.TextStrokeTransparency = 1
 		speedLbl.TextXAlignment = Enum.TextXAlignment.Center
+		addGreyShimmer(speedLbl)
 		-- READY!! / timer label (below)
-		timerLbl = Instance.new("TextLabel", bbGui)
+		timerLbl = Instance.new("TextLabel", bbCard)
 		timerLbl.Size = UDim2.new(1,0,0,28)
 		timerLbl.Position = UDim2.new(0,0,0,24)
 		timerLbl.BackgroundTransparency = 1
 		timerLbl.Text = "READY!!"
-		timerLbl.TextColor3 = C_MOON
+		timerLbl.TextColor3 = Color3.fromRGB(200, 200, 200)
 		timerLbl.TextScaled = true
 		timerLbl.Font = Enum.Font.GothamBlack
 		timerLbl.TextStrokeTransparency = 1
+		addGreyShimmer(timerLbl)
 		_G._MH_speedLblRef = speedLbl
 		_G._MH_timerLblRef = timerLbl
 	end
