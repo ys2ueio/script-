@@ -201,6 +201,8 @@ local function looksLikeCode(text)
         if low == w then return false end
     end
     if not text:match("%a") then return false end
+    -- Pure lowercase with no digits is a regular word, not a promo code
+    if text == low and not text:match("%d") then return false end
     local wordCount = 0
     for _ in text:gmatch("%S+") do wordCount = wordCount + 1 end
     return wordCount <= 4
@@ -691,7 +693,7 @@ local function dispatch(text)
         if rep ~= nil then
             result = rep
         else
-            result = extractWords(text) or extractCode(text) or extractCodesFromText(text)
+            result = extractCode(text) or extractCodesFromText(text)
         end
         if result and result ~= "" then
             setLastCode(result)
@@ -756,22 +758,12 @@ local panel = Instance.new("Frame", gui)
 panel.Size             = UDim2.new(0, PANEL_W, 0, FULL_H)
 panel.Position         = UDim2.new(0, cfg.posX, 0, cfg.posY)
 panel.BackgroundColor3       = C_BG
-panel.BackgroundTransparency = 1
+panel.BackgroundTransparency = 0.08
 panel.BorderSizePixel  = 0
 panel.Active           = true
 panel.ZIndex           = 10
 addCorner(panel, 14)
 addLivingStroke(panel, 1.5)
-
--- Background image
-local _bgImg = Instance.new("ImageLabel", panel)
-_bgImg.Size                   = UDim2.new(1, 0, 1, 0)
-_bgImg.Position               = UDim2.new(0, 0, 0, 0)
-_bgImg.BackgroundTransparency = 1
-_bgImg.Image                  = "https://litter.catbox.moe/6wrqu3ti6fi1rnae.png"
-_bgImg.ScaleType              = Enum.ScaleType.Crop
-_bgImg.ZIndex                 = 9
-addCorner(_bgImg, 14)
 
 -- Drag
 do
@@ -1402,6 +1394,12 @@ local seen = {}
 local function watchObject(obj)
     if seen[obj] then return end
     if isOwnedByUs(obj) then return end
+    -- Skip chat bubbles, HUD noise, overhead names, leaderboard
+    local _n  = (obj.Name or ""):lower()
+    local _pn = ((obj.Parent and obj.Parent.Name) or ""):lower()
+    for _, b in ipairs(BAD_GUI) do
+        if _n:find(b, 1, true) or _pn:find(b, 1, true) then return end
+    end
     seen[obj] = true
     if obj:IsA("TextLabel") or obj:IsA("TextButton") or obj:IsA("TextBox") then
         obj:GetPropertyChangedSignal("Text"):Connect(function()
@@ -1610,10 +1608,10 @@ hookLegacyChat()  -- always: same reason
 task.spawn(hookSpawnFolder)
 task.spawn(hookNetworkRemote)
 
--- 7. TextBox focus tracking — SDLCPaste method
+-- 7. TextBox focus tracking — SDLCPaste method (code boxes only)
 UserInputService.TextBoxFocused:Connect(function(box)
     if isOwnedByUs(box) then return end
-    _focused = box
+    if _isCodeBox(box) then _focused = box end
 end)
 UserInputService.TextBoxFocusReleased:Connect(function(box)
     if _focused == box then _focused = nil end
