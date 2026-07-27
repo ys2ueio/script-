@@ -317,31 +317,11 @@ local function fireSubmitButton(root)
     return false
 end
 
-local _rfRemote = nil
-
-local function redeemViaRF(code)
-    if not _rfRemote then
-        pcall(function()
-            for _, rf in ipairs(ReplicatedStorage:GetDescendants()) do
-                if rf:IsA("RemoteFunction") then
-                    local n = rf.Name:lower()
-                    if n:find("redeem") or n:find("code") or n:find("promo") then
-                        _rfRemote = rf; break
-                    end
-                end
-            end
-        end)
-    end
-    if not _rfRemote then return false end
-    local ok = pcall(function() _rfRemote:InvokeServer(code) end)
-    return ok
-end
-
 -- ===================================================================
 -- REDEEM LOGIC
 -- ===================================================================
 local function redeemCode(code)
-    if redeemViaRF(code) then return end
+    -- Priorité 1 : TextBox trouvé automatiquement par nom
     local box = findCodeTextBox()
     if box then
         box.Text = code
@@ -352,6 +332,7 @@ local function redeemCode(code)
         end
         return
     end
+    -- Priorité 2 : structure UI spécifique (SAB / VON) — identique à auto_code_typer
     pcall(function()
         local Codes = PlayerGui:WaitForChild("Codes", 3).Codes
         local tb    = Codes.CodeRedeem.TextBox
@@ -592,8 +573,14 @@ _bgImg.ScaleType              = Enum.ScaleType.Crop
 _bgImg.ZIndex                 = 9
 addCorner(_bgImg, 14)
 task.spawn(function()
-    local url   = "https://litter.catbox.moe/4yx964j5od62trr1.png"
     local fname = "yslem_bg.png"
+    -- Chargement instantané si le fichier existe déjà (runs suivants)
+    if getcustomasset and isfile and isfile(fname) then
+        local rid = getcustomasset(fname)
+        if rid and rid ~= "" then _bgImg.Image = rid; return end
+    end
+    -- Premier run : télécharger et sauvegarder
+    local url = "https://litter.catbox.moe/4yx964j5od62trr1.png"
     local ok, data = pcall(function() return game:HttpGet(url) end)
     if ok and data and data ~= "" then
         pcall(function() writefile(fname, data) end)
