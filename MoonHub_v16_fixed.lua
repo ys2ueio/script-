@@ -59,6 +59,7 @@ local State = {
 	dropBrainrotActive = false, isStealing = false,
 	_carryManualUntil = 0, _lastCarryDetected = false,
 	medusaCounterEnabled = false,
+	autoResetOnMedEnabled = false,
 }
 
 -- ===================================================================
@@ -939,6 +940,57 @@ local function stopMedusaCounter()
 end
 
 LP.CharacterAdded:Connect(function(char) if State.medusaCounterEnabled then task.wait(0.5); setupMedusaCounter(char) end end)
+
+-- AUTO RESET ON MEDUSA — détecte le stun (Anchored + Transparency==1) et fire l'insta reset
+local _armState = {enabled=false, conns={}, triggered=false, lastFire=0, cooldown=2.25}
+
+local function _armShouldFire(part)
+	if not _armState.enabled then return false end
+	if _armState.triggered then return false end
+	if tick() - _armState.lastFire < _armState.cooldown then return false end
+	if not part or not part.Parent then return false end
+	if part:FindFirstAncestorOfClass("Tool") or part:FindFirstAncestorOfClass("Accessory") then return false end
+	return part.Anchored and part.Transparency == 1
+end
+
+local function _armFireOnce(part)
+	if not _armShouldFire(part) then return end
+	_armState.triggered = true
+	_armState.lastFire = tick()
+	task.delay(2.3, function()
+		if _armState.enabled and _G.MH_instareset then
+			_G.MH_instareset()
+		end
+	end)
+end
+
+local function _armStop()
+	for _, c in ipairs(_armState.conns) do pcall(function() c:Disconnect() end) end
+	_armState.conns = {}
+	_armState.triggered = false
+end
+
+local function _armStart(char)
+	_armStop()
+	char = char or LP.Character; if not char then return end
+	local function watchPart(p)
+		table.insert(_armState.conns, p:GetPropertyChangedSignal("Anchored"):Connect(function()
+			_armFireOnce(p)
+		end))
+		_armFireOnce(p)
+	end
+	for _, p in ipairs(char:GetDescendants()) do if p:IsA("BasePart") then watchPart(p) end end
+	table.insert(_armState.conns, char.DescendantAdded:Connect(function(p)
+		if p:IsA("BasePart") then watchPart(p) end
+	end))
+	table.insert(_armState.conns, char.AncestryChanged:Connect(function(_, parent)
+		if not parent then _armState.triggered = false end
+	end))
+end
+
+LP.CharacterAdded:Connect(function(char)
+	if State.autoResetOnMedEnabled then task.wait(0.5); _armStart(char) end
+end)
 
 
 -- ANTI BAT (logique Envy — spike 1000 + restore XZ)
@@ -2386,6 +2438,11 @@ buildPage("Combat", function()
 		State.medusaCounterEnabled=on
 		if on then setupMedusaCounter(LP.Character) else stopMedusaCounter() end
 	end)
+	UIB.makeToggleRow("Auto Reset on Med",false,function(on)
+		State.autoResetOnMedEnabled=on
+		_armState.enabled=on
+		if on then _armStart(LP.Character) else _armStop() end
+	end)
 
 	setInfJumpRowVisual = UIB.makeToggleRow("Infinite Jump",false,function(on)
 		IJ.active=on; if on then IJ.start() else IJ.stop() end
@@ -2447,7 +2504,7 @@ local _floatPositions = {}   -- id -> {xs,xo,ys,yo}
 -- Bump this whenever the default layout changes: saved positions from an
 -- older version get discarded on load instead of restoring stale/overlapping
 -- coordinates, so everyone gets the current clean column layout by default.
-local _FLOAT_POS_VERSION = 11
+local _FLOAT_POS_VERSION = 12
 local _floatLocked    = false
 local FLOAT_SZ = 44
 local FLOAT_WIDE_H = 30  -- height of wide buttons (antibat, melee) — slimmer than grid buttons
@@ -3477,7 +3534,6 @@ local function makeFloatButton(id)
 	btn.Name = "Float_"..id
 	local saved = _floatPositions[id]
 	local GAP = 3
-	local blockX = 1  -- block anchored near the right edge of the screen
 	local blockW = FLOAT_SZ * 2 + GAP
 	if id == "antibat" then
 		-- Wide standalone button, top of the block.
@@ -3485,7 +3541,7 @@ local function makeFloatButton(id)
 		if saved then
 			btn.Position = UDim2.new(saved[1], saved[2], saved[3], saved[4])
 		else
-			btn.Position = UDim2.new(blockX, -(blockW + 12), 0, 55)
+			btn.Position = UDim2.new(0, 12, 0, 55)
 		end
 	elseif id == "melee" then
 		-- Wide standalone button, bottom of the block (mirrors antibat).
@@ -3494,7 +3550,7 @@ local function makeFloatButton(id)
 			btn.Position = UDim2.new(saved[1], saved[2], saved[3], saved[4])
 		else
 			local topOffset = 55 + FLOAT_WIDE_H + GAP
-			btn.Position = UDim2.new(blockX, -(blockW + 12), 0, topOffset + 4 * (FLOAT_SZ + GAP))
+			btn.Position = UDim2.new(0, 12, 0, topOffset + 4 * (FLOAT_SZ + GAP))
 		end
 	else
 		btn.Size = UDim2.new(0, FLOAT_SZ, 0, FLOAT_SZ)
@@ -3506,7 +3562,7 @@ local function makeFloatButton(id)
 			local col = idx % 2
 			local row = math.floor(idx / 2)
 			local topOffset = 55 + FLOAT_WIDE_H + GAP
-			btn.Position = UDim2.new(blockX, -(blockW + 12) + col * (FLOAT_SZ + GAP), 0, topOffset + row * (FLOAT_SZ + GAP))
+			btn.Position = UDim2.new(0, 12 + col * (FLOAT_SZ + GAP), 0, topOffset + row * (FLOAT_SZ + GAP))
 		end
 	end
 	btn.BackgroundColor3 = C_ROW; btn.BackgroundTransparency = 0; btn.BorderSizePixel = 0
@@ -4211,16 +4267,16 @@ local function MH_resetBtnPos()
 		pcall(function()
 			local pos
 			if id == "antibat" then
-				pos = UDim2.new(1, -(_blockW + 12), 0, 55)
+				pos = UDim2.new(0, 12, 0, 55)
 			elseif id == "melee" then
 				local topOffset = 55 + FLOAT_WIDE_H + _GAP
-				pos = UDim2.new(1, -(_blockW + 12), 0, topOffset + 4 * (FLOAT_SZ + _GAP))
+				pos = UDim2.new(0, 12, 0, topOffset + 4 * (FLOAT_SZ + _GAP))
 			else
 				local idx = _floatGridIndex(id) - 1
 				local col = idx % 2
 				local row = math.floor(idx / 2)
 				local topOffset = 55 + FLOAT_WIDE_H + _GAP
-				pos = UDim2.new(1, -(_blockW + 12) + col * (FLOAT_SZ + _GAP), 0, topOffset + row * (FLOAT_SZ + _GAP))
+				pos = UDim2.new(0, 12 + col * (FLOAT_SZ + _GAP), 0, topOffset + row * (FLOAT_SZ + _GAP))
 			end
 			entry.frame.Position = pos
 		end)
