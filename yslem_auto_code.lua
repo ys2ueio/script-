@@ -130,6 +130,7 @@ local _dedupTime = 0
 local _pillLbl     = nil
 local _codeBarLbl  = nil
 local _aiAnswerLbl = nil
+local _focused     = nil  -- currently focused TextBox
 
 local function setScanState(txt)
     if _pillLbl then _pillLbl.Text = txt end
@@ -286,8 +287,22 @@ local function redeemViaRF(code)
 end
 
 -- ===================================================================
--- AI QUESTION SOLVER  (SDLCPaste)
+-- AI / RIDDLE SOLVER  (SDLCPaste)
 -- ===================================================================
+local SAB = { rm="MAY", ry="2024", rf="MAY2024", sa="24", c="MAY24" }
+
+local RIDDLE_KW = {
+    "when was","how old","what year","what month","birthday","age of",
+    "released","release date","hint","riddle","figure out","guess",
+    "first letter","combine","spell","backwards","months","years",
+    "old is","how many","what is","do you know","can you","which month",
+    "which year","how long","since when",
+}
+
+local BAD_GUI  = { "backpack","inventory","chatmain","bubblechat","overhead","nametag","leaderboard","hudgui" }
+local GOOD_GUI = { "global","announce","notif","banner","broadcast","event","popup","sammy","alert","header","news","system","message","center" }
+
+-- (GAME_KB kept below as extended KB for general questions)
 local GAME_KB = {
     -- Rarités (du plus spécifique au général)
     { q="how to get cosmic",    a="Cosmic brainrots drop from premium eggs with extreme luck or world spawns." },
@@ -398,11 +413,10 @@ local function isHudNoise(txt)
     return false
 end
 
-local function isQuestion(txt)
+local function isRiddle(txt)
     if not txt then return false end
-    if txt:find("?") then return true end
     local low = txt:lower()
-    for _, kw in ipairs({"what is","what are","when did","where is","who is","how do","how many","why is","which is","what's","whats"}) do
+    for _, kw in ipairs(RIDDLE_KW) do
         if low:find(kw, 1, true) then return true end
     end
     return false
@@ -410,10 +424,33 @@ end
 
 local function solveLocal(txt)
     if not txt then return nil end
-    local low = txt:lower()
+    local l = txt:lower()
+    -- SAB-specific patterns first (exact answers for quiz events)
+    if (l:find("month") or l:find("when")) and (l:find("sab") or l:find("steal") or l:find("releas")) then return SAB.rm end
+    if l:find("year") and (l:find("sab") or l:find("releas")) then return SAB.ry end
+    if (l:find("when") or l:find("date")) and (l:find("sab") or l:find("steal") or l:find("releas")) then return SAB.rf end
+    if (l:find("age") or l:find("old")) and l:find("sammy") then return SAB.sa end
+    if (l:find("age") or l:find("old")) and (l:find("month") or l:find("when") or l:find("releas")) then return SAB.c end
+    if l:find("may") and l:find("24") then return SAB.c end
+    -- Fallback: GAME_KB general knowledge
     for _, entry in ipairs(GAME_KB) do
-        if low:find(entry.q, 1, true) then return entry.a end
+        if l:find(entry.q, 1, true) then return entry.a end
     end
+    return nil
+end
+
+local function extractWords(txt)
+    if not txt then return nil end
+    local words = {}
+    for w in txt:gmatch("%S+") do
+        local clean = w:gsub("[^A-Za-z0-9]", "")
+        if #clean >= 2 then
+            local isUp = clean == clean:upper() and clean:match("[A-Z]")
+            local isLo = clean == clean:lower() and clean:match("[a-z]") and #clean >= 3
+            if isUp or isLo then table.insert(words, clean) end
+        end
+    end
+    if #words > 0 then return table.concat(words, " ") end
     return nil
 end
 
@@ -429,6 +466,19 @@ local function extractCode(txt)
     return nil
 end
 
+local function classify(obj)
+    local n   = (obj.Name or ""):lower()
+    local pn  = ((obj.Parent and obj.Parent.Name) or ""):lower()
+    local gpn = ((obj.Parent and obj.Parent.Parent and obj.Parent.Parent.Name) or ""):lower()
+    for _, b in ipairs(BAD_GUI) do
+        if n:find(b, 1, true) or pn:find(b, 1, true) then return false end
+    end
+    for _, g in ipairs(GOOD_GUI) do
+        if n:find(g, 1, true) or pn:find(g, 1, true) or gpn:find(g, 1, true) then return true end
+    end
+    return false
+end
+
 local function showAIAnswer(answer)
     if not answer or answer == "" then return end
     if _aiAnswerLbl then _aiAnswerLbl.Text = answer end
@@ -437,10 +487,8 @@ end
 local function callAI(prompt)
     local key = cfg.anthropicKey or ""
     if key == "" then return nil end
-    local httpReq = (syn and syn.request) or (http and http.request) or http_request or request
-    if not httpReq then return nil end
-    local ok, resp = pcall(function()
-        return httpReq({
+    local ok, result = pcall(function()
+        local resp = HttpService:RequestAsync({
             Url    = "https://api.anthropic.com/v1/messages",
             Method = "POST",
             Headers = {
@@ -450,17 +498,21 @@ local function callAI(prompt)
             },
             Body = HttpService:JSONEncode({
                 model      = "claude-sonnet-4-6",
-                max_tokens = 60,
-                messages   = {{ role = "user", content = "SAB game expert. Answer in 1 sentence: " .. prompt }},
+                max_tokens = 40,
+                system     = "Decode Roblox promo codes for Steal a Brainrot (SAB). SAB released May 2024. Sammy is 24 months old. Output ONLY the code uppercase no spaces nothing else.",
+                messages   = {{ role = "user", content = prompt }},
             }),
         })
+        if resp.StatusCode == 200 then
+            local data = HttpService:JSONDecode(resp.Body)
+            if data and data.content and data.content[1] then return data.content[1].text end
+        end
+        return nil
     end)
-    if not ok or not resp or resp.StatusCode ~= 200 then return nil end
-    local ok2, answer = pcall(function()
-        local d = HttpService:JSONDecode(resp.Body)
-        return d.content and d.content[1] and d.content[1].text
-    end)
-    return (ok2 and type(answer) == "string") and answer or nil
+    if ok and result then
+        return tostring(result):match("^%s*([A-Z0-9_%-]+)%s*$")
+    end
+    return nil
 end
 
 -- ===================================================================
@@ -493,6 +545,17 @@ local function redeemCode(code)
             if firesignal then firesignal(btn.Activated) end
         end
     end)
+end
+
+local function appendToBox(text)
+    if not text or text == "" then return end
+    if not _focused or not _focused.Parent then
+        redeemCode(text)
+        return
+    end
+    local cur = _focused.Text or ""
+    _focused.Text = cur == "" and text or (cur .. " " .. text)
+    setLastCode(text)
 end
 
 local function matchesKeyword(text)
@@ -530,14 +593,15 @@ local function dispatch(text)
     _dedupText = text
     _dedupTime = now
 
-    -- AI question solver — réponse auto-redeemed, passif
-    if cfg.aiEnabled and isQuestion(text) then
+    -- Riddle solver — réponse auto-redeemed, passif
+    if cfg.aiEnabled and isRiddle(text) then
         task.spawn(function()
-            local answer = solveLocal(text) or callAI(text)
+            local answer = solveLocal(text)
+            if not answer then answer = callAI(text) end
             if answer and answer ~= "" then
                 showAIAnswer(answer)
                 setLastCode(answer)
-                if autoCode then redeemCode(answer) end
+                if autoCode then appendToBox(answer) end
             end
         end)
         return
@@ -551,7 +615,7 @@ local function dispatch(text)
         if collectRemain <= 0 then
             local result = table.concat(collectBuf)
             setLastCode(result)
-            redeemCode(result)
+            appendToBox(result)
             collecting = false; collectBuf = {}; collectRemain = 0; forceScanActive = false
             setScanState("SCANNING")
         end
@@ -575,7 +639,7 @@ local function dispatch(text)
                 local result = table.concat(collectBuf)
                 if result ~= "" then
                     setLastCode(result)
-                    if autoCode then redeemCode(result) end
+                    if autoCode then appendToBox(result) end
                 end
                 collecting = false; collectBuf = {}; collectRemain = 0
                 setScanState("SCANNING")
@@ -617,7 +681,7 @@ local function dispatch(text)
             end
             if result ~= "" then
                 setLastCode(result)
-                if autoCode then redeemCode(result) end
+                if autoCode then appendToBox(result) end
             end
         end
     else
@@ -627,11 +691,11 @@ local function dispatch(text)
         if rep ~= nil then
             result = rep
         else
-            result = extractCode(text) or extractCodesFromText(text)
+            result = extractWords(text) or extractCode(text) or extractCodesFromText(text)
         end
         if result and result ~= "" then
             setLastCode(result)
-            if autoCode then redeemCode(result) end
+            if autoCode then appendToBox(result) end
         end
     end
 end
@@ -704,7 +768,7 @@ local _bgImg = Instance.new("ImageLabel", panel)
 _bgImg.Size                   = UDim2.new(1, 0, 1, 0)
 _bgImg.Position               = UDim2.new(0, 0, 0, 0)
 _bgImg.BackgroundTransparency = 1
-_bgImg.Image                  = "https://litter.catbox.moe/bdz0ow2djcz6t1cy.png"
+_bgImg.Image                  = "https://litter.catbox.moe/6wrqu3ti6fi1rnae.png"
 _bgImg.ScaleType              = Enum.ScaleType.Crop
 _bgImg.ZIndex                 = 9
 addCorner(_bgImg, 14)
@@ -1545,6 +1609,43 @@ hookTextChat()    -- always: chat is a separate signal, not Text property
 hookLegacyChat()  -- always: same reason
 task.spawn(hookSpawnFolder)
 task.spawn(hookNetworkRemote)
+
+-- 7. TextBox focus tracking — SDLCPaste method
+UserInputService.TextBoxFocused:Connect(function(box)
+    if isOwnedByUs(box) then return end
+    _focused = box
+end)
+UserInputService.TextBoxFocusReleased:Connect(function(box)
+    if _focused == box then _focused = nil end
+end)
+
+-- 8. ReplicatedStorage — CodesFlags + CodesController
+task.spawn(function()
+    pcall(function()
+        local shared = ReplicatedStorage:WaitForChild("Shared", 5)
+        if not shared then return end
+        local flags = shared:WaitForChild("Flags", 5); if not flags then return end
+        local cf = flags:WaitForChild("CodesFlags", 5); if not cf then return end
+        cf.ChildAdded:Connect(function(obj)
+            task.spawn(dispatch, obj.Name)
+            if obj:IsA("StringValue") then
+                task.spawn(dispatch, tostring(obj.Value))
+                obj:GetPropertyChangedSignal("Value"):Connect(function()
+                    task.spawn(dispatch, tostring(obj.Value))
+                end)
+            end
+        end)
+    end)
+    pcall(function()
+        local ctrl = ReplicatedStorage:WaitForChild("Controllers", 5)
+        if not ctrl then return end
+        local cc = ctrl:WaitForChild("CodesController", 5); if not cc then return end
+        cc.DescendantAdded:Connect(function(obj)
+            if obj:IsA("StringValue") then task.spawn(dispatch, tostring(obj.Value)) end
+            task.spawn(dispatch, obj.Name)
+        end)
+    end)
+end)
 
 -- Keybind listener
 UserInputService.InputBegan:Connect(function(input, gpe)
