@@ -4068,40 +4068,96 @@ _floatDefs.battp = {
 }
 
 -- ===================================================================
--- INSTA RESET — logic integrated from the InstaReset script
+-- INSTA RESET — logique complète (ACE)
+--   Méthode 1 : remote spécifique jeu (RE/ + GUID)
+--   Méthode 2 : LP:LoadCharacter() après 0.3s
+--   Méthode 3 : hum.Health = 0 après 0.8s
+--   Détection : hookfunction FireServer + scan actif + DescendantAdded
 -- ===================================================================
 do
 	local IR_GUID        = "f888ee6e-c86d-46e1-93d7-0639d6635d42"
 	local IR_resetRemote = nil
 
+	-- Scan actif : cherche le remote déjà présent dans le jeu
+	local function IR_scan()
+		if IR_resetRemote then return end
+		for _, svc in ipairs({game:GetService("ReplicatedStorage"), workspace, game:GetService("Players")}) do
+			pcall(function()
+				for _, v in ipairs(svc:GetDescendants()) do
+					if v:IsA("RemoteEvent") and type(v.Name) == "string" and v.Name:sub(1,3) == "RE/" then
+						IR_resetRemote = v; return
+					end
+				end
+			end)
+			if IR_resetRemote then break end
+		end
+	end
+
+	-- Hook FireServer : capture le remote dès sa première utilisation
 	pcall(function()
 		local o_
 		o_ = hookfunction(Instance.new("RemoteEvent").FireServer, newcclosure(function(self, ...)
-			if not IR_resetRemote and self.Name:sub(1,3) == "RE/" then
+			if not IR_resetRemote and type(self.Name) == "string" and self.Name:sub(1,3) == "RE/" then
 				IR_resetRemote = self
 			end
 			return o_(self, ...)
 		end))
 	end)
 
-	-- [FIX #3] Timeout 5s : si le serveur ne répond pas, la boucle ne tourne pas
-	-- indéfiniment jusqu'à la fin de session.
-	local function instareset(resetType)
-		if not IR_resetRemote then return end
+	-- DescendantAdded : capture le remote s'il apparaît après l'injection
+	task.spawn(function()
+		for _, svc in ipairs({game:GetService("ReplicatedStorage"), workspace}) do
+			pcall(function()
+				svc.DescendantAdded:Connect(function(v)
+					if not IR_resetRemote and v:IsA("RemoteEvent")
+					and type(v.Name) == "string" and v.Name:sub(1,3) == "RE/" then
+						IR_resetRemote = v
+					end
+				end)
+			end)
+		end
+	end)
+
+	-- Scan immédiat au cas où le script est injecté tard
+	task.spawn(IR_scan)
+
+	local function instareset()
+		-- Dernière chance de trouver le remote si pas encore vu
+		if not IR_resetRemote then IR_scan() end
+
 		local oldChar = LP.Character
 		local deadline = tick() + 5
-		task.spawn(function()
-			while (LP.Character == oldChar or LP.Character == nil) and tick() < deadline do
-				pcall(function() IR_resetRemote:FireServer(IR_GUID, LP, resetType or "balloon") end)
-				task.wait()
-			end
+
+		-- Méthode 1 : remote propre au jeu (instantané côté serveur)
+		if IR_resetRemote then
+			task.spawn(function()
+				while (LP.Character == oldChar or not LP.Character) and tick() < deadline do
+					pcall(function() IR_resetRemote:FireServer(IR_GUID, LP, "balloon") end)
+					task.wait(0.05)
+				end
+			end)
+		end
+
+		-- Méthode 2 : LP:LoadCharacter() si toujours en vie après 0.3s
+		task.delay(0.3, function()
+			if LP.Character ~= oldChar then return end
+			pcall(function() LP:LoadCharacter() end)
+		end)
+
+		-- Méthode 3 : tuer le humanoid directement après 0.8s
+		task.delay(0.8, function()
+			if LP.Character ~= oldChar then return end
+			local char = LP.Character; if not char then return end
+			local hum  = char:FindFirstChildOfClass("Humanoid"); if not hum then return end
+			pcall(function() hum.Health = 0 end)
 		end)
 	end
-	_G.MH_instareset = function() instareset("balloon") end  -- exposed to the keybind
+
+	_G.MH_instareset = instareset
 
 	_floatDefs.instareset = {
 		label = "INSTANT\nRESET",
-		onClick = function() instareset("balloon") end,
+		onClick  = instareset,
 		momentary = true,
 	}
 end
