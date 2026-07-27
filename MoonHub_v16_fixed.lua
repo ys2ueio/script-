@@ -3778,16 +3778,17 @@ do
 		bbGui.AlwaysOnTop = true
 		-- "speed" label (above) — Moon Hub living-gradient style
 		speedLbl = Instance.new("TextLabel", bbGui)
-		speedLbl.Size = UDim2.new(1,0,0,22)
+		speedLbl.Size = UDim2.new(1,0,0,26)
 		speedLbl.Position = UDim2.new(0,0,0,0)
 		speedLbl.BackgroundTransparency = 1
-		speedLbl.Text = "0"
-		speedLbl.TextColor3 = C_MOON
-		speedLbl.TextScaled = true
+		speedLbl.Text = "Speed: 0"
+		speedLbl.TextColor3 = Color3.fromRGB(255, 255, 255)
+		speedLbl.TextScaled = false
+		speedLbl.TextSize = 19
 		speedLbl.Font = Enum.Font.GothamBlack
-		speedLbl.TextStrokeTransparency = 0.35
-		speedLbl.TextStrokeColor3 = Color3.fromRGB(0,0,0)
-		addLivingTextGradient(speedLbl)
+		speedLbl.TextStrokeTransparency = 0
+		speedLbl.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+		speedLbl.TextXAlignment = Enum.TextXAlignment.Center
 		-- READY!! / timer label (below)
 		timerLbl = Instance.new("TextLabel", bbGui)
 		timerLbl.Size = UDim2.new(1,0,0,28)
@@ -3853,13 +3854,19 @@ do
 	end)
 	if LP.Character then task.wait(0.1); createBB(); setupDetection(LP.Character) end
 
-	-- Speed update — actual horizontal velocity magnitude (raw_59 approach)
+	-- Speed update — acemobile approach (AssemblyLinearVelocity fallback, smart rounding)
 	RunService.RenderStepped:Connect(function()
 		if not speedLbl or not speedLbl.Parent then return end
 		local char = LP.Character; if not char then return end
 		local hrp3 = char:FindFirstChild("HumanoidRootPart"); if not hrp3 then return end
-		local hs = Vector3.new(hrp3.Velocity.X, 0, hrp3.Velocity.Z).Magnitude
-		speedLbl.Text = string.format("%.1f", hs)
+		local v = hrp3.AssemblyLinearVelocity or hrp3.Velocity
+		local speedMag = Vector3.new(v.X, 0, v.Z).Magnitude
+		local rounded = math.floor(speedMag * 10 + 0.5) / 10
+		if math.abs(rounded - math.floor(rounded)) < 0.05 then
+			speedLbl.Text = string.format("Speed: %d", math.floor(rounded + 0.5))
+		else
+			speedLbl.Text = string.format("Speed: %.1f", rounded)
+		end
 	end)
 
 	-- Other players' speed (billboard above their head)
