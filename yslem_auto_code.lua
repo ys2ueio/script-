@@ -289,16 +289,102 @@ end
 -- AI QUESTION SOLVER  (SDLCPaste)
 -- ===================================================================
 local GAME_KB = {
-    { q="launch",      a="Brainrot Simulator launched in early 2024." },
-    { q="rarest",      a="The rarest brainrots are Prismatic and Cosmic tier." },
-    { q="og",          a="OG brainrots were available at the game launch." },
-    { q="mutation",    a="Mutations are random stat boosts that appear on brainrots." },
-    { q="rarity",      a="Rarities: Common, Uncommon, Rare, Epic, Legendary, Mythic, Prismatic, Cosmic." },
-    { q="update",      a="Check the game Discord or announcements for latest updates." },
-    { q="how many",    a="Check the in-game bestiary for total brainrot counts." },
-    { q="best",        a="Cosmic tier brainrots generally have the best stats." },
-    { q="trade",       a="Trading is done through the in-game trade system." },
-    { q="code",        a="Active codes are announced in the game Discord server." },
+    -- Rarités (du plus spécifique au général)
+    { q="how to get cosmic",    a="Cosmic brainrots drop from premium eggs with extreme luck or world spawns." },
+    { q="how to get prismatic", a="Prismatic brainrots are hatched from high-tier eggs with good luck." },
+    { q="how to get legendary", a="Legendary brainrots hatch from standard eggs or appear as world spawns." },
+    { q="rarest",               a="Cosmic is the absolute rarest tier, followed by Prismatic then Mythic." },
+    { q="cosmic",               a="Cosmic is the rarest rarity — nearly impossible to obtain without luck boosts." },
+    { q="prismatic",            a="Prismatic is the second rarest rarity, just below Cosmic." },
+    { q="mythic",               a="Mythic is between Legendary and Prismatic in the rarity tier list." },
+    { q="legendary",            a="Legendary is a high-tier rarity above Epic and below Mythic." },
+    { q="epic",                 a="Epic sits above Rare and below Legendary in rarity." },
+    { q="rarity",               a="Rarities lowest to highest: Common, Uncommon, Rare, Epic, Legendary, Mythic, Prismatic, Cosmic." },
+
+    -- Mutations
+    { q="best mutation",        a="Double mutation is the most valuable, giving two separate stat bonuses." },
+    { q="mutation",             a="Mutations are random stat bonuses on a brainrot that increase its power and trade value." },
+    { q="mutated",              a="A mutated brainrot has bonus stats making it stronger and more valuable in trades." },
+    { q="double mutation",      a="Double mutation means a brainrot has two stat bonuses — the rarest and most valued mutation type." },
+
+    -- Types spéciaux
+    { q="shiny",                a="Shiny brainrots have a glowing visual effect and are rarer than standard variants." },
+    { q="glitch",               a="Glitch brainrots have a distorted look and hold special rarity status." },
+    { q="og",                   a="OG brainrots were available at game launch and are much rarer to find now." },
+    { q="admin",                a="Admin brainrots are exclusive developer items unobtainable through normal gameplay." },
+    { q="limited",              a="Limited brainrots from events are among the most valuable for trading." },
+
+    -- Obtention
+    { q="how to get",           a="Brainrots are obtained by hatching eggs, trading, world spawns, or events." },
+    { q="spawn rate",           a="Common spawns often; Epic occasionally; Legendary rarely; Cosmic almost never." },
+    { q="spawn",                a="Brainrots spawn naturally in the world at intervals based on their rarity." },
+    { q="hatch",                a="Hatching eggs is the primary way to get brainrots — better eggs hatch rarer ones." },
+    { q="egg",                  a="Eggs are bought with coins or Robux and hatched to get brainrots of various rarities." },
+
+    -- Monnaie & économie
+    { q="how to get coins",     a="Earn coins by selling brainrots, completing quests, daily rewards, and events." },
+    { q="coin",                 a="Coins are the main currency used to buy eggs, upgrades, and items." },
+    { q="robux",                a="Robux buys gamepasses, premium eggs, and cosmetics unavailable with coins." },
+    { q="value",                a="Brainrot value depends on rarity, mutations, demand, and if it is OG or shiny." },
+    { q="worth",                a="Check the Discord trading channel or wiki for current brainrot values." },
+
+    -- Progression
+    { q="level up",             a="Level up brainrots using XP items or by battling to increase their stats." },
+    { q="level",                a="Higher level brainrots have stronger stats and better trade value." },
+    { q="how to level",         a="Gain XP by battling or using XP potions to level up your brainrots." },
+    { q="luck",                 a="Luck boosts your chances of hatching or finding rarer brainrots." },
+    { q="double luck",          a="Double Luck doubles rarity chances when hatching — stack with events for best results." },
+    { q="grind",                a="Grinding means farming coins and brainrots repeatedly to progress faster." },
+    { q="fastest way",          a="The fastest way to progress is hatching eggs with active luck boosts during events." },
+
+    -- Stats & combat
+    { q="stat",                 a="Stats include attack, defense, and speed which determine brainrot strength." },
+    { q="attack",               a="Attack determines how much damage your brainrot deals in battle." },
+    { q="defense",              a="Defense reduces the damage your brainrot takes in combat." },
+    { q="speed",                a="Speed determines turn order and movement rate in battle." },
+    { q="strongest",            a="The strongest brainrots are Cosmic tier with double mutations maxed out." },
+    { q="best",                 a="Cosmic with double mutation is considered the best possible brainrot." },
+    { q="how many",             a="Check the in-game bestiary for the current total number of brainrots." },
+
+    -- Trading
+    { q="how to trade",         a="Open the trade menu, select a player, offer your brainrots, and confirm." },
+    { q="overpay",              a="Overpaying means you give more value than you receive in a trade." },
+    { q="underpay",             a="Underpaying means you receive more value than what you offer." },
+    { q="scam",                 a="Never accept trades without verifying value first — scammers are common." },
+    { q="trade",                a="Use the in-game trade system to exchange brainrots with other players." },
+
+    -- Gamepasses
+    { q="gamepass",             a="Gamepasses include Auto-Collect, Double Luck, VIP, and storage upgrades." },
+    { q="vip",                  a="VIP gamepass gives a special title, exclusive perks, and bonus coin gain." },
+    { q="auto collect",         a="Auto-Collect gamepass automatically picks up nearby spawned brainrots for you." },
+    { q="storage",              a="Upgrade your storage to hold more brainrots in your inventory at once." },
+    { q="worth buying",         a="Auto-Collect and Double Luck gamepasses are generally considered most worth it." },
+
+    -- Codes & Discord
+    { q="code",                 a="Active codes are posted on the game Discord and official social media pages." },
+    { q="discord",              a="Join the official Discord to get codes, news, events, and trading info." },
+    { q="free",                 a="Free rewards come from login codes, events, and Discord server giveaways." },
+    { q="where to find code",   a="Codes are posted in the game Discord #codes channel and on the Roblox page." },
+
+    -- Événements & saisons
+    { q="event",                a="Events are limited-time challenges that reward exclusive brainrots or cosmetics." },
+    { q="season",               a="Seasonal events introduce brainrots only available during that limited period." },
+    { q="update",               a="Updates add new brainrots, eggs, and features — follow Discord for announcements." },
+    { q="new update",           a="Check the Discord announcements channel for the latest update patch notes." },
+
+    -- Infos générales
+    { q="launch",               a="Brainrot Simulator launched in early 2024 on Roblox." },
+    { q="how old",              a="The game has been on Roblox since early 2024." },
+    { q="bestiary",             a="The bestiary tracks every brainrot you have discovered or collected in the game." },
+    { q="daily",                a="Claim your daily login reward each day for free coins or items." },
+    { q="private server",       a="Private servers let you farm alone or with friends without random players." },
+    { q="wiki",                 a="The Brainrot Simulator Wiki on Fandom has guides, values, and brainrot lists." },
+    { q="mobile",               a="The game is fully playable on mobile through the Roblox app." },
+    { q="brainrot",             a="Brainrots are collectible creatures you hatch, level, trade, and battle with." },
+    { q="what is the game",     a="Brainrot Simulator is a Roblox collecting game centered around brainrots." },
+    { q="how to play",          a="Hatch eggs to get brainrots, level them up, trade with players, and join events." },
+    { q="beginner",             a="As a beginner: hatch common eggs to get starter brainrots, sell duplicates for coins." },
+    { q="tip",                  a="Tip: hatch during Double Luck events and save Robux for premium eggs." },
 }
 
 local function isHudNoise(txt)
