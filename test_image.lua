@@ -34,10 +34,12 @@ lbl.TextSize = 14
 
 task.spawn(function()
 	local ok, err = pcall(function()
-		local data = game:HttpGet(url)
-		writefile(filename, data)
-		local assetId = getcustomasset(filename)
-		img.Image = assetId
+		if not isfile(filename) then
+			-- Premier lancement : télécharge et cache
+			writefile(filename, game:HttpGet(url))
+		end
+		-- Déjà en cache : instantané
+		img.Image = getcustomasset(filename)
 		lbl.Text = ""
 	end)
 	if not ok then
