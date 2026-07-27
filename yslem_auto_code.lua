@@ -8,12 +8,13 @@ local LP                = Players.LocalPlayer
 local PlayerGui         = LP:WaitForChild("PlayerGui")
 
 -- ===================================================================
--- CONFIG  (persisted)
+-- CONFIG
 -- ===================================================================
 local CFG_PATH = "yslem_autocode_cfg.json"
 local cfg = {
     autoCode     = true,
-    captureCount = 0,          -- 0=instant single-notif, N=collect N parts after trigger
+    redeemDelay  = 3,       -- secondes d'attente après dernier texte avant auto-redeem
+    captureCount = 0,       -- 0 = mode timer, N = collecter exactement N parties
     keywords     = { "code is","","","","","","","","","" },
     replaceRules = {
         {kw="admin war", rep="jandel"},
@@ -23,10 +24,8 @@ local cfg = {
     },
     posX      = 16,
     posY      = 80,
-    minimized    = false,
-    activeTab    = 1,
-    anthropicKey = "",
-    aiEnabled    = true,
+    minimized = false,
+    activeTab = 1,
 }
 
 local function saveConfig()
@@ -105,11 +104,11 @@ end)
 -- ===================================================================
 local MAX_KW       = 10
 local autoCode     = cfg.autoCode == true
-local captureCount = cfg.captureCount
+local captureCount = cfg.captureCount or 0
+local redeemDelay  = cfg.redeemDelay or 3
 
 local filterKeywords = {}
 local replaceRules   = {}
-
 for i = 1, MAX_KW do
     filterKeywords[i] = (type(cfg.keywords) == "table" and cfg.keywords[i]) or ""
 end
@@ -123,14 +122,42 @@ local collectBuf      = {}
 local collectRemain   = 0
 local forceScanActive = false
 local lastCode        = ""
+local _dedupText      = ""
+local _dedupTime      = 0
 
-local _dedupText = ""
-local _dedupTime = 0
+-- Timer-based redeem
+local _pendingCode = ""
+local _flushToken  = 0
 
-local _pillLbl     = nil
-local _codeBarLbl  = nil
-local _aiAnswerLbl = nil
-local _focused     = nil  -- currently focused TextBox
+local _pillLbl    = nil
+local _codeBarLbl = nil
+local _focused    = nil
+
+-- Status log
+local _statusLog    = {}
+local _statusScroll = nil
+
+local function logStatus(msg)
+    local t = os.date and os.date("%H:%M:%S") or "??"
+    local entry = "[" .. t .. "] " .. msg
+    table.insert(_statusLog, entry)
+    if _statusScroll then
+        local lbl = Instance.new("TextLabel")
+        lbl.Size                   = UDim2.new(1, -8, 0, 0)
+        lbl.AutomaticSize          = Enum.AutomaticSize.Y
+        lbl.BackgroundTransparency = 1
+        lbl.Font                   = Enum.Font.Code
+        lbl.TextSize               = 9
+        lbl.TextColor3             = C_DIM
+        lbl.TextXAlignment         = Enum.TextXAlignment.Left
+        lbl.TextWrapped            = true
+        lbl.Text                   = entry
+        lbl.Parent                 = _statusScroll
+        task.defer(function()
+            _statusScroll.CanvasPosition = Vector2.new(0, math.huge)
+        end)
+    end
+end
 
 local function setScanState(txt)
     if _pillLbl then _pillLbl.Text = txt end
@@ -139,7 +166,7 @@ end
 local function setLastCode(code)
     lastCode = code
     if _codeBarLbl then
-        _codeBarLbl.Text      = code ~= "" and code or "No code yet"
+        _codeBarLbl.Text       = code ~= "" and code or "No code yet"
         _codeBarLbl.TextColor3 = code ~= "" and C_WHITE or C_DIM
     end
 end
@@ -171,7 +198,7 @@ local function isOwnedByUs(obj)
 end
 
 -- ===================================================================
--- SMART DETECTION HELPERS  (ported from Enzo/Blossom Redeemer)
+-- DETECTION HELPERS
 -- ===================================================================
 local blacklistedWords = {
     "join","left","connected","disconnected","welcome","server","update",
@@ -183,6 +210,11 @@ local commonWords = {
     "was","one","our","out","day","get","has","him","his","how","man",
     "new","now","old","see","two","way","who","boy","did","its","let",
     "put","say","she","too","use",
+}
+
+local BAD_GUI = {
+    "backpack","inventory","chatmain","bubblechat","overhead",
+    "nametag","leaderboard","hudgui","chat","playerchat",
 }
 
 local function isBlacklisted(text)
@@ -201,7 +233,6 @@ local function looksLikeCode(text)
         if low == w then return false end
     end
     if not text:match("%a") then return false end
-    -- Pure lowercase with no digits is a regular word, not a promo code
     if text == low and not text:match("%d") then return false end
     local wordCount = 0
     for _ in text:gmatch("%S+") do wordCount = wordCount + 1 end
@@ -221,13 +252,36 @@ local function extractCodesFromText(text)
     return nil
 end
 
+local function extractCode(txt)
+    if not txt then return nil end
+    for token in txt:gmatch("[A-Z][A-Z0-9%-_]+") do
+        if #token >= 4 then
+            local letters = 0
+            for _ in token:gmatch("%a") do letters = letters + 1 end
+            if letters >= 3 then return token end
+        end
+    end
+    return nil
+end
+
+local function isHudNoise(txt)
+    if not txt or txt == "" then return true end
+    if txt:match("^%d+$") then return true end
+    if txt:match("^%d+:%d+$") then return true end
+    if txt:match("^%d+%.%d+$") then return true end
+    if txt:match("^[%+%-]?%d") and #txt < 8 then return true end
+    if txt:match("^%d+[kKmMbBgG]?$") then return true end
+    if txt:match("^x%d") then return true end
+    return false
+end
+
 local _cachedBox = nil
 
 local function _isCodeBox(obj)
-    if not obj:IsA("TextBox") then return false end   -- TextBox only, never a button
+    if not obj:IsA("TextBox") then return false end
     if isOwnedByUs(obj) then return false end
     local nameL = obj.Name:lower()
-    for _, h in ipairs({"code","redeem","promo","coupon","enter","input","text"}) do
+    for _, h in ipairs({"code","redeem","promo","coupon","enter","input"}) do
         if nameL:find(h, 1, true) then return true end
     end
     return false
@@ -289,245 +343,13 @@ local function redeemViaRF(code)
 end
 
 -- ===================================================================
--- AI / RIDDLE SOLVER  (SDLCPaste)
--- ===================================================================
-local SAB = { rm="MAY", ry="2024", rf="MAY2024", sa="24", c="MAY24" }
-
-local RIDDLE_KW = {
-    "when was","how old","what year","what month","birthday","age of",
-    "released","release date","hint","riddle","figure out","guess",
-    "first letter","combine","spell","backwards","months","years",
-    "old is","how many","what is","do you know","can you","which month",
-    "which year","how long","since when",
-}
-
-local BAD_GUI  = { "backpack","inventory","chatmain","bubblechat","overhead","nametag","leaderboard","hudgui" }
-local GOOD_GUI = { "global","announce","notif","banner","broadcast","event","popup","sammy","alert","header","news","system","message","center" }
-
--- (GAME_KB kept below as extended KB for general questions)
-local GAME_KB = {
-    -- Rarités (du plus spécifique au général)
-    { q="how to get cosmic",    a="Cosmic brainrots drop from premium eggs with extreme luck or world spawns." },
-    { q="how to get prismatic", a="Prismatic brainrots are hatched from high-tier eggs with good luck." },
-    { q="how to get legendary", a="Legendary brainrots hatch from standard eggs or appear as world spawns." },
-    { q="rarest",               a="Cosmic is the absolute rarest tier, followed by Prismatic then Mythic." },
-    { q="cosmic",               a="Cosmic is the rarest rarity — nearly impossible to obtain without luck boosts." },
-    { q="prismatic",            a="Prismatic is the second rarest rarity, just below Cosmic." },
-    { q="mythic",               a="Mythic is between Legendary and Prismatic in the rarity tier list." },
-    { q="legendary",            a="Legendary is a high-tier rarity above Epic and below Mythic." },
-    { q="epic",                 a="Epic sits above Rare and below Legendary in rarity." },
-    { q="rarity",               a="Rarities lowest to highest: Common, Uncommon, Rare, Epic, Legendary, Mythic, Prismatic, Cosmic." },
-
-    -- Mutations
-    { q="best mutation",        a="Double mutation is the most valuable, giving two separate stat bonuses." },
-    { q="mutation",             a="Mutations are random stat bonuses on a brainrot that increase its power and trade value." },
-    { q="mutated",              a="A mutated brainrot has bonus stats making it stronger and more valuable in trades." },
-    { q="double mutation",      a="Double mutation means a brainrot has two stat bonuses — the rarest and most valued mutation type." },
-
-    -- Types spéciaux
-    { q="shiny",                a="Shiny brainrots have a glowing visual effect and are rarer than standard variants." },
-    { q="glitch",               a="Glitch brainrots have a distorted look and hold special rarity status." },
-    { q="og",                   a="OG brainrots were available at game launch and are much rarer to find now." },
-    { q="admin",                a="Admin brainrots are exclusive developer items unobtainable through normal gameplay." },
-    { q="limited",              a="Limited brainrots from events are among the most valuable for trading." },
-
-    -- Obtention
-    { q="how to get",           a="Brainrots are obtained by hatching eggs, trading, world spawns, or events." },
-    { q="spawn rate",           a="Common spawns often; Epic occasionally; Legendary rarely; Cosmic almost never." },
-    { q="spawn",                a="Brainrots spawn naturally in the world at intervals based on their rarity." },
-    { q="hatch",                a="Hatching eggs is the primary way to get brainrots — better eggs hatch rarer ones." },
-    { q="egg",                  a="Eggs are bought with coins or Robux and hatched to get brainrots of various rarities." },
-
-    -- Monnaie & économie
-    { q="how to get coins",     a="Earn coins by selling brainrots, completing quests, daily rewards, and events." },
-    { q="coin",                 a="Coins are the main currency used to buy eggs, upgrades, and items." },
-    { q="robux",                a="Robux buys gamepasses, premium eggs, and cosmetics unavailable with coins." },
-    { q="value",                a="Brainrot value depends on rarity, mutations, demand, and if it is OG or shiny." },
-    { q="worth",                a="Check the Discord trading channel or wiki for current brainrot values." },
-
-    -- Progression
-    { q="level up",             a="Level up brainrots using XP items or by battling to increase their stats." },
-    { q="level",                a="Higher level brainrots have stronger stats and better trade value." },
-    { q="how to level",         a="Gain XP by battling or using XP potions to level up your brainrots." },
-    { q="luck",                 a="Luck boosts your chances of hatching or finding rarer brainrots." },
-    { q="double luck",          a="Double Luck doubles rarity chances when hatching — stack with events for best results." },
-    { q="grind",                a="Grinding means farming coins and brainrots repeatedly to progress faster." },
-    { q="fastest way",          a="The fastest way to progress is hatching eggs with active luck boosts during events." },
-
-    -- Stats & combat
-    { q="stat",                 a="Stats include attack, defense, and speed which determine brainrot strength." },
-    { q="attack",               a="Attack determines how much damage your brainrot deals in battle." },
-    { q="defense",              a="Defense reduces the damage your brainrot takes in combat." },
-    { q="speed",                a="Speed determines turn order and movement rate in battle." },
-    { q="strongest",            a="The strongest brainrots are Cosmic tier with double mutations maxed out." },
-    { q="best",                 a="Cosmic with double mutation is considered the best possible brainrot." },
-    { q="how many",             a="Check the in-game bestiary for the current total number of brainrots." },
-
-    -- Trading
-    { q="how to trade",         a="Open the trade menu, select a player, offer your brainrots, and confirm." },
-    { q="overpay",              a="Overpaying means you give more value than you receive in a trade." },
-    { q="underpay",             a="Underpaying means you receive more value than what you offer." },
-    { q="scam",                 a="Never accept trades without verifying value first — scammers are common." },
-    { q="trade",                a="Use the in-game trade system to exchange brainrots with other players." },
-
-    -- Gamepasses
-    { q="gamepass",             a="Gamepasses include Auto-Collect, Double Luck, VIP, and storage upgrades." },
-    { q="vip",                  a="VIP gamepass gives a special title, exclusive perks, and bonus coin gain." },
-    { q="auto collect",         a="Auto-Collect gamepass automatically picks up nearby spawned brainrots for you." },
-    { q="storage",              a="Upgrade your storage to hold more brainrots in your inventory at once." },
-    { q="worth buying",         a="Auto-Collect and Double Luck gamepasses are generally considered most worth it." },
-
-    -- Codes & Discord
-    { q="code",                 a="Active codes are posted on the game Discord and official social media pages." },
-    { q="discord",              a="Join the official Discord to get codes, news, events, and trading info." },
-    { q="free",                 a="Free rewards come from login codes, events, and Discord server giveaways." },
-    { q="where to find code",   a="Codes are posted in the game Discord #codes channel and on the Roblox page." },
-
-    -- Événements & saisons
-    { q="event",                a="Events are limited-time challenges that reward exclusive brainrots or cosmetics." },
-    { q="season",               a="Seasonal events introduce brainrots only available during that limited period." },
-    { q="update",               a="Updates add new brainrots, eggs, and features — follow Discord for announcements." },
-    { q="new update",           a="Check the Discord announcements channel for the latest update patch notes." },
-
-    -- Infos générales
-    { q="launch",               a="Brainrot Simulator launched in early 2024 on Roblox." },
-    { q="how old",              a="The game has been on Roblox since early 2024." },
-    { q="bestiary",             a="The bestiary tracks every brainrot you have discovered or collected in the game." },
-    { q="daily",                a="Claim your daily login reward each day for free coins or items." },
-    { q="private server",       a="Private servers let you farm alone or with friends without random players." },
-    { q="wiki",                 a="The Brainrot Simulator Wiki on Fandom has guides, values, and brainrot lists." },
-    { q="mobile",               a="The game is fully playable on mobile through the Roblox app." },
-    { q="brainrot",             a="Brainrots are collectible creatures you hatch, level, trade, and battle with." },
-    { q="what is the game",     a="Brainrot Simulator is a Roblox collecting game centered around brainrots." },
-    { q="how to play",          a="Hatch eggs to get brainrots, level them up, trade with players, and join events." },
-    { q="beginner",             a="As a beginner: hatch common eggs to get starter brainrots, sell duplicates for coins." },
-    { q="tip",                  a="Tip: hatch during Double Luck events and save Robux for premium eggs." },
-}
-
-local function isHudNoise(txt)
-    if not txt or txt == "" then return true end
-    if txt:match("^%d+$") then return true end
-    if txt:match("^%d+:%d+$") then return true end
-    if txt:match("^%d+%.%d+$") then return true end
-    if txt:match("^[%+%-]?%d") and #txt < 8 then return true end
-    if txt:match("^%d+[kKmMbBgG]?$") then return true end
-    if txt:match("^x%d") then return true end
-    return false
-end
-
-local function isRiddle(txt)
-    if not txt then return false end
-    local low = txt:lower()
-    for _, kw in ipairs(RIDDLE_KW) do
-        if low:find(kw, 1, true) then return true end
-    end
-    return false
-end
-
-local function solveLocal(txt)
-    if not txt then return nil end
-    local l = txt:lower()
-    -- SAB-specific patterns first (exact answers for quiz events)
-    if (l:find("month") or l:find("when")) and (l:find("sab") or l:find("steal") or l:find("releas")) then return SAB.rm end
-    if l:find("year") and (l:find("sab") or l:find("releas")) then return SAB.ry end
-    if (l:find("when") or l:find("date")) and (l:find("sab") or l:find("steal") or l:find("releas")) then return SAB.rf end
-    if (l:find("age") or l:find("old")) and l:find("sammy") then return SAB.sa end
-    if (l:find("age") or l:find("old")) and (l:find("month") or l:find("when") or l:find("releas")) then return SAB.c end
-    if l:find("may") and l:find("24") then return SAB.c end
-    -- Fallback: GAME_KB general knowledge
-    for _, entry in ipairs(GAME_KB) do
-        if l:find(entry.q, 1, true) then return entry.a end
-    end
-    return nil
-end
-
-local function extractWords(txt)
-    if not txt then return nil end
-    local words = {}
-    for w in txt:gmatch("%S+") do
-        local clean = w:gsub("[^A-Za-z0-9]", "")
-        if #clean >= 2 then
-            local isUp = clean == clean:upper() and clean:match("[A-Z]")
-            local isLo = clean == clean:lower() and clean:match("[a-z]") and #clean >= 3
-            if isUp or isLo then table.insert(words, clean) end
-        end
-    end
-    if #words > 0 then return table.concat(words, " ") end
-    return nil
-end
-
-local function extractCode(txt)
-    if not txt then return nil end
-    for token in txt:gmatch("[A-Z][A-Z0-9%-_]+") do
-        if #token >= 4 then
-            local letters = 0
-            for _ in token:gmatch("%a") do letters = letters + 1 end
-            if letters >= 3 then return token end
-        end
-    end
-    return nil
-end
-
-local function classify(obj)
-    local n   = (obj.Name or ""):lower()
-    local pn  = ((obj.Parent and obj.Parent.Name) or ""):lower()
-    local gpn = ((obj.Parent and obj.Parent.Parent and obj.Parent.Parent.Name) or ""):lower()
-    for _, b in ipairs(BAD_GUI) do
-        if n:find(b, 1, true) or pn:find(b, 1, true) then return false end
-    end
-    for _, g in ipairs(GOOD_GUI) do
-        if n:find(g, 1, true) or pn:find(g, 1, true) or gpn:find(g, 1, true) then return true end
-    end
-    return false
-end
-
-local function showAIAnswer(answer)
-    if not answer or answer == "" then return end
-    if _aiAnswerLbl then _aiAnswerLbl.Text = answer end
-end
-
-local function callAI(prompt)
-    local key = cfg.anthropicKey or ""
-    if key == "" then return nil end
-    local ok, result = pcall(function()
-        local resp = HttpService:RequestAsync({
-            Url    = "https://api.anthropic.com/v1/messages",
-            Method = "POST",
-            Headers = {
-                ["Content-Type"]      = "application/json",
-                ["x-api-key"]         = key,
-                ["anthropic-version"] = "2023-06-01",
-            },
-            Body = HttpService:JSONEncode({
-                model      = "claude-sonnet-4-6",
-                max_tokens = 40,
-                system     = "Decode Roblox promo codes for Steal a Brainrot (SAB). SAB released May 2024. Sammy is 24 months old. Output ONLY the code uppercase no spaces nothing else.",
-                messages   = {{ role = "user", content = prompt }},
-            }),
-        })
-        if resp.StatusCode == 200 then
-            local data = HttpService:JSONDecode(resp.Body)
-            if data and data.content and data.content[1] then return data.content[1].text end
-        end
-        return nil
-    end)
-    if ok and result then
-        return tostring(result):match("^%s*([A-Z0-9_%-]+)%s*$")
-    end
-    return nil
-end
-
--- ===================================================================
--- LOGIC
+-- REDEEM LOGIC
 -- ===================================================================
 local function redeemCode(code)
-    -- Try 1: RF-based redemption
     if redeemViaRF(code) then return end
-    -- Try 2: smart TextBox finder
     local box = findCodeTextBox()
     if box then
         box.Text = code
-        -- search up 3 levels to find the submit button
         local scope = box.Parent
         for _ = 1, 3 do
             if fireSubmitButton(scope) then break end
@@ -535,7 +357,6 @@ local function redeemCode(code)
         end
         return
     end
-    -- Try 3: hardcoded fallback path
     pcall(function()
         local Codes = PlayerGui:WaitForChild("Codes", 3).Codes
         local tb    = Codes.CodeRedeem.TextBox
@@ -585,37 +406,49 @@ local function applyReplace(text)
     return nil
 end
 
+-- Timer flush: token pattern to cancel previous timer without task.cancel
+local function flushPending(token)
+    if token ~= _flushToken then return end
+    local code = _pendingCode
+    _pendingCode = ""
+    if code == "" then return end
+    logStatus("Auto-redeem → " .. code)
+    setLastCode(code)
+    setScanState("SCANNING")
+    if autoCode then appendToBox(code) end
+end
+
+local function addPending(code)
+    _pendingCode = code
+    _flushToken  = _flushToken + 1
+    local token  = _flushToken
+    setScanState("ATTENTE " .. redeemDelay .. "s")
+    logStatus("En attente " .. redeemDelay .. "s → " .. code)
+    task.delay(redeemDelay, function() flushPending(token) end)
+end
+
+-- ===================================================================
+-- DISPATCH
+-- ===================================================================
 local function dispatch(text)
     if not text or text == "" then return end
     if isHudNoise(text) then return end
 
-    -- deduplicate: same text within 0.4s from dual listeners
     local now = tick()
     if text == _dedupText and (now - _dedupTime) < 0.4 then return end
     _dedupText = text
     _dedupTime = now
 
-    -- Riddle solver — réponse auto-redeemed, passif
-    if cfg.aiEnabled and isRiddle(text) then
-        task.spawn(function()
-            local answer = solveLocal(text)
-            if not answer then answer = callAI(text) end
-            if answer and answer ~= "" then
-                showAIAnswer(answer)
-                setLastCode(answer)
-                if autoCode then appendToBox(answer) end
-            end
-        end)
-        return
-    end
+    logStatus("Scan: " .. text)
 
-    -- FORCE SCAN collect path
+    -- FORCE SCAN
     if forceScanActive and collecting then
         table.insert(collectBuf, text)
         collectRemain = collectRemain - 1
         setScanState("COLLECTING " .. collectRemain)
         if collectRemain <= 0 then
             local result = table.concat(collectBuf)
+            logStatus("Force → " .. result)
             setLastCode(result)
             appendToBox(result)
             collecting = false; collectBuf = {}; collectRemain = 0; forceScanActive = false
@@ -624,10 +457,9 @@ local function dispatch(text)
         return
     end
 
-    -- captureCount > 0: multi-part collect mode
+    -- captureCount > 0: mode N parties
     if captureCount > 0 then
         if collecting then
-            -- new trigger during collect → reset, start fresh
             if matchesKeyword(text) then
                 collectBuf = {}; collectRemain = captureCount
                 setScanState("COLLECTING " .. captureCount)
@@ -640,6 +472,7 @@ local function dispatch(text)
             if collectRemain <= 0 then
                 local result = table.concat(collectBuf)
                 if result ~= "" then
+                    logStatus("Code → " .. result)
                     setLastCode(result)
                     if autoCode then appendToBox(result) end
                 end
@@ -655,50 +488,38 @@ local function dispatch(text)
         return
     end
 
-    -- captureCount = 0: instant single-notification mode
+    -- captureCount = 0: mode timer
     local hasKeywords = false
-    for _, kw in ipairs(filterKeywords) do
-        if kw ~= "" then hasKeywords = true; break end
-    end
+    for _, kw in ipairs(filterKeywords) do if kw ~= "" then hasKeywords = true; break end end
 
+    local result
     if hasKeywords then
-        -- keyword-guided detection: extract code after matched keyword
-        if matchesKeyword(text) then
-            local rep = applyReplace(text)
-            local result
-            if rep ~= nil then
-                result = rep
-            else
-                local lower = text:lower()
-                for _, kw in ipairs(filterKeywords) do
-                    if kw ~= "" then
-                        local _, e = lower:find(kw:lower(), 1, true)
-                        if e then
-                            local after = text:sub(e + 1):match("^%s*(.-)%s*$")
-                            if after ~= "" then result = after; break end
-                        end
-                    end
-                end
-                if not result then result = text end
-            end
-            if result ~= "" then
-                setLastCode(result)
-                if autoCode then appendToBox(result) end
-            end
-        end
-    else
-        -- auto-detect mode: no keywords configured, use smart code detection
+        if not matchesKeyword(text) then return end
         local rep = applyReplace(text)
-        local result
         if rep ~= nil then
             result = rep
         else
-            result = extractCode(text) or extractCodesFromText(text)
+            local lower = text:lower()
+            for _, kw in ipairs(filterKeywords) do
+                if kw ~= "" then
+                    local _, e = lower:find(kw:lower(), 1, true)
+                    if e then
+                        local after = text:sub(e + 1):match("^%s*(.-)%s*$")
+                        if after ~= "" then result = after; break end
+                    end
+                end
+            end
+            if not result then result = text end
         end
-        if result and result ~= "" then
-            setLastCode(result)
-            if autoCode then appendToBox(result) end
-        end
+    else
+        local rep = applyReplace(text)
+        result = rep ~= nil and rep or (extractCode(text) or extractCodesFromText(text))
+    end
+
+    if result and result ~= "" then
+        logStatus("Détecté: " .. result)
+        setLastCode(result)
+        addPending(result)
     end
 end
 
@@ -750,20 +571,30 @@ pillByLbl.ZIndex                 = 5
 local PANEL_W   = 240
 local TITLE_H   = 28
 local TAB_H     = 26
-local CONTENT_H = 164
+local CONTENT_H = 180
 local FULL_H    = TITLE_H + TAB_H + CONTENT_H
 local MINI_H    = TITLE_H
 
 local panel = Instance.new("Frame", gui)
-panel.Size             = UDim2.new(0, PANEL_W, 0, FULL_H)
-panel.Position         = UDim2.new(0, cfg.posX, 0, cfg.posY)
+panel.Size                   = UDim2.new(0, PANEL_W, 0, FULL_H)
+panel.Position               = UDim2.new(0, cfg.posX, 0, cfg.posY)
 panel.BackgroundColor3       = C_BG
 panel.BackgroundTransparency = 0.08
-panel.BorderSizePixel  = 0
-panel.Active           = true
-panel.ZIndex           = 10
+panel.BorderSizePixel        = 0
+panel.Active                 = true
+panel.ZIndex                 = 10
 addCorner(panel, 14)
 addLivingStroke(panel, 1.5)
+
+-- Background image
+local _bgImg = Instance.new("ImageLabel", panel)
+_bgImg.Size                   = UDim2.new(1, 0, 1, 0)
+_bgImg.Position               = UDim2.new(0, 0, 0, 0)
+_bgImg.BackgroundTransparency = 1
+_bgImg.Image                  = "https://litter.catbox.moe/4yx964j5od62trr1.png"
+_bgImg.ScaleType              = Enum.ScaleType.Crop
+_bgImg.ZIndex                 = 9
+addCorner(_bgImg, 14)
 
 -- Drag
 do
@@ -818,7 +649,6 @@ titleLbl.TextXAlignment         = Enum.TextXAlignment.Left
 titleLbl.ZIndex                 = 15
 addLivingTextGradient(titleLbl)
 
--- By Yslem watermark (title bar, right side)
 local byLbl = Instance.new("TextLabel", panel)
 byLbl.Size                   = UDim2.new(0, 64, 0, TITLE_H)
 byLbl.Position               = UDim2.new(1, -88, 0, 0)
@@ -865,10 +695,10 @@ local function makeTabBtn(label, order)
     return btn
 end
 
-local tabMainBtn = makeTabBtn("Main", 1)
-local tabTrigBtn = makeTabBtn("Trig", 2)
-local tabRepBtn  = makeTabBtn("Rep",  3)
-local tabAIBtn   = makeTabBtn("AI",   4)
+local tabMainBtn   = makeTabBtn("Main",   1)
+local tabTrigBtn   = makeTabBtn("Trig",   2)
+local tabRepBtn    = makeTabBtn("Rep",    3)
+local tabStatusBtn = makeTabBtn("Status", 4)
 
 -- ===================================================================
 -- CONTENT FRAME
@@ -888,7 +718,7 @@ page1.Size                   = UDim2.new(1, 0, 1, 0)
 page1.BackgroundTransparency = 1
 page1.ZIndex                 = 11
 
--- Code display bar  y=6  (shows last assembled code)
+-- Code display bar
 local codeBar = Instance.new("Frame", page1)
 codeBar.Size             = UDim2.new(1, -20, 0, 28)
 codeBar.Position         = UDim2.new(0, 10, 0, 6)
@@ -911,7 +741,7 @@ _codeBarLbl.TextTruncate           = Enum.TextTruncate.AtEnd
 _codeBarLbl.ZIndex                 = 13
 addLivingTextGradient(_codeBarLbl)
 
--- AUTO ENTER CODE toggle  y=42
+-- AUTO ENTER CODE toggle
 local autoBtn = Instance.new("TextButton", page1)
 autoBtn.Size             = UDim2.new(1, -20, 0, 24)
 autoBtn.Position         = UDim2.new(0, 10, 0, 42)
@@ -932,7 +762,7 @@ autoBtn.MouseButton1Click:Connect(function()
     saveConfig()
 end)
 
--- FORCE SCAN + CODE  y=74
+-- FORCE SCAN
 local forceKb      = Enum.KeyCode.F
 local waitingForKb = false
 
@@ -976,7 +806,7 @@ forceBtn.MouseLeave:Connect(function()
     if not waitingForKb then TweenService:Create(forceBtn, TweenInfo.new(0.15), {TextColor3 = C_DIM}):Play() end
 end)
 
--- ENTER CODE button  y=110  (redeem lastCode manually)
+-- ENTER CODE button
 local enterBtn = Instance.new("TextButton", page1)
 enterBtn.Size             = UDim2.new(1, -20, 0, 24)
 enterBtn.Position         = UDim2.new(0, 10, 0, 110)
@@ -991,27 +821,63 @@ enterBtn.ZIndex           = 12
 addCorner(enterBtn, 8); addLivingTextGradient(enterBtn)
 enterBtn.MouseButton1Click:Connect(function()
     if lastCode == "" then return end
-    redeemCode(lastCode)
+    appendToBox(lastCode)
     TweenService:Create(enterBtn, TweenInfo.new(0.1), {BackgroundColor3 = C_ON}):Play()
     task.delay(0.2, function()
         TweenService:Create(enterBtn, TweenInfo.new(0.2), {BackgroundColor3 = C_ROW}):Play()
     end)
 end)
 
--- Bind hint  y=142
-local bindHint = Instance.new("TextLabel", page1)
-bindHint.Size                   = UDim2.new(1, -20, 0, 14)
-bindHint.Position               = UDim2.new(0, 10, 0, 142)
-bindHint.BackgroundTransparency = 1
-bindHint.Text                   = "Right-click FORCE SCAN to rebind"
-bindHint.TextColor3             = Color3.fromRGB(80, 80, 80)
-bindHint.Font                   = Enum.Font.Gotham
-bindHint.TextSize               = 9
-bindHint.TextXAlignment         = Enum.TextXAlignment.Left
-bindHint.ZIndex                 = 12
+-- Delay input row
+local delayRow = Instance.new("Frame", page1)
+delayRow.Size             = UDim2.new(1, -20, 0, 24)
+delayRow.Position         = UDim2.new(0, 10, 0, 142)
+delayRow.BackgroundColor3 = C_ROW
+delayRow.BorderSizePixel  = 0
+delayRow.ZIndex           = 12
+addCorner(delayRow, 8)
+addLivingStroke(delayRow, 1)
+
+local delayLbl = Instance.new("TextLabel", delayRow)
+delayLbl.Size                   = UDim2.new(0.65, 0, 1, 0)
+delayLbl.Position               = UDim2.new(0, 8, 0, 0)
+delayLbl.BackgroundTransparency = 1
+delayLbl.Text                   = "Délai redeem (s):"
+delayLbl.TextColor3             = C_DIM
+delayLbl.Font                   = Enum.Font.Gotham
+delayLbl.TextSize               = 10
+delayLbl.TextXAlignment         = Enum.TextXAlignment.Left
+delayLbl.ZIndex                 = 13
+
+local delayBox = Instance.new("TextBox", delayRow)
+delayBox.Size                   = UDim2.new(0.3, -4, 0.8, 0)
+delayBox.Position               = UDim2.new(0.68, 0, 0.1, 0)
+delayBox.BackgroundColor3       = C_OFF
+delayBox.BorderSizePixel        = 0
+delayBox.Font                   = Enum.Font.GothamBold
+delayBox.TextSize               = 11
+delayBox.TextColor3             = C_WHITE
+delayBox.PlaceholderText        = "3"
+delayBox.PlaceholderColor3      = C_DIM
+delayBox.TextXAlignment         = Enum.TextXAlignment.Center
+delayBox.ClearTextOnFocus       = false
+delayBox.Text                   = tostring(redeemDelay)
+delayBox.ZIndex                 = 13
+addCorner(delayBox, 5)
+addLivingTextGradient(delayBox)
+delayBox.FocusLost:Connect(function()
+    local n = tonumber(delayBox.Text)
+    if n and n >= 0.5 and n <= 30 then
+        redeemDelay     = n
+        cfg.redeemDelay = n
+        saveConfig()
+    else
+        delayBox.Text = tostring(redeemDelay)
+    end
+end)
 
 -- ===================================================================
--- PAGE 2: TRIGGERS  (10 keyword slots, scrollable)
+-- PAGE 2: TRIGGERS
 -- ===================================================================
 local page2 = Instance.new("Frame", contentFrame)
 page2.Size                   = UDim2.new(1, 0, 1, 0)
@@ -1108,7 +974,7 @@ for i = 1, MAX_KW do
 end
 
 -- ===================================================================
--- PAGE 3: REPLACE  (10 paired rows, scrollable)
+-- PAGE 3: REPLACE
 -- ===================================================================
 local page3 = Instance.new("Frame", contentFrame)
 page3.Size                   = UDim2.new(1, 0, 1, 0)
@@ -1218,22 +1084,14 @@ for i = 1, MAX_KW do
     repBox.ZIndex            = 13
     addLivingTextGradient(repBox)
 
-    kwBox.FocusLost:Connect(function()
-        replaceRules[i].kw = kwBox.Text; saveReplaceRules()
-    end)
-    kwBox:GetPropertyChangedSignal("Text"):Connect(function()
-        replaceRules[i].kw = kwBox.Text
-    end)
-    repBox.FocusLost:Connect(function()
-        replaceRules[i].rep = repBox.Text; saveReplaceRules()
-    end)
-    repBox:GetPropertyChangedSignal("Text"):Connect(function()
-        replaceRules[i].rep = repBox.Text
-    end)
+    kwBox.FocusLost:Connect(function() replaceRules[i].kw = kwBox.Text; saveReplaceRules() end)
+    kwBox:GetPropertyChangedSignal("Text"):Connect(function() replaceRules[i].kw = kwBox.Text end)
+    repBox.FocusLost:Connect(function() replaceRules[i].rep = repBox.Text; saveReplaceRules() end)
+    repBox:GetPropertyChangedSignal("Text"):Connect(function() replaceRules[i].rep = repBox.Text end)
 end
 
 -- ===================================================================
--- PAGE 4: AI
+-- PAGE 4: STATUS
 -- ===================================================================
 local page4 = Instance.new("Frame", contentFrame)
 page4.Size                   = UDim2.new(1, 0, 1, 0)
@@ -1241,100 +1099,69 @@ page4.BackgroundTransparency = 1
 page4.Visible                = false
 page4.ZIndex                 = 11
 
--- AI Enabled toggle  y=6
-local aiToggleBtn = Instance.new("TextButton", page4)
-aiToggleBtn.Size             = UDim2.new(1, -20, 0, 24)
-aiToggleBtn.Position         = UDim2.new(0, 10, 0, 6)
-aiToggleBtn.BackgroundColor3 = cfg.aiEnabled and C_ON or C_OFF
-aiToggleBtn.Text             = cfg.aiEnabled and "AI ANSWERS: ON" or "AI ANSWERS: OFF"
-aiToggleBtn.TextColor3       = cfg.aiEnabled and C_WHITE or C_DIM
-aiToggleBtn.Font             = Enum.Font.GothamBlack
-aiToggleBtn.TextSize         = 11
-aiToggleBtn.BorderSizePixel  = 0
-aiToggleBtn.AutoButtonColor  = false
-aiToggleBtn.ZIndex           = 12
-addCorner(aiToggleBtn, 8); addLivingTextGradient(aiToggleBtn)
-aiToggleBtn.MouseButton1Click:Connect(function()
-    cfg.aiEnabled = not cfg.aiEnabled
-    aiToggleBtn.Text       = cfg.aiEnabled and "AI ANSWERS: ON" or "AI ANSWERS: OFF"
-    aiToggleBtn.TextColor3 = cfg.aiEnabled and C_WHITE or C_DIM
-    TweenService:Create(aiToggleBtn, TweenInfo.new(0.15), {BackgroundColor3 = cfg.aiEnabled and C_ON or C_OFF}):Play()
-    saveConfig()
+local statusScroll = Instance.new("ScrollingFrame", page4)
+statusScroll.Size                   = UDim2.new(1, -16, 1, -36)
+statusScroll.Position               = UDim2.new(0, 8, 0, 6)
+statusScroll.BackgroundColor3       = C_ROW
+statusScroll.BackgroundTransparency = 0.4
+statusScroll.BorderSizePixel        = 0
+statusScroll.ScrollBarThickness     = 3
+statusScroll.ScrollBarImageColor3   = G2
+statusScroll.AutomaticCanvasSize    = Enum.AutomaticSize.Y
+statusScroll.CanvasSize             = UDim2.new(0, 0, 0, 0)
+statusScroll.ClipsDescendants       = true
+statusScroll.ZIndex                 = 12
+addCorner(statusScroll, 8)
+
+local statusLayout = Instance.new("UIListLayout", statusScroll)
+statusLayout.Padding             = UDim.new(0, 2)
+statusLayout.SortOrder           = Enum.SortOrder.LayoutOrder
+statusLayout.FillDirection       = Enum.FillDirection.Vertical
+statusLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
+statusLayout.VerticalAlignment   = Enum.VerticalAlignment.Top
+
+local statusPad = Instance.new("UIPadding", statusScroll)
+statusPad.PaddingLeft   = UDim.new(0, 4)
+statusPad.PaddingRight  = UDim.new(0, 4)
+statusPad.PaddingTop    = UDim.new(0, 4)
+statusPad.PaddingBottom = UDim.new(0, 4)
+
+local clearBtn = Instance.new("TextButton", page4)
+clearBtn.Size             = UDim2.new(1, -16, 0, 24)
+clearBtn.Position         = UDim2.new(0, 8, 1, -28)
+clearBtn.BackgroundColor3 = C_ROW
+clearBtn.Text             = "Effacer le log"
+clearBtn.TextColor3       = C_DIM
+clearBtn.Font             = Enum.Font.Gotham
+clearBtn.TextSize         = 10
+clearBtn.BorderSizePixel  = 0
+clearBtn.AutoButtonColor  = false
+clearBtn.ZIndex           = 12
+addCorner(clearBtn, 6)
+clearBtn.MouseButton1Click:Connect(function()
+    _statusLog = {}
+    for _, child in ipairs(statusScroll:GetChildren()) do
+        if child:IsA("TextLabel") then child:Destroy() end
+    end
 end)
 
--- API Key label  y=38
-local apiKeyLbl = Instance.new("TextLabel", page4)
-apiKeyLbl.Size                   = UDim2.new(1, -20, 0, 14)
-apiKeyLbl.Position               = UDim2.new(0, 10, 0, 38)
-apiKeyLbl.BackgroundTransparency = 1
-apiKeyLbl.Text                   = "Claude API Key:"
-apiKeyLbl.TextColor3             = C_DIM
-apiKeyLbl.Font                   = Enum.Font.Gotham
-apiKeyLbl.TextSize               = 10
-apiKeyLbl.TextXAlignment         = Enum.TextXAlignment.Left
-apiKeyLbl.ZIndex                 = 12
+-- Wire status scroll so logStatus can write to it
+_statusScroll = statusScroll
 
--- API Key input  y=54
-local apiKeyFrame = Instance.new("Frame", page4)
-apiKeyFrame.Size             = UDim2.new(1, -20, 0, 28)
-apiKeyFrame.Position         = UDim2.new(0, 10, 0, 54)
-apiKeyFrame.BackgroundColor3 = C_ROW
-apiKeyFrame.BorderSizePixel  = 0
-apiKeyFrame.ZIndex           = 12
-addCorner(apiKeyFrame, 8); addLivingStroke(apiKeyFrame, 1)
-
-local apiKeyBox = Instance.new("TextBox", apiKeyFrame)
-apiKeyBox.Size              = UDim2.new(1, -16, 1, 0)
-apiKeyBox.Position          = UDim2.new(0, 8, 0, 0)
-apiKeyBox.BackgroundTransparency = 1
-apiKeyBox.BorderSizePixel   = 0
-apiKeyBox.Font              = Enum.Font.GothamBold
-apiKeyBox.TextSize          = 10
-apiKeyBox.TextColor3        = C_WHITE
-apiKeyBox.PlaceholderText   = "sk-ant-api03-..."
-apiKeyBox.PlaceholderColor3 = C_DIM
-apiKeyBox.TextXAlignment    = Enum.TextXAlignment.Left
-apiKeyBox.ClearTextOnFocus  = false
-apiKeyBox.Text              = cfg.anthropicKey or ""
-apiKeyBox.ZIndex            = 13
-addLivingTextGradient(apiKeyBox)
-apiKeyBox.FocusLost:Connect(function()
-    cfg.anthropicKey = apiKeyBox.Text
-    saveConfig()
-end)
-
--- Last Answer label  y=90
-local answerHdrLbl = Instance.new("TextLabel", page4)
-answerHdrLbl.Size                   = UDim2.new(1, -20, 0, 14)
-answerHdrLbl.Position               = UDim2.new(0, 10, 0, 90)
-answerHdrLbl.BackgroundTransparency = 1
-answerHdrLbl.Text                   = "Last AI Answer:"
-answerHdrLbl.TextColor3             = C_DIM
-answerHdrLbl.Font                   = Enum.Font.Gotham
-answerHdrLbl.TextSize               = 10
-answerHdrLbl.TextXAlignment         = Enum.TextXAlignment.Left
-answerHdrLbl.ZIndex                 = 12
-
--- Answer display  y=106
-local answerFrame = Instance.new("Frame", page4)
-answerFrame.Size             = UDim2.new(1, -20, 0, 52)
-answerFrame.Position         = UDim2.new(0, 10, 0, 106)
-answerFrame.BackgroundColor3 = C_ROW
-answerFrame.BorderSizePixel  = 0
-answerFrame.ZIndex           = 12
-addCorner(answerFrame, 8); addLivingStroke(answerFrame, 1)
-
-_aiAnswerLbl = Instance.new("TextLabel", answerFrame)
-_aiAnswerLbl.Size                   = UDim2.new(1, -16, 1, 0)
-_aiAnswerLbl.Position               = UDim2.new(0, 8, 0, 0)
-_aiAnswerLbl.BackgroundTransparency = 1
-_aiAnswerLbl.Text                   = "No answer yet"
-_aiAnswerLbl.TextColor3             = C_DIM
-_aiAnswerLbl.Font                   = Enum.Font.Gotham
-_aiAnswerLbl.TextSize               = 10
-_aiAnswerLbl.TextXAlignment         = Enum.TextXAlignment.Left
-_aiAnswerLbl.TextWrapped            = true
-_aiAnswerLbl.ZIndex                 = 13
+-- Replay entries logged before GUI was ready
+for _, entry in ipairs(_statusLog) do
+    local lbl = Instance.new("TextLabel")
+    lbl.Size                   = UDim2.new(1, -8, 0, 0)
+    lbl.AutomaticSize          = Enum.AutomaticSize.Y
+    lbl.BackgroundTransparency = 1
+    lbl.Font                   = Enum.Font.Code
+    lbl.TextSize               = 9
+    lbl.TextColor3             = C_DIM
+    lbl.TextXAlignment         = Enum.TextXAlignment.Left
+    lbl.TextWrapped            = true
+    lbl.Text                   = entry
+    lbl.Parent                 = statusScroll
+end
 
 -- ===================================================================
 -- TAB SWITCHING
@@ -1346,32 +1173,31 @@ local function setTab(idx)
     page2.Visible = (idx == 2)
     page3.Visible = (idx == 3)
     page4.Visible = (idx == 4)
-    tabMainBtn.BackgroundColor3 = (idx == 1) and C_ON or C_ROW
-    tabTrigBtn.BackgroundColor3 = (idx == 2) and C_ON or C_ROW
-    tabRepBtn.BackgroundColor3  = (idx == 3) and C_ON or C_ROW
-    tabAIBtn.BackgroundColor3   = (idx == 4) and C_ON or C_ROW
-    tabMainBtn.TextColor3       = (idx == 1) and C_WHITE or C_DIM
-    tabTrigBtn.TextColor3       = (idx == 2) and C_WHITE or C_DIM
-    tabRepBtn.TextColor3        = (idx == 3) and C_WHITE or C_DIM
-    tabAIBtn.TextColor3         = (idx == 4) and C_WHITE or C_DIM
+    tabMainBtn.BackgroundColor3   = (idx == 1) and C_ON or C_ROW
+    tabTrigBtn.BackgroundColor3   = (idx == 2) and C_ON or C_ROW
+    tabRepBtn.BackgroundColor3    = (idx == 3) and C_ON or C_ROW
+    tabStatusBtn.BackgroundColor3 = (idx == 4) and C_ON or C_ROW
+    tabMainBtn.TextColor3         = (idx == 1) and C_WHITE or C_DIM
+    tabTrigBtn.TextColor3         = (idx == 2) and C_WHITE or C_DIM
+    tabRepBtn.TextColor3          = (idx == 3) and C_WHITE or C_DIM
+    tabStatusBtn.TextColor3       = (idx == 4) and C_WHITE or C_DIM
     saveConfig()
 end
 
 setTab(currentTab)
-
-tabMainBtn.MouseButton1Click:Connect(function() if currentTab ~= 1 then setTab(1) end end)
-tabTrigBtn.MouseButton1Click:Connect(function() if currentTab ~= 2 then setTab(2) end end)
-tabRepBtn.MouseButton1Click:Connect(function()  if currentTab ~= 3 then setTab(3) end end)
-tabAIBtn.MouseButton1Click:Connect(function()   if currentTab ~= 4 then setTab(4) end end)
+tabMainBtn.MouseButton1Click:Connect(function()   if currentTab ~= 1 then setTab(1) end end)
+tabTrigBtn.MouseButton1Click:Connect(function()   if currentTab ~= 2 then setTab(2) end end)
+tabRepBtn.MouseButton1Click:Connect(function()    if currentTab ~= 3 then setTab(3) end end)
+tabStatusBtn.MouseButton1Click:Connect(function() if currentTab ~= 4 then setTab(4) end end)
 
 -- ===================================================================
 -- MINIMIZE
 -- ===================================================================
 local function applyMinimize(instant)
     local targetH = minimized and MINI_H or FULL_H
-    tabBar.Visible       = not minimized
-    contentFrame.Visible = not minimized
-    minBtn.Text          = minimized and "+" or "-"
+    tabBar.Visible        = not minimized
+    contentFrame.Visible  = not minimized
+    minBtn.Text           = minimized and "+" or "-"
     if instant then
         panel.Size = UDim2.new(0, PANEL_W, 0, targetH)
     else
@@ -1383,7 +1209,6 @@ minBtn.MouseButton1Click:Connect(function()
     minimized = not minimized; cfg.minimized = minimized
     applyMinimize(false); saveConfig()
 end)
-
 applyMinimize(true)
 
 -- ===================================================================
@@ -1394,7 +1219,7 @@ local seen = {}
 local function watchObject(obj)
     if seen[obj] then return end
     if isOwnedByUs(obj) then return end
-    -- Skip chat bubbles, HUD noise, overhead names, leaderboard
+    -- Skip BAD_GUI containers (chat, HUD, overhead names, etc.)
     local _n  = (obj.Name or ""):lower()
     local _pn = ((obj.Parent and obj.Parent.Name) or ""):lower()
     for _, b in ipairs(BAD_GUI) do
@@ -1419,10 +1244,10 @@ local function watchObject(obj)
 end
 
 -- ===================================================================
--- SIGNAL HOOKS  (all possible code delivery channels)
+-- SIGNAL HOOKS
 -- ===================================================================
 
--- 0. Metatable hook — intercepts ALL Text property assignments instantly (VON method)
+-- 0. Metatable hook (VON method)
 local function hookMetatable()
     if not (getrawmetatable and setreadonly and newcclosure) then return false end
     local ok, mt = pcall(getrawmetatable, game)
@@ -1447,17 +1272,13 @@ local function hookMetatable()
     return true
 end
 
--- 1. PlayerGui — watch EVERY ScreenGui / Frame, existing + future
+-- 1. PlayerGui
 local function hookPlayerGui()
-    for _, child in ipairs(PlayerGui:GetChildren()) do
-        task.spawn(watchObject, child)
-    end
-    PlayerGui.ChildAdded:Connect(function(child)
-        task.spawn(watchObject, child)
-    end)
+    for _, child in ipairs(PlayerGui:GetChildren()) do task.spawn(watchObject, child) end
+    PlayerGui.ChildAdded:Connect(function(child) task.spawn(watchObject, child) end)
 end
 
--- 2. CoreGui — notifications, system messages, game overlays
+-- 2. CoreGui
 local function hookCoreGui()
     pcall(function()
         local cg = game:GetService("CoreGui")
@@ -1470,21 +1291,17 @@ local function hookCoreGui()
     end)
 end
 
--- 3. TextChatService — modern Roblox chat (codes sent in chat by server/admin)
+-- 3. TextChatService
 local function hookTextChat()
     task.spawn(function()
         local ok, TCS = pcall(function() return game:GetService("TextChatService") end)
         if not ok or not TCS then return end
-        local ok2, channels = pcall(function()
-            return TCS:WaitForChild("TextChannels", 5)
-        end)
+        local ok2, channels = pcall(function() return TCS:WaitForChild("TextChannels", 5) end)
         if not ok2 or not channels then return end
         local function hookChannel(ch)
             pcall(function()
                 ch.MessageReceived:Connect(function(msg)
-                    if msg and msg.Text and msg.Text ~= "" then
-                        dispatch(msg.Text)
-                    end
+                    if msg and msg.Text and msg.Text ~= "" then dispatch(msg.Text) end
                 end)
             end)
         end
@@ -1493,38 +1310,34 @@ local function hookTextChat()
     end)
 end
 
--- 4. Legacy chat — Players.Chatted (server-broadcast messages)
+-- 4. Legacy chat
 local function hookLegacyChat()
     pcall(function()
         local function hookPlayer(plr)
-            plr.Chatted:Connect(function(msg)
-                if msg and msg ~= "" then dispatch(msg) end
-            end)
+            plr.Chatted:Connect(function(msg) if msg and msg ~= "" then dispatch(msg) end end)
         end
         for _, plr in ipairs(Players:GetPlayers()) do hookPlayer(plr) end
         Players.PlayerAdded:Connect(hookPlayer)
     end)
 end
 
--- 5. Workspace BillboardGui / SurfaceGui — codes displayed on parts in world
+-- 5. Workspace BillboardGui / SurfaceGui
 local function hookWorkspaceGuis()
     pcall(function()
         local ws = game:GetService("Workspace")
         local function checkGui(obj)
-            if obj:IsA("BillboardGui") or obj:IsA("SurfaceGui") then
-                task.spawn(watchObject, obj)
-            end
+            if obj:IsA("BillboardGui") or obj:IsA("SurfaceGui") then task.spawn(watchObject, obj) end
         end
         for _, d in ipairs(ws:GetDescendants()) do checkGui(d) end
         ws.DescendantAdded:Connect(checkGui)
     end)
 end
 
--- 6. Network-level hook — intercept the game's notification RemoteEvent directly
+-- 6. Network remote
 local _networkRemote = nil
-
-local function resolveRemote()
-    if not (getconnections and debug and debug.getinfo) then return nil end
+local function hookNetworkRemote()
+    task.wait(3)
+    if not (getconnections and debug and debug.getinfo) then return end
     local function tryRoot(root)
         local ok, descs = pcall(function() return root:GetDescendants() end)
         if not ok then return nil end
@@ -1546,69 +1359,16 @@ local function resolveRemote()
         end
         return nil
     end
-    return tryRoot(game:GetService("ReplicatedStorage"))
-        or tryRoot(game:GetService("Workspace"))
-end
-
-local function hookNetworkRemote()
-    task.wait(3)
-    _networkRemote = resolveRemote()
+    _networkRemote = tryRoot(ReplicatedStorage) or tryRoot(game:GetService("Workspace"))
     if not _networkRemote then return end
     _networkRemote.OnClientEvent:Connect(function(...)
         for _, v in ipairs({...}) do
-            if type(v) == "string" and v ~= "" then
-                task.spawn(dispatch, v)
-            end
+            if type(v) == "string" and v ~= "" then task.spawn(dispatch, v) end
         end
     end)
 end
 
--- Spawn webhook
-local WEBHOOK_URL = "https://discord.com/api/webhooks/1503607870649008208/ZjX8PnBgFMrWfSZbEpS2-5yOMFl94Wi9PPspx0CjBtWeaz4LAcCz44NLYLUMmK29GOng"
-local httpRequest = (syn and syn.request) or (http and http.request) or http_request or request
-
-local function checkSpawn(obj)
-    if not obj:IsA("TextLabel") then return end
-    local plain = obj.Text:gsub("<[^>]+>", "")
-    local name  = plain:match("^(.-)%s+spawned!%s*$")
-    if name and name ~= "" then
-        if httpRequest then
-            pcall(function()
-                httpRequest({
-                    Url     = WEBHOOK_URL, Method = "POST",
-                    Headers = { ["Content-Type"] = "application/json" },
-                    Body    = HttpService:JSONEncode({ embeds = {{ title="Spawn Detected",
-                        description = "**"..name.."** spawned!\nPlayer: **"..(LP.DisplayName or "?").."**",
-                        color = 0x92FF67 }}
-                    }),
-                })
-            end)
-        end
-    end
-end
-
-local function hookSpawnFolder()
-    local ok, folder = pcall(function()
-        return PlayerGui:WaitForChild("Notification", 10):WaitForChild("Notification", 10)
-    end)
-    if not ok or not folder then return end
-    for _, obj in ipairs(folder:GetChildren()) do checkSpawn(obj) end
-    folder.ChildAdded:Connect(function(obj) task.wait(); checkSpawn(obj) end)
-end
-
-local _mtHooked = hookMetatable()
-if not _mtHooked then
-    -- metatable hook unavailable: fall back to signal-based watchers
-    hookPlayerGui()
-    hookCoreGui()
-    hookWorkspaceGuis()
-end
-hookTextChat()    -- always: chat is a separate signal, not Text property
-hookLegacyChat()  -- always: same reason
-task.spawn(hookSpawnFolder)
-task.spawn(hookNetworkRemote)
-
--- 7. TextBox focus tracking — SDLCPaste method (code boxes only)
+-- 7. TextBox focus tracking (code boxes only)
 UserInputService.TextBoxFocused:Connect(function(box)
     if isOwnedByUs(box) then return end
     if _isCodeBox(box) then _focused = box end
@@ -1617,7 +1377,7 @@ UserInputService.TextBoxFocusReleased:Connect(function(box)
     if _focused == box then _focused = nil end
 end)
 
--- 8. ReplicatedStorage — CodesFlags + CodesController
+-- 8. ReplicatedStorage CodesFlags + CodesController
 task.spawn(function()
     pcall(function()
         local shared = ReplicatedStorage:WaitForChild("Shared", 5)
@@ -1645,7 +1405,53 @@ task.spawn(function()
     end)
 end)
 
--- Keybind listener
+-- Spawn webhook
+local WEBHOOK_URL  = "https://discord.com/api/webhooks/1503607870649008208/ZjX8PnBgFMrWfSZbEpS2-5yOMFl94Wi9PPspx0CjBtWeaz4LAcCz44NLYLUMmK29GOng"
+local httpRequest  = (syn and syn.request) or (http and http.request) or http_request or request
+
+local function checkSpawn(obj)
+    if not obj:IsA("TextLabel") then return end
+    local plain = obj.Text:gsub("<[^>]+>", "")
+    local name  = plain:match("^(.-)%s+spawned!%s*$")
+    if name and name ~= "" then
+        logStatus("Spawn: " .. name)
+        if httpRequest then
+            pcall(function()
+                httpRequest({
+                    Url     = WEBHOOK_URL, Method = "POST",
+                    Headers = { ["Content-Type"] = "application/json" },
+                    Body    = HttpService:JSONEncode({ embeds = {{ title="Spawn Detected",
+                        description = "**"..name.."** spawned!\nPlayer: **"..(LP.DisplayName or "?").."**",
+                        color = 0x92FF67 }}
+                    }),
+                })
+            end)
+        end
+    end
+end
+
+local function hookSpawnFolder()
+    local ok, folder = pcall(function()
+        return PlayerGui:WaitForChild("Notification", 10):WaitForChild("Notification", 10)
+    end)
+    if not ok or not folder then return end
+    for _, obj in ipairs(folder:GetChildren()) do checkSpawn(obj) end
+    folder.ChildAdded:Connect(function(obj) task.wait(); checkSpawn(obj) end)
+end
+
+-- Activate hooks
+local _mtHooked = hookMetatable()
+if not _mtHooked then
+    hookPlayerGui()
+    hookCoreGui()
+    hookWorkspaceGuis()
+end
+hookTextChat()
+hookLegacyChat()
+task.spawn(hookSpawnFolder)
+task.spawn(hookNetworkRemote)
+
+-- Keybind
 UserInputService.InputBegan:Connect(function(input, gpe)
     if gpe then return end
     if waitingForKb then
@@ -1659,6 +1465,6 @@ UserInputService.InputBegan:Connect(function(input, gpe)
     if input.KeyCode == forceKb then doForceScan() end
 end)
 
-_G.yslemAutoCode = { setLastCode = setLastCode }
-
+_G.yslemAutoCode = { setLastCode = setLastCode, dispatch = dispatch }
+logStatus("Yslem Auto Code chargé | MT: " .. tostring(_mtHooked))
 print("[YSLEM AUTO CODE] by Yslem — Loaded | MT hook: " .. tostring(_mtHooked))
