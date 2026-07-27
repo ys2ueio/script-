@@ -45,6 +45,95 @@ local C_RED     = Color3.fromRGB(220,60,60)
 local C_GREEN   = Color3.fromRGB(60,220,120)
 
 -- ===================================================================
+-- THEME SYSTEM (Défaut = bleu, Noir = monochrome)
+-- ===================================================================
+local _THEME_DEFS = {
+	default = {
+		moon    = Color3.fromRGB(90,160,255),
+		moon2   = Color3.fromRGB(160,200,255),
+		on_bg   = Color3.fromRGB(20,45,80),
+		border  = Color3.fromRGB(40,46,58),
+		silver  = Color3.fromRGB(210,222,240),
+		silver2 = Color3.fromRGB(140,165,210),
+		dim     = Color3.fromRGB(110,120,140),
+		d3      = Color3.fromRGB(40,80,165),
+		d4      = Color3.fromRGB(90,150,255),
+	},
+	noir = {
+		moon    = Color3.fromRGB(205,205,205),
+		moon2   = Color3.fromRGB(175,175,175),
+		on_bg   = Color3.fromRGB(28,28,28),
+		border  = Color3.fromRGB(44,44,44),
+		silver  = Color3.fromRGB(210,210,210),
+		silver2 = Color3.fromRGB(148,148,148),
+		dim     = Color3.fromRGB(105,105,105),
+		d3      = Color3.fromRGB(35,35,35),
+		d4      = Color3.fromRGB(165,165,165),
+	}
+}
+local _currentTheme = "default"
+local _themeAllGuis = {}
+local _G_updateThemeUI = nil
+
+local function _tColKey(col, themeName)
+	local t = _THEME_DEFS[themeName]
+	local r,g,b = col.R, col.G, col.B
+	for k,v in pairs(t) do
+		if math.abs(r-v.R)+math.abs(g-v.G)+math.abs(b-v.B) < 0.015 then return k end
+	end
+end
+
+local function applyTheme(newName)
+	if not _THEME_DEFS[newName] then return end
+	local oldName = _currentTheme
+	_currentTheme = newName
+	local new = _THEME_DEFS[newName]
+	C_MOON    = new.moon;   C_MOON2   = new.moon2
+	C_ON_BG   = new.on_bg; C_BORDER  = new.border
+	C_SILVER  = new.silver; C_SILVER2 = new.silver2
+	C_DIM     = new.dim;   C_TABIDLE = new.moon2
+	for _, guiRoot in ipairs(_themeAllGuis) do
+		pcall(function()
+			for _, inst in ipairs(guiRoot:GetDescendants()) do
+				pcall(function()
+					if inst:IsA("GuiObject") then
+						local k = _tColKey(inst.BackgroundColor3, oldName)
+						if k then inst.BackgroundColor3 = new[k] end
+					end
+					if inst:IsA("TextLabel") or inst:IsA("TextButton") or inst:IsA("TextBox") then
+						local k = _tColKey(inst.TextColor3, oldName)
+						if k then inst.TextColor3 = new[k] end
+					end
+					if inst:IsA("UIStroke") then
+						local k = _tColKey(inst.Color, oldName)
+						if k then inst.Color = new[k] end
+					end
+					if inst:IsA("UIGradient") then
+						local cs = inst.Color; local kps = cs.Keypoints
+						local changed,newKps = false,{}
+						for _,kp in ipairs(kps) do
+							local k = _tColKey(kp.Value, oldName)
+							if k then table.insert(newKps,ColorSequenceKeypoint.new(kp.Time,new[k])); changed=true
+							else table.insert(newKps,kp) end
+						end
+						if changed then inst.Color = ColorSequence.new(newKps) end
+					end
+				end)
+			end
+		end)
+	end
+	if _G._MH_speedLblRef and _G._MH_speedLblRef.Parent then
+		local k = _tColKey(_G._MH_speedLblRef.TextColor3, oldName)
+		if k then _G._MH_speedLblRef.TextColor3 = new[k] end
+	end
+	if _G._MH_timerLblRef and _G._MH_timerLblRef.Parent then
+		local k = _tColKey(_G._MH_timerLblRef.TextColor3, oldName)
+		if k then _G._MH_timerLblRef.TextColor3 = new[k] end
+	end
+	if _G_updateThemeUI then _G_updateThemeUI(newName) end
+end
+
+-- ===================================================================
 -- STATE
 -- ===================================================================
 local State = {
@@ -55,7 +144,7 @@ local State = {
 	autoPlayMode = "Full",
 	nukeOptEnabled = false, removeAccEnabled = false, antiLagAdvEnabled = false,
 	guiVisible = true,
-	antiRagdollEnabled = false, unwalkEnabled = false, autoCarryOnGrab = true,
+	antiRagdollEnabled = true, unwalkEnabled = false, autoCarryOnGrab = true,
 	dropBrainrotActive = false, isStealing = false,
 	_carryManualUntil = 0, _lastCarryDetected = false,
 	medusaCounterEnabled = false,
@@ -1442,6 +1531,7 @@ _MH_buildUI = function()
 local gui = Instance.new("ScreenGui")
 gui.Name = "MoonHub"; gui.ResetOnSpawn = false; gui.DisplayOrder = 10
 gui.IgnoreGuiInset = true; gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+table.insert(_themeAllGuis, gui)
 pcall(function()
 	if syn and syn.protect_gui then syn.protect_gui(gui) end
 	if protectgui then protectgui(gui) end
@@ -2447,7 +2537,7 @@ buildPage("Combat", function()
 	UIB.makeInputRow("Aim Speed",AB.SPEED,function(n) if n>0 and n<=200 then AB.SPEED=n end end)
 	UIB.makeInputRow("Aim Height",AB.HEIGHT,function(n) if n>=0 and n<=30 then AB.HEIGHT=n end end)
 	UIB.makeGap(4); UIB.makeSectionLabel("Defense")
-	setAntiRagdollRowVisual=UIB.makeToggleRow("Anti Ragdoll",false,function(on)
+	setAntiRagdollRowVisual=UIB.makeToggleRow("Anti Ragdoll",true,function(on)
 		State.antiRagdollEnabled=on; if on then startAntiRagdoll() else stopAntiRagdoll() end
 	end)
 	UIB.makeToggleRow("Medusa Counter",false,function(on)
@@ -3816,6 +3906,8 @@ do
 		timerLbl.TextStrokeTransparency = 0.3
 		timerLbl.TextStrokeColor3 = Color3.fromRGB(0,0,0)
 		addLivingTextGradient(timerLbl)
+		_G._MH_speedLblRef = speedLbl
+		_G._MH_timerLblRef = timerLbl
 	end
 
 	local function updateDisplay()
@@ -4001,6 +4093,7 @@ local function MH_save()
 				floatPositions = _floatPositions,
 				floatPosV = _FLOAT_POS_VERSION,
 				uiLocked = _uiLocked,
+				theme             = _currentTheme,
 				autoPlayMode      = State.autoPlayMode,
 				uiScaleVal        = _G._MH_getUIScale and _G._MH_getUIScale() or nil,
 				floatScaleVal     = _G._MH_getFloatScale and _G._MH_getFloatScale() or nil,
@@ -4134,15 +4227,23 @@ local function MH_load()
 			end
 		end
 
-		-- Toggle rows: restore ON state and re-activate the underlying feature.
+		-- Toggle rows: restore saved state (ON and OFF) including defaults-ON features.
 		if type(data.toggles) == "table" then
 			for key, on in pairs(data.toggles) do
 				local entry = _G._MH_allToggles and _G._MH_allToggles[key]
-				if entry and on then
-					if entry.onToggle then pcall(entry.onToggle, true) end
-					entry.set(true)
+				if entry then
+					if on then
+						if entry.onToggle then pcall(entry.onToggle, true) end
+						entry.set(true)
+					else
+						if entry.onToggle then pcall(entry.onToggle, false) end
+						entry.set(false)
+					end
 				end
 			end
+		end
+		if data.theme == "default" or data.theme == "noir" then
+			applyTheme(data.theme)
 		end
 
 		if data.kb then
@@ -4546,6 +4647,50 @@ buildPage("Settings", function()
 		end)
 	end
 
+	UIB.makeGap(4)
+	UIB.makeSectionLabel("Thème")
+	UIB.makeGap(2)
+	do
+		local thRow = Instance.new("Frame", currentPage)
+		thRow.Size = UDim2.new(1,0,0,32); thRow.BackgroundColor3 = C_ROW
+		thRow.BackgroundTransparency = 0.35; thRow.BorderSizePixel = 0
+		thRow.LayoutOrder = LO(); addCorner(thRow,12); addLivingStroke(thRow,1)
+		local thLbl = Instance.new("TextLabel", thRow)
+		thLbl.Size = UDim2.new(0,80,1,0); thLbl.Position = UDim2.new(0,14,0,0)
+		thLbl.BackgroundTransparency = 1; thLbl.Text = "Couleurs"
+		thLbl.TextColor3 = C_WHITE; thLbl.Font = Enum.Font.GothamBold
+		thLbl.TextSize = 10; thLbl.TextXAlignment = Enum.TextXAlignment.Left
+		addLivingTextGradient(thLbl)
+		local BW,BH = 55,22
+		local defBtn = Instance.new("TextButton", thRow)
+		defBtn.Size = UDim2.new(0,BW,0,BH); defBtn.Position = UDim2.new(1,-(BW*2+14),0.5,-BH/2)
+		defBtn.BackgroundColor3 = C_MOON; defBtn.BackgroundTransparency = 0.1
+		defBtn.BorderSizePixel = 0; defBtn.Text = "Défaut"
+		defBtn.TextColor3 = Color3.fromRGB(0,10,20)
+		defBtn.Font = Enum.Font.GothamBold; defBtn.TextSize = 9
+		defBtn.AutoButtonColor = false; addCorner(defBtn,6); addLivingStroke(defBtn,1)
+		local noirBtn = Instance.new("TextButton", thRow)
+		noirBtn.Size = UDim2.new(0,BW,0,BH); noirBtn.Position = UDim2.new(1,-(BW+6),0.5,-BH/2)
+		noirBtn.BackgroundColor3 = C_OFF_BG; noirBtn.BackgroundTransparency = 0.3
+		noirBtn.BorderSizePixel = 0; noirBtn.Text = "Noir"
+		noirBtn.TextColor3 = C_DIM
+		noirBtn.Font = Enum.Font.GothamBold; noirBtn.TextSize = 9
+		noirBtn.AutoButtonColor = false; addCorner(noirBtn,6)
+		_G_updateThemeUI = function(name)
+			defBtn.BackgroundColor3  = name=="default" and C_MOON or C_OFF_BG
+			defBtn.BackgroundTransparency  = name=="default" and 0.1 or 0.3
+			defBtn.TextColor3  = name=="default" and Color3.fromRGB(0,10,20) or C_DIM
+			noirBtn.BackgroundColor3 = name=="noir" and Color3.fromRGB(200,200,200) or C_OFF_BG
+			noirBtn.BackgroundTransparency = name=="noir" and 0.15 or 0.3
+			noirBtn.TextColor3 = name=="noir" and Color3.fromRGB(10,10,10) or C_DIM
+		end
+		defBtn.MouseButton1Click:Connect(function()
+			applyTheme("default"); if _G._MH_autoSave then _G._MH_autoSave() end
+		end)
+		noirBtn.MouseButton1Click:Connect(function()
+			applyTheme("noir"); if _G._MH_autoSave then _G._MH_autoSave() end
+		end)
+	end
 	UIB.makeGap(4)
 	UIB.makeSectionLabel("Reset")
 	UIB.makeGap(2)
