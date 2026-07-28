@@ -263,7 +263,8 @@ end
 local function extractCode(txt)
     if not txt then return nil end
     for token in txt:gmatch("[A-Z][A-Z0-9%-_]+") do
-        if #token >= 4 and looksLikeCode(token) then
+        -- reject short all-caps no-digit tokens (LUCKY, BLACK, RARE, GOLD, etc.)
+        if #token >= 4 and looksLikeCode(token) and (token:match("%d") or #token >= 7) then
             local letters = 0
             for _ in token:gmatch("%a") do letters = letters + 1 end
             if letters >= 3 then return token end
@@ -592,10 +593,10 @@ local function dispatch(text, trusted)
         if rep ~= nil then
             result = rep
         elseif trusted then
-            -- Source sûre: token seul uniquement (pas "Code is", pas phrases)
             result = isLoneCode(text) and text or extractCode(text)
         else
-            result = extractCode(text) or extractCodesFromText(text)
+            -- untrusted, no keyword: only accept if the full text IS a lone code
+            result = (isLoneCode(text) and looksLikeCode(text)) and text or nil
         end
     end
 
