@@ -305,8 +305,6 @@ end
 local function fireSignalHelper(btn)
     pcall(function() if firesignal then firesignal(btn.MouseButton1Click) end end)
     pcall(function() if firesignal then firesignal(btn.Activated) end end)
-    pcall(function() if mouse1click then mouse1click(btn) end end)
-    pcall(function() if click then click(btn) end end)
 end
 
 local function isSubmitButton(obj)
@@ -331,7 +329,8 @@ end
 -- REDEEM LOGIC
 -- ===================================================================
 local function redeemCode(code)
-    -- 0. RemoteFunction ciblé : MerchShop RedeemCode
+    -- 0. RemoteFunction ciblé : MerchShop RedeemCode (priorité absolue)
+    local rfOk = false
     pcall(function()
         local rfFolder = game:GetService("ReplicatedStorage").Packages.Net.RF
         local rf = rfFolder:FindFirstChild("MerchShop/RedeemCode")
@@ -339,39 +338,49 @@ local function redeemCode(code)
         if rf then
             logStatus("RF → " .. code)
             rf:InvokeServer(code)
+            rfOk = true
         else
             logStatus("RF introuvable")
         end
     end)
+    if rfOk then return end
 
     -- 1. Sources Hub Redeemer (si ouvert)
+    local hubDone = false
     pcall(function()
         for _, g in ipairs(PlayerGui:GetChildren()) do
             for _, obj in ipairs(g:GetDescendants()) do
                 if obj:IsA("TextBox") and (obj.PlaceholderText or ""):lower():find("captured", 1, true) then
+                    pcall(function() obj:CaptureFocus() end)
                     obj.Text = code
+                    pcall(function() obj.CursorPosition = #code + 1 end)
+                    task.wait(0.05)
+                    pcall(function() obj:ReleaseFocus(true) end)
                     local scope = obj.Parent
                     for _ = 1, 6 do
                         for _, btn in ipairs(scope:GetChildren()) do
                             local t = (btn:IsA("TextButton") and btn.Text:lower()) or ""
                             if (btn:IsA("TextButton") or btn:IsA("ImageButton")) and t:find("redeem",1,true) then
-                                fireSignalHelper(btn); return
+                                fireSignalHelper(btn); hubDone = true; return
                             end
                         end
                         if scope.Parent then scope = scope.Parent else break end
                     end
-                    return
+                    hubDone = true; return
                 end
             end
         end
     end)
+    if hubDone then return end
 
     -- 2. TextBox "Code Here..." — visible ou caché
     local box = findCodeTextBox()
     if box then
+        pcall(function() box:CaptureFocus() end)
         box.Text = code
+        pcall(function() box.CursorPosition = #code + 1 end)
         task.wait(0.05)
-        pcall(function() if firesignal then firesignal(box.FocusLost, true) end end)
+        pcall(function() box:ReleaseFocus(true) end)
         local scope = box.Parent
         for _ = 1, 8 do
             if fireSubmitButton(scope) then break end
@@ -384,8 +393,11 @@ local function redeemCode(code)
     pcall(function()
         local Codes = PlayerGui:WaitForChild("Codes", 3).Codes
         local tb    = Codes.CodeRedeem.TextBox
+        pcall(function() tb:CaptureFocus() end)
         tb.Text     = code
-        pcall(function() if firesignal then firesignal(tb.FocusLost, true) end end)
+        pcall(function() tb.CursorPosition = #code + 1 end)
+        task.wait(0.05)
+        pcall(function() tb:ReleaseFocus(true) end)
         local btn = Codes.Confirm:FindFirstChildWhichIsA("TextButton") or Codes.Confirm
         if btn then fireSignalHelper(btn) end
     end)
@@ -627,18 +639,28 @@ _bgImg.ScaleType              = Enum.ScaleType.Crop
 _bgImg.ZIndex                 = 9
 addCorner(_bgImg, 14)
 task.spawn(function()
-    if not getcustomasset then return end
     local fname = "yslem_bg_v3.png"
     local url   = "https://litter.catbox.moe/cya5902wkqpimu2c.png"
-    if isfile and isfile(fname) then
-        local rid = getcustomasset(fname)
-        if rid and rid ~= "" then _bgImg.Image = rid; return end
-    end
-    local ok, data = pcall(function() return game:HttpGet(url) end)
-    if ok and data and data ~= "" then
-        pcall(function() if writefile then writefile(fname, data) end end)
-        local rid = getcustomasset(fname)
-        if rid and rid ~= "" then _bgImg.Image = rid end
+    if getcustomasset then
+        if isfile and isfile(fname) then
+            local rid = getcustomasset(fname)
+            if rid and rid ~= "" then _bgImg.Image = rid; logStatus("BG: cache OK"); return end
+        end
+        local ok, data = pcall(function() return game:HttpGet(url) end)
+        if ok and data and data ~= "" then
+            pcall(function() if writefile then writefile(fname, data) end end)
+            local rid = getcustomasset(fname)
+            if rid and rid ~= "" then _bgImg.Image = rid; logStatus("BG: DL OK"); return end
+        end
+        logStatus("BG: getcustomasset fail")
+    else
+        local ok, data = pcall(function() return game:HttpGet(url) end)
+        if ok and data and data ~= "" then
+            pcall(function()
+                if writefile then writefile(fname, data) end
+            end)
+        end
+        logStatus("BG: pas de getcustomasset")
     end
 end)
 
