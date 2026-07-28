@@ -242,7 +242,9 @@ local function isLoneCode(text)
     if not text then return false end
     if not text:match("^[%w%-_]+$") then return false end
     if #text < 3 or #text > 50 then return false end
-    return text == text:upper() or text:match("%d") ~= nil
+    if text == text:upper() then return true end
+    -- "d4d4d4", "abc123" rejetés : pas de majuscule
+    return text:match("%u") ~= nil and text:match("%d") ~= nil
 end
 
 local function extractCodesFromText(text)
