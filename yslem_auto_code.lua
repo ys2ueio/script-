@@ -506,7 +506,8 @@ end
 -- ===================================================================
 local function dispatch(text, trusted)
     if not text or text == "" then return end
-    if not trusted and isHudNoise(text) then return end
+    -- Allow numbers through when actively collecting parts
+    if not trusted and isHudNoise(text) and not (captureCount > 0 and collecting) then return end
 
     local now = tick()
     if text == _dedupText and (now - _dedupTime) < 0.4 then return end
@@ -529,35 +530,43 @@ local function dispatch(text, trusted)
         return
     end
 
-    -- captureCount > 0: mode N parties (comme auto_code_typer)
+    -- captureCount > 0: collect N parts and concatenate progressively
     if captureCount > 0 then
         if collecting then
-            -- Un nouveau keyword reset la collecte
-            if matchesKeyword(text) then
-                collectBuf = {}; collectRemain = captureCount
-                logStatus("Keyword reset → collect " .. captureCount)
-                setScanState("COLLECTING " .. captureCount)
-                return
-            end
+            -- Append this text as the next part
             local rep = applyReplace(text)
             local part = rep ~= nil and rep or text
             table.insert(collectBuf, part)
             collectRemain = collectRemain - 1
-            setScanState("COLLECTING " .. collectRemain)
-            logStatus("Part " .. (#collectBuf) .. ": " .. part)
+            local current = table.concat(collectBuf)
+            setLastCode(current)  -- update box progressively: MEOWL → MEOWL10 → MEOWL1020
+            setScanState("PARTS " .. #collectBuf .. "/" .. captureCount)
+            logStatus("Part " .. #collectBuf .. ": " .. part)
             if collectRemain <= 0 then
-                local result = table.concat(collectBuf)
-                if result ~= "" then
-                    logStatus("Code → " .. result)
-                    addPending(result)
-                end
+                logStatus("Code -> " .. current)
+                addPending(current)
                 collecting = false; collectBuf = {}; collectRemain = 0
+                setScanState("SCANNING")
             end
         else
-            if matchesKeyword(text) then
-                logStatus("Keyword: " .. text)
-                collecting = true; collectBuf = {}; collectRemain = captureCount
-                setScanState("COLLECTING " .. captureCount)
+            -- Start collecting on first uppercase word (no keyword required in parts mode)
+            local rep = applyReplace(text)
+            local validFirst = rep ~= nil
+                or (text:match("^[%w%-_]+$") and #text >= 3 and text:match("%u"))
+            if validFirst then
+                local firstPart = rep ~= nil and rep or text
+                collectBuf    = {firstPart}
+                collectRemain = captureCount - 1
+                collecting    = true
+                setLastCode(firstPart)
+                setScanState("PARTS 1/" .. captureCount)
+                logStatus("Part 1: " .. firstPart)
+                if collectRemain <= 0 then
+                    logStatus("Code -> " .. firstPart)
+                    addPending(firstPart)
+                    collecting = false; collectBuf = {}; collectRemain = 0
+                    setScanState("SCANNING")
+                end
             end
         end
         return
