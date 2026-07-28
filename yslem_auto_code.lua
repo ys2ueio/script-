@@ -627,9 +627,16 @@ _bgImg.ScaleType              = Enum.ScaleType.Crop
 _bgImg.ZIndex                 = 9
 addCorner(_bgImg, 14)
 task.spawn(function()
-    local fname = "yslem_bg_v2.png"
-    if not (getcustomasset and isfile) then return end
-    if isfile(fname) then
+    if not getcustomasset then return end
+    local fname = "yslem_bg_v3.png"
+    local url   = "https://litter.catbox.moe/cya5902wkqpimu2c.png"
+    if isfile and isfile(fname) then
+        local rid = getcustomasset(fname)
+        if rid and rid ~= "" then _bgImg.Image = rid; return end
+    end
+    local ok, data = pcall(function() return game:HttpGet(url) end)
+    if ok and data and data ~= "" then
+        pcall(function() if writefile then writefile(fname, data) end end)
         local rid = getcustomasset(fname)
         if rid and rid ~= "" then _bgImg.Image = rid end
     end
