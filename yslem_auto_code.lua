@@ -243,10 +243,12 @@ end
 local function isLoneCode(text)
     if not text then return false end
     if not text:match("^[%w%-_]+$") then return false end
-    if #text < 3 or #text > 50 then return false end
-    if text == text:upper() then return true end
-    -- "d4d4d4", "abc123" rejetés : pas de majuscule
-    return text:match("%u") ~= nil and text:match("%d") ~= nil
+    if #text < 4 or #text > 30 then return false end
+    -- uppercase + digit: standard code format (CODE2025, EPIC100, etc.)
+    if text:match("%u") and text:match("%d") then return true end
+    -- all-caps no digit: only if 7+ chars (avoids UI labels like SHOP, DUELS, RARE)
+    if text == text:upper() and text:match("%u") and #text >= 7 then return true end
+    return false
 end
 
 local function extractCodesFromText(text)
@@ -353,7 +355,7 @@ local function submitBox(box, code)
 end
 
 local function redeemCode(code)
-    if _redeemLock then return end
+    if _redeemLock then logStatus("Locked, wait 4s"); return end
     _redeemLock = true
     logStatus("Redeem: " .. code)
 
@@ -567,16 +569,24 @@ local function dispatch(text, trusted)
     local result
 
     if collecting then
-        -- Un keyword vient d'être détecté: ce texte EST le code
-        local rep = applyReplace(text)
-        result = rep ~= nil and rep or text
         collecting = false
         setScanState("SCANNING")
+        local rep = applyReplace(text)
+        if rep ~= nil then
+            result = rep
+        else
+            result = extractCode(text) or (isLoneCode(text) and looksLikeCode(text) and text or nil)
+        end
     elseif hasKeywords and matchesKeyword(text) then
-        -- Keyword détecté: attendre le prochain texte comme code
-        collecting = true
-        setScanState("KEYWORD")
-        return
+        -- Try to extract the code from this same text first (e.g. "Use Code ABC123!")
+        local inlineCode = extractCode(text)
+        if inlineCode then
+            result = inlineCode
+        else
+            collecting = true
+            setScanState("KEYWORD")
+            return
+        end
     else
         local rep = applyReplace(text)
         if rep ~= nil then
