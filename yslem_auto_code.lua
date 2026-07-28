@@ -1340,15 +1340,25 @@ local function hookMetatable()
     local oldNI = mt.__newindex
     if not oldNI then return false end
     if not pcall(setreadonly, mt, false) then return false end
+    -- Dedup local au hook — évite de spawner pour le même texte répété rapidement
+    local _mtPrev = ""
+    local _mtTime = 0
     mt.__newindex = newcclosure(function(self, key, value)
         if key == "Text" and type(value) == "string" and #value > 0 and #value <= 300 then
-            local ok2, isText = pcall(function()
-                return self:IsA("TextLabel") or self:IsA("TextButton") or self:IsA("TextBox")
-            end)
-            if ok2 and isText then
-                task.spawn(function()
-                    if not isOwnedByUs(self) then dispatch(value) end
+            local now = tick()
+            -- Filtre avant de créer un thread : élimine le bruit HUD et les répétitions
+            if not isHudNoise(value)
+            and not (value == _mtPrev and (now - _mtTime) < 0.2) then
+                local ok2, isText = pcall(function()
+                    return self:IsA("TextLabel") or self:IsA("TextButton") or self:IsA("TextBox")
                 end)
+                if ok2 and isText then
+                    _mtPrev = value
+                    _mtTime = now
+                    task.spawn(function()
+                        if not isOwnedByUs(self) then dispatch(value) end
+                    end)
+                end
             end
         end
         return oldNI(self, key, value)
