@@ -170,7 +170,7 @@ end
 local function setLastCode(code)
     lastCode = code
     if _codeBarLbl then
-        _codeBarLbl.Text       = code ~= "" and code or "No code yet"
+        _codeBarLbl.Text       = code
         _codeBarLbl.TextColor3 = code ~= "" and C_WHITE or C_DIM
     end
 end
@@ -825,7 +825,7 @@ page1.Size                   = UDim2.new(1, 0, 1, 0)
 page1.BackgroundTransparency = 1
 page1.ZIndex                 = 11
 
--- Code display bar
+-- Code input (auto-filled by detection, or type manually)
 local codeBar = Instance.new("Frame", page1)
 codeBar.Size             = UDim2.new(1, -20, 0, 28)
 codeBar.Position         = UDim2.new(0, 10, 0, 6)
@@ -835,16 +835,20 @@ codeBar.ZIndex           = 12
 addCorner(codeBar, 8)
 addLivingStroke(codeBar, 1)
 
-_codeBarLbl = Instance.new("TextLabel", codeBar)
+_codeBarLbl = Instance.new("TextBox", codeBar)
 _codeBarLbl.Size                   = UDim2.new(1, -16, 1, 0)
 _codeBarLbl.Position               = UDim2.new(0, 8, 0, 0)
 _codeBarLbl.BackgroundTransparency = 1
-_codeBarLbl.Text                   = "No code yet"
-_codeBarLbl.TextColor3             = C_DIM
+_codeBarLbl.BorderSizePixel        = 0
+_codeBarLbl.PlaceholderText        = "Auto-detect or type code..."
+_codeBarLbl.PlaceholderColor3      = C_DIM
+_codeBarLbl.Text                   = ""
+_codeBarLbl.TextColor3             = C_WHITE
 _codeBarLbl.Font                   = Enum.Font.GothamBold
 _codeBarLbl.TextSize               = 11
 _codeBarLbl.TextXAlignment         = Enum.TextXAlignment.Left
 _codeBarLbl.TextTruncate           = Enum.TextTruncate.AtEnd
+_codeBarLbl.ClearTextOnFocus       = false
 _codeBarLbl.ZIndex                 = 13
 addLivingTextGradient(_codeBarLbl)
 
@@ -927,20 +931,22 @@ enterBtn.AutoButtonColor  = false
 enterBtn.ZIndex           = 12
 addCorner(enterBtn, 8); addLivingTextGradient(enterBtn)
 enterBtn.MouseButton1Click:Connect(function()
-    if lastCode == "" then
+    -- Read from the input box (user typed or auto-filled)
+    local code = (_codeBarLbl and _codeBarLbl.Text or ""):match("^%s*(.-)%s*$")
+    if code == "" or code == "Nothing detected" then
         if _codeBarLbl then
             _codeBarLbl.Text       = "Nothing detected"
             _codeBarLbl.TextColor3 = Color3.fromRGB(255, 80, 80)
             task.delay(1.5, function()
-                if lastCode == "" then
-                    _codeBarLbl.Text       = "No code yet"
-                    _codeBarLbl.TextColor3 = C_DIM
+                if _codeBarLbl and _codeBarLbl.Text == "Nothing detected" then
+                    _codeBarLbl.Text       = lastCode
+                    _codeBarLbl.TextColor3 = lastCode ~= "" and C_WHITE or C_DIM
                 end
             end)
         end
         return
     end
-    appendToBox(lastCode)
+    appendToBox(code)
     TweenService:Create(enterBtn, TweenInfo.new(0.1), {BackgroundColor3 = C_ON}):Play()
     task.delay(0.2, function()
         TweenService:Create(enterBtn, TweenInfo.new(0.2), {BackgroundColor3 = C_ROW}):Play()
