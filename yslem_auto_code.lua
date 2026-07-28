@@ -15,7 +15,7 @@ local cfg = {
     autoCode     = true,
     redeemDelay  = 3,       -- secondes d'attente après dernier texte avant auto-redeem
     captureCount = 0,       -- 0 = mode timer, N = collecter exactement N parties
-    keywords     = { "","","","","","","","","","" },
+    keywords     = { "code is","use code","new code","code:","codes:","promo","redeem","","","" },
     replaceRules = {
         {kw="admin war", rep="jandel"},
         {kw="",rep=""},{kw="",rep=""},{kw="",rep=""},
@@ -126,8 +126,9 @@ local _dedupText      = ""
 local _dedupTime      = 0
 
 -- Timer-based redeem
-local _pendingCode = ""
-local _flushToken  = 0
+local _pendingCode  = ""
+local _flushToken   = 0
+local _lastRedeem   = { code = "", time = 0 }
 
 local _pillLbl    = nil
 local _codeBarLbl = nil
@@ -279,8 +280,9 @@ local function _isCodeBox(obj)
     if not obj:IsA("TextBox") then return false end
     if isOwnedByUs(obj) then return false end
     local nameL = obj.Name:lower()
+    local phL   = (obj.PlaceholderText or ""):lower()
     for _, h in ipairs({"code","redeem","promo","coupon","enter","input"}) do
-        if nameL:find(h, 1, true) then return true end
+        if nameL:find(h, 1, true) or phL:find(h, 1, true) then return true end
     end
     return false
 end
@@ -394,6 +396,8 @@ local function flushPending(token)
     logStatus("✓ " .. code)
     setLastCode(code)
     setScanState("SCANNING")
+    _lastRedeem.code = code
+    _lastRedeem.time = tick()
     if autoCode then appendToBox(code) end
 end
 
@@ -468,41 +472,38 @@ local function dispatch(text, trusted)
         return
     end
 
-    -- captureCount = 0: mode timer
+    -- captureCount = 0: mode timer (hybrid: keyword→prochain texte + détection directe)
     local hasKeywords = false
     for _, kw in ipairs(filterKeywords) do if kw ~= "" then hasKeywords = true; break end end
 
     local result
-    if hasKeywords then
-        if not matchesKeyword(text) then return end
+
+    if collecting then
+        -- Un keyword vient d'être détecté: ce texte EST le code
         local rep = applyReplace(text)
-        if rep ~= nil then
-            result = rep
-        else
-            local lower = text:lower()
-            for _, kw in ipairs(filterKeywords) do
-                if kw ~= "" then
-                    local _, e = lower:find(kw:lower(), 1, true)
-                    if e then
-                        local after = text:sub(e + 1):match("^%s*(.-)%s*$")
-                        if after ~= "" then result = after; break end
-                    end
-                end
-            end
-            if not result then result = text end
-        end
+        result = rep ~= nil and rep or text
+        collecting = false
+        setScanState("SCANNING")
+    elseif hasKeywords and matchesKeyword(text) then
+        -- Keyword détecté: attendre le prochain texte comme code
+        collecting = true
+        setScanState("KEYWORD")
+        return
     else
         local rep = applyReplace(text)
         if rep ~= nil then
             result = rep
         elseif trusted then
-            result = text
+            -- Source sûre: token seul uniquement (pas "Code is", pas phrases)
+            result = isLoneCode(text) and text or extractCode(text)
         else
             result = extractCode(text) or extractCodesFromText(text)
         end
     end
 
     if result and result ~= "" then
+        -- Anti-boucle: bloquer le même code 30s après redeem (MT hook → redeemCode feedback)
+        if result:lower() == _lastRedeem.code:lower() and (tick() - _lastRedeem.time) < 30 then return end
         setLastCode(result)
         addPending(result)
     end
