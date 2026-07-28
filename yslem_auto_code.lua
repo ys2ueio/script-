@@ -555,10 +555,10 @@ local function dispatch(text, trusted)
             end
         else
             local rep = applyReplace(text)
-            -- Démarre sur: replaceRule, keyword, ou texte alphanum+majuscule sans espace
+            -- Démarre sur: replaceRule, keyword, ou texte qui ressemble à un vrai début de code
             local validFirst = rep ~= nil
                 or matchesKeyword(text)
-                or (text:match("^[%w%-_]+$") and #text >= 3 and text:match("%u"))
+                or isLoneCode(text)
             if validFirst then
                 local firstPart = rep ~= nil and rep or text
                 collectBuf    = { firstPart }
