@@ -506,7 +506,7 @@ end
 -- ===================================================================
 local function dispatch(text, trusted)
     if not text or text == "" then return end
-    if not trusted and isHudNoise(text) then return end
+    if not trusted and isHudNoise(text) and not (captureCount > 0 and collecting) then return end
 
     local now = tick()
     if text == _dedupText and (now - _dedupTime) < 0.4 then return end
