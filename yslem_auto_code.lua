@@ -656,7 +656,7 @@ pillByLbl.ZIndex                 = 5
 local PANEL_W   = 240
 local TITLE_H   = 28
 local TAB_H     = 26
-local CONTENT_H = 180
+local CONTENT_H = 206
 local FULL_H    = TITLE_H + TAB_H + CONTENT_H
 local MINI_H    = TITLE_H
 
@@ -1000,6 +1000,81 @@ delayBox.FocusLost:Connect(function()
     else
         delayBox.Text = tostring(redeemDelay)
     end
+end)
+
+-- Code parts row (captureCount)
+local partsRow = Instance.new("Frame", page1)
+partsRow.Size             = UDim2.new(1, -20, 0, 24)
+partsRow.Position         = UDim2.new(0, 10, 0, 174)
+partsRow.BackgroundColor3 = C_ROW
+partsRow.BorderSizePixel  = 0
+partsRow.ZIndex           = 12
+addCorner(partsRow, 8)
+addLivingStroke(partsRow, 1)
+
+local partsLbl = Instance.new("TextLabel", partsRow)
+partsLbl.Size                   = UDim2.new(0.55, 0, 1, 0)
+partsLbl.Position               = UDim2.new(0, 8, 0, 0)
+partsLbl.BackgroundTransparency = 1
+partsLbl.Text                   = "Code parts:"
+partsLbl.TextColor3             = C_DIM
+partsLbl.Font                   = Enum.Font.Gotham
+partsLbl.TextSize               = 10
+partsLbl.TextXAlignment         = Enum.TextXAlignment.Left
+partsLbl.ZIndex                 = 13
+
+local partsMinBtn = Instance.new("TextButton", partsRow)
+partsMinBtn.Size             = UDim2.new(0, 22, 0.8, 0)
+partsMinBtn.Position         = UDim2.new(0.55, 4, 0.1, 0)
+partsMinBtn.BackgroundColor3 = C_OFF
+partsMinBtn.Text             = "-"
+partsMinBtn.TextColor3       = C_WHITE
+partsMinBtn.Font             = Enum.Font.GothamBold
+partsMinBtn.TextSize         = 14
+partsMinBtn.BorderSizePixel  = 0
+partsMinBtn.AutoButtonColor  = false
+partsMinBtn.ZIndex           = 13
+addCorner(partsMinBtn, 5)
+addLivingTextGradient(partsMinBtn)
+
+local partsValLbl = Instance.new("TextLabel", partsRow)
+partsValLbl.Size                   = UDim2.new(0, 30, 1, 0)
+partsValLbl.Position               = UDim2.new(0.55, 30, 0, 0)
+partsValLbl.BackgroundTransparency = 1
+partsValLbl.Text                   = captureCount == 0 and "off" or tostring(captureCount)
+partsValLbl.TextColor3             = captureCount == 0 and C_DIM or C_WHITE
+partsValLbl.Font                   = Enum.Font.GothamBold
+partsValLbl.TextSize               = 11
+partsValLbl.TextXAlignment         = Enum.TextXAlignment.Center
+partsValLbl.ZIndex                 = 13
+addLivingTextGradient(partsValLbl)
+
+local partsPlusBtn = Instance.new("TextButton", partsRow)
+partsPlusBtn.Size             = UDim2.new(0, 22, 0.8, 0)
+partsPlusBtn.Position         = UDim2.new(0.55, 64, 0.1, 0)
+partsPlusBtn.BackgroundColor3 = C_OFF
+partsPlusBtn.Text             = "+"
+partsPlusBtn.TextColor3       = C_WHITE
+partsPlusBtn.Font             = Enum.Font.GothamBold
+partsPlusBtn.TextSize         = 14
+partsPlusBtn.BorderSizePixel  = 0
+partsPlusBtn.AutoButtonColor  = false
+partsPlusBtn.ZIndex           = 13
+addCorner(partsPlusBtn, 5)
+addLivingTextGradient(partsPlusBtn)
+
+local function refreshParts()
+    partsValLbl.Text       = captureCount == 0 and "off" or tostring(captureCount)
+    partsValLbl.TextColor3 = captureCount == 0 and C_DIM or C_WHITE
+    cfg.captureCount       = captureCount
+    saveConfig()
+end
+
+partsMinBtn.MouseButton1Click:Connect(function()
+    if captureCount > 0 then captureCount = captureCount - 1; refreshParts() end
+end)
+partsPlusBtn.MouseButton1Click:Connect(function()
+    if captureCount < 10 then captureCount = captureCount + 1; refreshParts() end
 end)
 
 -- ===================================================================
