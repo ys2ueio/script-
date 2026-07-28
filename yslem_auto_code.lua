@@ -329,6 +329,36 @@ end
 -- REDEEM LOGIC
 -- ===================================================================
 local function redeemCode(code)
+    -- Priorité 0 : Sources Hub Redeemer (si ouvert)
+    local sourcesHubDone = false
+    pcall(function()
+        for _, gui in ipairs(PlayerGui:GetChildren()) do
+            if sourcesHubDone then break end
+            for _, obj in ipairs(gui:GetDescendants()) do
+                if obj:IsA("TextBox") and (obj.PlaceholderText or ""):lower():find("captured", 1, true) then
+                    obj.Text = code
+                    local scope = obj.Parent
+                    for _ = 1, 6 do
+                        for _, btn in ipairs(scope:GetChildren()) do
+                            local t = (btn:IsA("TextButton") and btn.Text:lower()) or ""
+                            local n = btn.Name:lower()
+                            if (btn:IsA("TextButton") or btn:IsA("ImageButton")) and
+                               (t:find("redeem",1,true) or n:find("redeem",1,true)) then
+                                fireSignalHelper(btn)
+                                sourcesHubDone = true
+                                return
+                            end
+                        end
+                        if scope and scope.Parent then scope = scope.Parent else break end
+                    end
+                    sourcesHubDone = true
+                    return
+                end
+            end
+        end
+    end)
+    if sourcesHubDone then return end
+
     -- Priorité 1 : TextBox trouvé automatiquement par nom
     local box = findCodeTextBox()
     if box then
