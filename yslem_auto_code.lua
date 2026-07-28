@@ -330,79 +330,116 @@ end
 -- ===================================================================
 -- REDEEM LOGIC
 -- ===================================================================
+
+local function forceParentVisible(obj)
+    local cur = obj.Parent
+    while cur and cur ~= PlayerGui and cur ~= game:GetService("CoreGui") do
+        pcall(function() cur.Visible = true end)
+        cur = cur.Parent
+    end
+end
+
+local function submitBox(box, code)
+    forceParentVisible(box)
+    pcall(function() box:CaptureFocus() end)
+    box.Text = code
+    pcall(function() box.CursorPosition = #code + 1 end)
+    task.wait(0.05)
+    pcall(function() box:ReleaseFocus(true) end)
+    local scope = box.Parent
+    for _ = 1, 10 do
+        if fireSubmitButton(scope) then break end
+        if scope and scope.Parent then scope = scope.Parent else break end
+    end
+end
+
 local function redeemCode(code)
-    -- 0. RemoteFunction ciblé : MerchShop RedeemCode (priorité absolue)
+    logStatus("Redeem: " .. code)
+
+    -- 0. Direct RF Knit : ReplicatedStorage.Packages.Net.RF["MerchShop/RedeemCode"]
     local rfOk = false
     pcall(function()
-        local rfFolder = game:GetService("ReplicatedStorage").Packages.Net.RF
+        local pkg = ReplicatedStorage:FindFirstChild("Packages"); if not pkg then return end
+        local net = pkg:FindFirstChild("Net"); if not net then return end
+        local rfFolder = net:FindFirstChild("RF"); if not rfFolder then return end
         local rf = rfFolder:FindFirstChild("MerchShop/RedeemCode")
-                or (rfFolder:FindFirstChild("MerchShop") and rfFolder.MerchShop:FindFirstChild("RedeemCode"))
-        if rf then
-            logStatus("RF → " .. code)
-            rf:InvokeServer(code)
-            rfOk = true
-        else
-            logStatus("RF introuvable")
+        if not rf then
+            local ms = rfFolder:FindFirstChild("MerchShop")
+            if ms then rf = ms:FindFirstChild("RedeemCode") end
         end
+        if not rf then logStatus("RF: introuvable"); return end
+        logStatus("RF: InvokeServer...")
+        local ok, res = pcall(function() return rf:InvokeServer(code) end)
+        logStatus("RF: " .. (ok and "OK" or "ERR") .. " → " .. tostring(res))
+        rfOk = ok
     end)
     if rfOk then return end
 
-    -- 1. Sources Hub Redeemer (si ouvert)
+    -- 1. Sources Hub Redeemer (TextBox PlaceholderText="captured")
     local hubDone = false
     pcall(function()
-        for _, g in ipairs(PlayerGui:GetChildren()) do
-            for _, obj in ipairs(g:GetDescendants()) do
-                if obj:IsA("TextBox") and (obj.PlaceholderText or ""):lower():find("captured", 1, true) then
-                    pcall(function() obj:CaptureFocus() end)
-                    obj.Text = code
-                    pcall(function() obj.CursorPosition = #code + 1 end)
-                    task.wait(0.05)
-                    pcall(function() obj:ReleaseFocus(true) end)
-                    local scope = obj.Parent
-                    for _ = 1, 6 do
-                        for _, btn in ipairs(scope:GetChildren()) do
-                            local t = (btn:IsA("TextButton") and btn.Text:lower()) or ""
-                            if (btn:IsA("TextButton") or btn:IsA("ImageButton")) and t:find("redeem",1,true) then
-                                fireSignalHelper(btn); hubDone = true; return
-                            end
+        for _, obj in ipairs(PlayerGui:GetDescendants()) do
+            if obj:IsA("TextBox") and (obj.PlaceholderText or ""):lower():find("captured", 1, true) then
+                submitBox(obj, code)
+                local scope = obj.Parent
+                for _ = 1, 6 do
+                    for _, btn in ipairs(scope:GetChildren()) do
+                        local t = (btn:IsA("TextButton") and btn.Text:lower()) or ""
+                        if (btn:IsA("TextButton") or btn:IsA("ImageButton")) and t:find("redeem",1,true) then
+                            fireSignalHelper(btn); hubDone = true; return
                         end
-                        if scope.Parent then scope = scope.Parent else break end
                     end
-                    hubDone = true; return
+                    if scope.Parent then scope = scope.Parent else break end
                 end
+                hubDone = true; return
             end
         end
     end)
     if hubDone then return end
 
-    -- 2. TextBox "Code Here..." — visible ou caché
+    -- 2. TextBox "Code Here..." — cherche même si caché, force la visibilité
     local box = findCodeTextBox()
     if box then
-        pcall(function() box:CaptureFocus() end)
-        box.Text = code
-        pcall(function() box.CursorPosition = #code + 1 end)
-        task.wait(0.05)
-        pcall(function() box:ReleaseFocus(true) end)
-        local scope = box.Parent
-        for _ = 1, 8 do
-            if fireSubmitButton(scope) then break end
-            if scope and scope.Parent then scope = scope.Parent else break end
-        end
+        logStatus("Box: " .. box:GetFullName())
+        submitBox(box, code)
         return
     end
 
-    -- 3. Structure spécifique (SAB / VON)
+    -- 3. Structure SAB / VON : PlayerGui.Codes
     pcall(function()
-        local Codes = PlayerGui:WaitForChild("Codes", 3).Codes
-        local tb    = Codes.CodeRedeem.TextBox
-        pcall(function() tb:CaptureFocus() end)
-        tb.Text     = code
-        pcall(function() tb.CursorPosition = #code + 1 end)
-        task.wait(0.05)
-        pcall(function() tb:ReleaseFocus(true) end)
-        local btn = Codes.Confirm:FindFirstChildWhichIsA("TextButton") or Codes.Confirm
-        if btn then fireSignalHelper(btn) end
+        local codesGui = PlayerGui:FindFirstChild("Codes"); if not codesGui then return end
+        local inner    = codesGui:FindFirstChild("Codes"); if not inner then return end
+        local cr       = inner:FindFirstChild("CodeRedeem"); if not cr then return end
+        local tb       = cr:FindFirstChildWhichIsA("TextBox"); if not tb then return end
+        logStatus("SAB/VON box trouvé")
+        submitBox(tb, code)
+        local confirmFrame = inner:FindFirstChild("Confirm")
+        if confirmFrame then
+            local btn = confirmFrame:FindFirstChildWhichIsA("TextButton") or confirmFrame
+            fireSignalHelper(btn)
+        end
     end)
+
+    -- 4. Fallback général : cherche n'importe quelle TextBox avec "code" dans toute la hiérarchie
+    if not box then
+        pcall(function()
+            local roots = {PlayerGui, game:GetService("CoreGui")}
+            for _, root in ipairs(roots) do
+                for _, d in ipairs(root:GetDescendants()) do
+                    if d:IsA("TextBox") and not isOwnedByUs(d) then
+                        local n  = d.Name:lower()
+                        local ph = (d.PlaceholderText or ""):lower()
+                        if n:find("code",1,true) or ph:find("code",1,true)
+                        or n:find("redeem",1,true) or ph:find("enter",1,true) then
+                            logStatus("Fallback box: " .. d:GetFullName())
+                            submitBox(d, code)
+                            return
+                        end
+                    end
+                end
+            end
+        end)
+    end
 end
 
 local function appendToBox(text)
