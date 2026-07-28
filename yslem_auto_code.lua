@@ -331,11 +331,17 @@ end
 -- REDEEM LOGIC
 -- ===================================================================
 local function redeemCode(code)
-    -- 0. RemoteFunction ciblé : ReplicatedStorage.Packages.Net.RF["MerchShop/RedeemCode"]
+    -- 0. RemoteFunction ciblé : MerchShop RedeemCode
     pcall(function()
-        local net = game:GetService("ReplicatedStorage").Packages.Net
-        local rf  = net.RF["MerchShop/RedeemCode"]
-        rf:InvokeServer(code)
+        local rfFolder = game:GetService("ReplicatedStorage").Packages.Net.RF
+        local rf = rfFolder:FindFirstChild("MerchShop/RedeemCode")
+                or (rfFolder:FindFirstChild("MerchShop") and rfFolder.MerchShop:FindFirstChild("RedeemCode"))
+        if rf then
+            logStatus("RF → " .. code)
+            rf:InvokeServer(code)
+        else
+            logStatus("RF introuvable")
+        end
     end)
 
     -- 1. Sources Hub Redeemer (si ouvert)
@@ -611,7 +617,7 @@ panel.ZIndex                 = 10
 addCorner(panel, 14)
 addLivingStroke(panel, 1.5)
 
--- Background image (loaded via getcustomasset to support external URLs)
+-- Background image (chargement async depuis workspace si disponible)
 local _bgImg = Instance.new("ImageLabel", panel)
 _bgImg.Size                   = UDim2.new(1, 0, 1, 0)
 _bgImg.Position               = UDim2.new(0, 0, 0, 0)
@@ -622,20 +628,10 @@ _bgImg.ZIndex                 = 9
 addCorner(_bgImg, 14)
 task.spawn(function()
     local fname = "yslem_bg_v2.png"
-    -- Chargement instantané si le fichier existe déjà (runs suivants)
-    if getcustomasset and isfile and isfile(fname) then
+    if not (getcustomasset and isfile) then return end
+    if isfile(fname) then
         local rid = getcustomasset(fname)
-        if rid and rid ~= "" then _bgImg.Image = rid; return end
-    end
-    -- Premier run : télécharger et sauvegarder
-    local url = "https://litter.catbox.moe/y0xpmimi361mzoo7.png"
-    local ok, data = pcall(function() return game:HttpGet(url) end)
-    if ok and data and data ~= "" then
-        pcall(function() writefile(fname, data) end)
-        if getcustomasset then
-            local rid = getcustomasset(fname)
-            if rid and rid ~= "" then _bgImg.Image = rid end
-        end
+        if rid and rid ~= "" then _bgImg.Image = rid end
     end
 end)
 
