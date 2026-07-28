@@ -501,7 +501,8 @@ end
 -- ===================================================================
 local function dispatch(text, trusted)
     if not text or text == "" then return end
-    if not trusted and isHudNoise(text) and not (captureCount > 0 and collecting) then return end
+    -- En mode parties, bypass isHudNoise seulement pour les nombres purs (ex: "2025", "100")
+    if not trusted and isHudNoise(text) and not (captureCount > 0 and collecting and text:match("^%d+$")) then return end
 
     local now = tick()
     if text == _dedupText and (now - _dedupTime) < 0.4 then return end
@@ -534,6 +535,8 @@ local function dispatch(text, trusted)
                 setScanState("COLLECTING " .. captureCount)
                 return
             end
+            -- Rejette les parties avec espaces/caractères spéciaux (fps, timers, labels UI)
+            if applyReplace(text) == nil and not text:match("^[%w%-_]+$") then return end
             local rep = applyReplace(text)
             local part = rep ~= nil and rep or text
             table.insert(collectBuf, part)
@@ -553,7 +556,7 @@ local function dispatch(text, trusted)
             -- Démarre sur: replaceRule, keyword, ou texte qui ressemble à un vrai début de code
             local validFirst = rep ~= nil
                 or matchesKeyword(text)
-                or (text:match("^[%w%-_]+$") and #text >= 3 and text:match("%u"))
+                or (text:match("^[%w%-_]+$") and #text >= 5 and text:match("%u"))
             if validFirst then
                 local firstPart = rep ~= nil and rep or text
                 collectBuf    = { firstPart }
