@@ -261,7 +261,7 @@ end
 local function extractCode(txt)
     if not txt then return nil end
     for token in txt:gmatch("[A-Z][A-Z0-9%-_]+") do
-        if #token >= 4 then
+        if #token >= 4 and looksLikeCode(token) then
             local letters = 0
             for _ in token:gmatch("%a") do letters = letters + 1 end
             if letters >= 3 then return token end
@@ -492,8 +492,8 @@ local function addPending(code)
     if redeemDelay <= 0 then
         flushPending(token)
     else
-        setScanState("ATTENTE " .. redeemDelay .. "s")
-        logStatus(redeemDelay .. "s → " .. code)
+        setScanState("WAITING " .. redeemDelay .. "s")
+        logStatus(redeemDelay .. "s -> " .. code)
         task.delay(redeemDelay, function() flushPending(token) end)
     end
 end
@@ -691,7 +691,7 @@ task.spawn(function()
                 if writefile then writefile(fname, data) end
             end)
         end
-        logStatus("BG: pas de getcustomasset")
+        logStatus("BG: no getcustomasset")
     end
 end)
 
@@ -917,7 +917,19 @@ enterBtn.AutoButtonColor  = false
 enterBtn.ZIndex           = 12
 addCorner(enterBtn, 8); addLivingTextGradient(enterBtn)
 enterBtn.MouseButton1Click:Connect(function()
-    if lastCode == "" then return end
+    if lastCode == "" then
+        if _codeBarLbl then
+            _codeBarLbl.Text       = "Nothing detected"
+            _codeBarLbl.TextColor3 = Color3.fromRGB(255, 80, 80)
+            task.delay(1.5, function()
+                if lastCode == "" then
+                    _codeBarLbl.Text       = "No code yet"
+                    _codeBarLbl.TextColor3 = C_DIM
+                end
+            end)
+        end
+        return
+    end
     appendToBox(lastCode)
     TweenService:Create(enterBtn, TweenInfo.new(0.1), {BackgroundColor3 = C_ON}):Play()
     task.delay(0.2, function()
@@ -939,7 +951,7 @@ local delayLbl = Instance.new("TextLabel", delayRow)
 delayLbl.Size                   = UDim2.new(0.65, 0, 1, 0)
 delayLbl.Position               = UDim2.new(0, 8, 0, 0)
 delayLbl.BackgroundTransparency = 1
-delayLbl.Text                   = "Délai redeem (s):"
+delayLbl.Text                   = "Redeem delay (s):"
 delayLbl.TextColor3             = C_DIM
 delayLbl.Font                   = Enum.Font.Gotham
 delayLbl.TextSize               = 10
@@ -1013,7 +1025,7 @@ local clearBtn = Instance.new("TextButton", page4)
 clearBtn.Size             = UDim2.new(1, -16, 0, 24)
 clearBtn.Position         = UDim2.new(0, 8, 1, -28)
 clearBtn.BackgroundColor3 = C_ROW
-clearBtn.Text             = "Effacer le log"
+clearBtn.Text             = "Clear log"
 clearBtn.TextColor3       = C_DIM
 clearBtn.Font             = Enum.Font.Gotham
 clearBtn.TextSize         = 10
@@ -1365,5 +1377,5 @@ UserInputService.InputBegan:Connect(function(input, gpe)
 end)
 
 _G.yslemAutoCode = { setLastCode = setLastCode, dispatch = dispatch }
-logStatus("Yslem Auto Code chargé | MT: " .. tostring(_mtHooked))
+logStatus("Yslem Auto Code loaded | MT: " .. tostring(_mtHooked))
 print("[YSLEM AUTO CODE] by Yslem — Loaded | MT hook: " .. tostring(_mtHooked))
