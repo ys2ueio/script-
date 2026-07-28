@@ -14,8 +14,8 @@ local CFG_PATH = "yslem_autocode_cfg.json"
 local cfg = {
     autoCode     = true,
     redeemDelay  = 3,       -- secondes d'attente après dernier texte avant auto-redeem
-    captureCount = 4,       -- 0 = mode timer, N = collecter exactement N parties
-    keywords     = { "code is","","","","","","","","","" },
+    captureCount = 0,       -- 0 = mode timer, N = collecter exactement N parties
+    keywords     = { "","","","","","","","","","" },
     replaceRules = {
         {kw="admin war", rep="jandel"},
         {kw="",rep=""},{kw="",rep=""},{kw="",rep=""},
@@ -104,7 +104,7 @@ end)
 -- ===================================================================
 local MAX_KW       = 10
 local autoCode     = cfg.autoCode == true
-local captureCount = cfg.captureCount or 4
+local captureCount = cfg.captureCount or 0
 local redeemDelay  = cfg.redeemDelay or 3
 
 local filterKeywords = {}
@@ -134,10 +134,13 @@ local _codeBarLbl = nil
 local _focused    = nil
 
 -- Status log
-local _statusLog    = {}
+local _statusLog      = {}
+local _lastLogEntry   = ""
 local _statusScroll = nil
 
 local function logStatus(msg)
+    if msg == _lastLogEntry then return end
+    _lastLogEntry = msg
     local t = os.date and os.date("%H:%M:%S") or "??"
     local entry = "[" .. t .. "] " .. msg
     table.insert(_statusLog, entry)
@@ -388,7 +391,7 @@ local function flushPending(token)
     local code = _pendingCode
     _pendingCode = ""
     if code == "" then return end
-    logStatus("Auto-redeem → " .. code)
+    logStatus("✓ " .. code)
     setLastCode(code)
     setScanState("SCANNING")
     if autoCode then appendToBox(code) end
@@ -399,16 +402,16 @@ local function addPending(code)
     _flushToken  = _flushToken + 1
     local token  = _flushToken
     setScanState("ATTENTE " .. redeemDelay .. "s")
-    logStatus("En attente " .. redeemDelay .. "s → " .. code)
+    logStatus(redeemDelay .. "s → " .. code)
     task.delay(redeemDelay, function() flushPending(token) end)
 end
 
 -- ===================================================================
 -- DISPATCH
 -- ===================================================================
-local function dispatch(text)
+local function dispatch(text, trusted)
     if not text or text == "" then return end
-    if isHudNoise(text) then return end
+    if not trusted and isHudNoise(text) then return end
 
     local now = tick()
     if text == _dedupText and (now - _dedupTime) < 0.4 then return end
@@ -490,11 +493,16 @@ local function dispatch(text)
         end
     else
         local rep = applyReplace(text)
-        result = rep ~= nil and rep or (extractCode(text) or extractCodesFromText(text))
+        if rep ~= nil then
+            result = rep
+        elseif trusted then
+            result = text
+        else
+            result = extractCode(text) or extractCodesFromText(text)
+        end
     end
 
     if result and result ~= "" then
-        logStatus("Détecté: " .. result)
         setLastCode(result)
         addPending(result)
     end
@@ -1264,13 +1272,35 @@ end
 -- 1. TopNotification container (exact same approach as auto_code_typer)
 local function hookContainers()
     local names = { "TopNotification" }
+
+    local function watchTrusted(obj)
+        if seen[obj] then return end
+        if isOwnedByUs(obj) then return end
+        seen[obj] = true
+        if obj:IsA("TextLabel") or obj:IsA("TextButton") or obj:IsA("TextBox") then
+            obj:GetPropertyChangedSignal("Text"):Connect(function()
+                if not isOwnedByUs(obj) and obj.Text ~= "" then dispatch(obj.Text, true) end
+            end)
+        end
+        for _, child in ipairs(obj:GetDescendants()) do watchTrusted(child) end
+        obj.DescendantAdded:Connect(function(child)
+            if isOwnedByUs(child) then return end
+            local isNew = not seen[child]
+            watchTrusted(child)
+            if isNew then
+                local t = (child:IsA("TextLabel") or child:IsA("TextButton") or child:IsA("TextBox")) and child.Text
+                if t and t ~= "" then dispatch(t, true) end
+            end
+        end)
+    end
+
     for _, name in ipairs(names) do
         local c = PlayerGui:FindFirstChild(name)
-        if c then task.spawn(watchObject, c) end
+        if c then task.spawn(watchTrusted, c) end
     end
     PlayerGui.ChildAdded:Connect(function(child)
         for _, name in ipairs(names) do
-            if child.Name == name then task.spawn(watchObject, child) end
+            if child.Name == name then task.spawn(watchTrusted, child) end
         end
     end)
 end
