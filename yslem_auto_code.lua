@@ -375,7 +375,7 @@ local function redeemCode(code)
         local tb       = cr:FindFirstChildWhichIsA("TextBox"); if not tb       then return end
         submitBox(tb, code)
         task.wait(0.1)
-        fireSubmitButton(cr) or fireSubmitButton(inner)
+        if not fireSubmitButton(cr) then fireSubmitButton(inner) end
         submitted = true
     end)
 
