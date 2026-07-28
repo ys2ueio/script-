@@ -433,6 +433,20 @@ local function redeemCode(code)
     task.delay(4, function() _redeemLock = false end)
 end
 
+local function writeProgressiveToGameBox(code)
+    pcall(function()
+        local codesGui = PlayerGui:FindFirstChild("Codes"); if not codesGui then return end
+        local inner    = codesGui:FindFirstChild("Codes");  if not inner    then return end
+        local cr       = inner:FindFirstChild("CodeRedeem"); if not cr      then return end
+        local tb       = cr:FindFirstChildWhichIsA("TextBox"); if not tb    then return end
+        local wasVis   = inner.Visible
+        inner.Visible  = true
+        tb.Text        = code
+        pcall(function() tb.CursorPosition = #code + 1 end)
+        inner.Visible  = wasVis
+    end)
+end
+
 local function appendToBox(text)
     if not text or text == "" then return end
     if not _focused or not _focused.Parent then
@@ -501,8 +515,7 @@ end
 -- ===================================================================
 local function dispatch(text, trusted)
     if not text or text == "" then return end
-    -- En mode parties, bypass isHudNoise seulement pour les nombres purs (ex: "2025", "100")
-    if not trusted and isHudNoise(text) and not (captureCount > 0 and collecting and text:match("^%d+$")) then return end
+    if not trusted and isHudNoise(text) then return end
 
     local now = tick()
     if text == _dedupText and (now - _dedupTime) < 0.4 then return end
@@ -525,7 +538,7 @@ local function dispatch(text, trusted)
         return
     end
 
-    -- captureCount > 0: mode N parties (comme auto_code_typer)
+    -- captureCount > 0: mode N parties — keyword déclenche, puis collecte N textes
     if captureCount > 0 then
         if collecting then
             -- Un nouveau keyword reset la collecte
@@ -535,42 +548,25 @@ local function dispatch(text, trusted)
                 setScanState("COLLECTING " .. captureCount)
                 return
             end
-            -- Rejette les parties avec espaces/caractères spéciaux (fps, timers, labels UI)
-            if applyReplace(text) == nil and not text:match("^[%w%-_]+$") then return end
             local rep = applyReplace(text)
             local part = rep ~= nil and rep or text
             table.insert(collectBuf, part)
             collectRemain = collectRemain - 1
+            local current = table.concat(collectBuf)
+            setLastCode(current)
+            writeProgressiveToGameBox(current)
             setScanState("COLLECTING " .. collectRemain)
             logStatus("Part " .. (#collectBuf) .. ": " .. part)
             if collectRemain <= 0 then
-                local result = table.concat(collectBuf)
-                if result ~= "" then
-                    logStatus("Code → " .. result)
-                    addPending(result)
-                end
+                logStatus("Code → " .. current)
+                addPending(current)
                 collecting = false; collectBuf = {}; collectRemain = 0
             end
         else
-            local rep = applyReplace(text)
-            -- Démarre sur: replaceRule, keyword, ou texte qui ressemble à un vrai début de code
-            local validFirst = rep ~= nil
-                or matchesKeyword(text)
-                or (text:match("^[%w%-_]+$") and #text >= 5 and text:match("%u"))
-            if validFirst then
-                local firstPart = rep ~= nil and rep or text
-                collectBuf    = { firstPart }
-                collectRemain = captureCount - 1
-                collecting    = true
-                setLastCode(firstPart)
-                setScanState("PARTS 1/" .. captureCount)
-                logStatus("Part 1: " .. firstPart)
-                if collectRemain <= 0 then
-                    logStatus("Code → " .. firstPart)
-                    addPending(firstPart)
-                    collecting = false; collectBuf = {}; collectRemain = 0
-                    setScanState("SCANNING")
-                end
+            if matchesKeyword(text) then
+                logStatus("Keyword: " .. text)
+                collecting = true; collectBuf = {}; collectRemain = captureCount
+                setScanState("COLLECTING " .. captureCount)
             end
         end
         return
