@@ -239,7 +239,10 @@ local function looksLikeCode(text)
 end
 
 local function isLoneCode(text)
-    return text ~= nil and text:match("^[%w%-_]+$") ~= nil and #text >= 3 and #text <= 50
+    if not text then return false end
+    if not text:match("^[%w%-_]+$") then return false end
+    if #text < 3 or #text > 50 then return false end
+    return text == text:upper() or text:match("%d") ~= nil
 end
 
 local function extractCodesFromText(text)
