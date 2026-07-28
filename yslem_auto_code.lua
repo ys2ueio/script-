@@ -330,92 +330,51 @@ end
 -- ===================================================================
 -- REDEEM LOGIC
 -- ===================================================================
-local function tryDirectRemote(code)
-    local kws = {"redeem","code","coupon","promo","dlc"}
-    local function fire(obj)
-        pcall(function()
-            if obj:IsA("RemoteEvent") then obj:FireServer(code)
-            elseif obj:IsA("RemoteFunction") then obj:InvokeServer(code) end
-        end)
-    end
-    local function scan(folder)
-        if not folder then return false end
-        for _, obj in ipairs(folder:GetDescendants()) do
-            if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
-                local n = obj.Name:lower()
-                for _, kw in ipairs(kws) do
-                    if n:find(kw, 1, true) then fire(obj); return true end
-                end
-            end
-        end
-        return false
-    end
-    return scan(ReplicatedStorage)
-end
-
 local function redeemCode(code)
-    -- Priorité 0 : FireServer direct (sans ouvrir l'UI)
-    if tryDirectRemote(code) then return end
-
-    -- Priorité 1 : Sources Hub Redeemer (si ouvert)
-    local sourcesHubDone = false
+    -- 1. Sources Hub Redeemer (si ouvert)
     pcall(function()
-        for _, gui in ipairs(PlayerGui:GetChildren()) do
-            if sourcesHubDone then break end
-            for _, obj in ipairs(gui:GetDescendants()) do
+        for _, g in ipairs(PlayerGui:GetChildren()) do
+            for _, obj in ipairs(g:GetDescendants()) do
                 if obj:IsA("TextBox") and (obj.PlaceholderText or ""):lower():find("captured", 1, true) then
                     obj.Text = code
                     local scope = obj.Parent
                     for _ = 1, 6 do
                         for _, btn in ipairs(scope:GetChildren()) do
                             local t = (btn:IsA("TextButton") and btn.Text:lower()) or ""
-                            local n = btn.Name:lower()
-                            if (btn:IsA("TextButton") or btn:IsA("ImageButton")) and
-                               (t:find("redeem",1,true) or n:find("redeem",1,true)) then
-                                fireSignalHelper(btn)
-                                sourcesHubDone = true
-                                return
+                            if (btn:IsA("TextButton") or btn:IsA("ImageButton")) and t:find("redeem",1,true) then
+                                fireSignalHelper(btn); return
                             end
                         end
-                        if scope and scope.Parent then scope = scope.Parent else break end
+                        if scope.Parent then scope = scope.Parent else break end
                     end
-                    sourcesHubDone = true
                     return
                 end
             end
         end
     end)
-    if sourcesHubDone then return end
 
-    -- Priorité 1 : TextBox trouvé automatiquement par nom
+    -- 2. TextBox "Code Here..." — visible ou caché
     local box = findCodeTextBox()
     if box then
-        -- Focus + écrire
-        pcall(function() if mouse1click then mouse1click(box) end end)
-        pcall(function() if click then click(box) end end)
         box.Text = code
         task.wait(0.05)
-        -- Simuler Enter
         pcall(function() if firesignal then firesignal(box.FocusLost, true) end end)
-        -- Chercher bouton submit jusqu'à 6 niveaux au-dessus
         local scope = box.Parent
-        for _ = 1, 6 do
+        for _ = 1, 8 do
             if fireSubmitButton(scope) then break end
             if scope and scope.Parent then scope = scope.Parent else break end
         end
         return
     end
-    -- Priorité 2 : structure UI spécifique (SAB / VON) — identique à auto_code_typer
+
+    -- 3. Structure spécifique (SAB / VON)
     pcall(function()
         local Codes = PlayerGui:WaitForChild("Codes", 3).Codes
         local tb    = Codes.CodeRedeem.TextBox
-        local cfm   = Codes.Confirm
         tb.Text     = code
-        local btn   = cfm:FindFirstChildWhichIsA("TextButton") or cfm
-        if btn then
-            if firesignal then firesignal(btn.MouseButton1Click) end
-            if firesignal then firesignal(btn.Activated) end
-        end
+        pcall(function() if firesignal then firesignal(tb.FocusLost, true) end end)
+        local btn = Codes.Confirm:FindFirstChildWhichIsA("TextButton") or Codes.Confirm
+        if btn then fireSignalHelper(btn) end
     end)
 end
 
