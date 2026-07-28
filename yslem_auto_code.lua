@@ -554,10 +554,25 @@ local function dispatch(text, trusted)
                 collecting = false; collectBuf = {}; collectRemain = 0
             end
         else
-            if matchesKeyword(text) then
-                logStatus("Keyword: " .. text)
-                collecting = true; collectBuf = {}; collectRemain = captureCount
-                setScanState("COLLECTING " .. captureCount)
+            local rep = applyReplace(text)
+            -- Démarre sur: replaceRule, keyword, ou texte alphanum+majuscule sans espace
+            local validFirst = rep ~= nil
+                or matchesKeyword(text)
+                or (text:match("^[%w%-_]+$") and #text >= 3 and text:match("%u"))
+            if validFirst then
+                local firstPart = rep ~= nil and rep or text
+                collectBuf    = { firstPart }
+                collectRemain = captureCount - 1
+                collecting    = true
+                setLastCode(firstPart)
+                setScanState("PARTS 1/" .. captureCount)
+                logStatus("Part 1: " .. firstPart)
+                if collectRemain <= 0 then
+                    logStatus("Code → " .. firstPart)
+                    addPending(firstPart)
+                    collecting = false; collectBuf = {}; collectRemain = 0
+                    setScanState("SCANNING")
+                end
             end
         end
         return
