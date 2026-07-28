@@ -305,6 +305,8 @@ end
 local function fireSignalHelper(btn)
     pcall(function() if firesignal then firesignal(btn.MouseButton1Click) end end)
     pcall(function() if firesignal then firesignal(btn.Activated) end end)
+    pcall(function() if mouse1click then mouse1click(btn) end end)
+    pcall(function() if click then click(btn) end end)
 end
 
 local function isSubmitButton(obj)
@@ -362,8 +364,12 @@ local function redeemCode(code)
     -- Priorité 1 : TextBox trouvé automatiquement par nom
     local box = findCodeTextBox()
     if box then
+        -- Focus + écrire
+        pcall(function() if mouse1click then mouse1click(box) end end)
+        pcall(function() if click then click(box) end end)
         box.Text = code
-        -- Simuler Enter (FocusLost avec enterPressed=true)
+        task.wait(0.05)
+        -- Simuler Enter
         pcall(function() if firesignal then firesignal(box.FocusLost, true) end end)
         -- Chercher bouton submit jusqu'à 6 niveaux au-dessus
         local scope = box.Parent
@@ -618,7 +624,7 @@ _bgImg.ScaleType              = Enum.ScaleType.Crop
 _bgImg.ZIndex                 = 9
 addCorner(_bgImg, 14)
 task.spawn(function()
-    local fname = "yslem_bg.png"
+    local fname = "yslem_bg_v2.png"
     -- Chargement instantané si le fichier existe déjà (runs suivants)
     if getcustomasset and isfile and isfile(fname) then
         local rid = getcustomasset(fname)
