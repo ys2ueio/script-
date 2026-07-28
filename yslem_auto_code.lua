@@ -506,7 +506,7 @@ end
 -- ===================================================================
 local function dispatch(text, trusted)
     if not text or text == "" then return end
-    if not trusted and isHudNoise(text) and not (captureCount > 0 and collecting) then return end
+    if not trusted and isHudNoise(text) then return end
 
     local now = tick()
     if text == _dedupText and (now - _dedupTime) < 0.4 then return end
@@ -529,43 +529,35 @@ local function dispatch(text, trusted)
         return
     end
 
-    -- captureCount > 0: mode N parties — tout texte uppercase démarre la collecte
+    -- captureCount > 0: mode N parties (comme auto_code_typer)
     if captureCount > 0 then
         if collecting then
+            -- Un nouveau keyword reset la collecte
+            if matchesKeyword(text) then
+                collectBuf = {}; collectRemain = captureCount
+                logStatus("Keyword reset → collect " .. captureCount)
+                setScanState("COLLECTING " .. captureCount)
+                return
+            end
             local rep = applyReplace(text)
             local part = rep ~= nil and rep or text
             table.insert(collectBuf, part)
             collectRemain = collectRemain - 1
-            local current = table.concat(collectBuf)
-            setLastCode(current)
-            setScanState("PARTS " .. #collectBuf .. "/" .. captureCount)
-            logStatus("Part " .. #collectBuf .. ": " .. part)
+            setScanState("COLLECTING " .. collectRemain)
+            logStatus("Part " .. (#collectBuf) .. ": " .. part)
             if collectRemain <= 0 then
-                logStatus("Code → " .. current)
-                addPending(current)
+                local result = table.concat(collectBuf)
+                if result ~= "" then
+                    logStatus("Code → " .. result)
+                    addPending(result)
+                end
                 collecting = false; collectBuf = {}; collectRemain = 0
-                setScanState("SCANNING")
             end
         else
-            -- Démarre sur n'importe quel texte qui contient une majuscule (pas un keyword obligatoire)
-            local rep = applyReplace(text)
-            local validFirst = rep ~= nil
-                or (text:match("^[%w%-_]+$") and #text >= 2 and text:match("%u"))
-                or (text:match("%u") and #text >= 2)
-            if validFirst then
-                local firstPart = rep ~= nil and rep or text
-                collectBuf    = { firstPart }
-                collectRemain = captureCount - 1
-                collecting    = true
-                setLastCode(firstPart)
-                setScanState("PARTS 1/" .. captureCount)
-                logStatus("Part 1: " .. firstPart)
-                if collectRemain <= 0 then
-                    logStatus("Code → " .. firstPart)
-                    addPending(firstPart)
-                    collecting = false; collectBuf = {}; collectRemain = 0
-                    setScanState("SCANNING")
-                end
+            if matchesKeyword(text) then
+                logStatus("Keyword: " .. text)
+                collecting = true; collectBuf = {}; collectRemain = captureCount
+                setScanState("COLLECTING " .. captureCount)
             end
         end
         return
