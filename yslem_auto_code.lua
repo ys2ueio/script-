@@ -538,16 +538,9 @@ local function dispatch(text, trusted)
         return
     end
 
-    -- captureCount > 0: mode N parties — keyword déclenche, puis collecte N textes
+    -- captureCount > 0: mêmes déclencheurs que mode 0, mais on collecte N parties
     if captureCount > 0 then
         if collecting then
-            -- Un nouveau keyword reset la collecte
-            if matchesKeyword(text) then
-                collectBuf = {}; collectRemain = captureCount
-                logStatus("Keyword reset → collect " .. captureCount)
-                setScanState("COLLECTING " .. captureCount)
-                return
-            end
             local rep = applyReplace(text)
             local part = rep ~= nil and rep or text
             table.insert(collectBuf, part)
@@ -555,18 +548,38 @@ local function dispatch(text, trusted)
             local current = table.concat(collectBuf)
             setLastCode(current)
             writeProgressiveToGameBox(current)
-            setScanState("COLLECTING " .. collectRemain)
-            logStatus("Part " .. (#collectBuf) .. ": " .. part)
+            setScanState("PARTS " .. #collectBuf .. "/" .. captureCount)
+            logStatus("Part " .. #collectBuf .. ": " .. part)
             if collectRemain <= 0 then
                 logStatus("Code → " .. current)
                 addPending(current)
                 collecting = false; collectBuf = {}; collectRemain = 0
+                setScanState("SCANNING")
             end
         else
-            if matchesKeyword(text) then
-                logStatus("Keyword: " .. text)
-                collecting = true; collectBuf = {}; collectRemain = captureCount
-                setScanState("COLLECTING " .. captureCount)
+            -- Mêmes déclencheurs que mode 0
+            local rep = applyReplace(text)
+            local hasKeywords = false
+            for _, kw in ipairs(filterKeywords) do if kw ~= "" then hasKeywords = true; break end end
+            local shouldStart = rep ~= nil
+                or (hasKeywords and matchesKeyword(text))
+                or (trusted and (isLoneCode(text) or extractCode(text) ~= nil))
+                or (isLoneCode(text) and looksLikeCode(text))
+            if shouldStart then
+                local firstPart = rep ~= nil and rep or text
+                collectBuf    = { firstPart }
+                collectRemain = captureCount - 1
+                collecting    = true
+                setLastCode(firstPart)
+                writeProgressiveToGameBox(firstPart)
+                setScanState("PARTS 1/" .. captureCount)
+                logStatus("Part 1: " .. firstPart)
+                if collectRemain <= 0 then
+                    logStatus("Code → " .. firstPart)
+                    addPending(firstPart)
+                    collecting = false; collectBuf = {}; collectRemain = 0
+                    setScanState("SCANNING")
+                end
             end
         end
         return
