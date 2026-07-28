@@ -13,7 +13,7 @@ local PlayerGui         = LP:WaitForChild("PlayerGui")
 local CFG_PATH = "yslem_autocode_cfg.json"
 local cfg = {
     autoCode     = true,
-    redeemDelay  = 3,       -- secondes d'attente après dernier texte avant auto-redeem
+    redeemDelay  = 0,       -- secondes d'attente après dernier texte avant auto-redeem
     captureCount = 0,       -- 0 = mode timer, N = collecter exactement N parties
     keywords     = { "code is","use code","new code","code:","codes:","promo","redeem","","","" },
     replaceRules = {
@@ -333,8 +333,11 @@ local function redeemCode(code)
     local box = findCodeTextBox()
     if box then
         box.Text = code
+        -- Simuler Enter (FocusLost avec enterPressed=true)
+        pcall(function() if firesignal then firesignal(box.FocusLost, true) end end)
+        -- Chercher bouton submit jusqu'à 6 niveaux au-dessus
         local scope = box.Parent
-        for _ = 1, 3 do
+        for _ = 1, 6 do
             if fireSubmitButton(scope) then break end
             if scope and scope.Parent then scope = scope.Parent else break end
         end
