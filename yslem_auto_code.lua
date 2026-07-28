@@ -331,6 +331,13 @@ end
 -- REDEEM LOGIC
 -- ===================================================================
 local function redeemCode(code)
+    -- 0. RemoteFunction ciblé : ReplicatedStorage.Packages.Net.RF["MerchShop/RedeemCode"]
+    pcall(function()
+        local net = game:GetService("ReplicatedStorage").Packages.Net
+        local rf  = net.RF["MerchShop/RedeemCode"]
+        rf:InvokeServer(code)
+    end)
+
     -- 1. Sources Hub Redeemer (si ouvert)
     pcall(function()
         for _, g in ipairs(PlayerGui:GetChildren()) do
