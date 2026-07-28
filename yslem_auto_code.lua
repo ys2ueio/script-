@@ -14,7 +14,8 @@ local CFG_PATH = "yslem_autocode_cfg.json"
 local cfg = {
     autoCode     = true,
     redeemDelay  = 0,       -- secondes d'attente après dernier texte avant auto-redeem
-    captureCount = 0,       -- 0 = mode timer, N = collecter exactement N parties
+    captureCount   = 0,       -- 0 = mode timer, N = collecter exactement N parties
+    partSeparator  = "",      -- séparateur entre les parties (ex: "-", " ", "")
     keywords     = { "code is","use code","new code","code:","codes:","promo","redeem","","","" },
     replaceRules = {
         {kw="admin war", rep="jandel"},
@@ -103,9 +104,10 @@ end)
 -- SCANNER STATE
 -- ===================================================================
 local MAX_KW       = 10
-local autoCode     = cfg.autoCode == true
-local captureCount = cfg.captureCount or 0
-local redeemDelay  = 0
+local autoCode      = cfg.autoCode == true
+local captureCount  = cfg.captureCount or 0
+local partSeparator = cfg.partSeparator or ""
+local redeemDelay   = 0
 
 local filterKeywords = {}
 local replaceRules   = {}
@@ -476,6 +478,8 @@ local function redeemCode(code)
 end
 
 local function writeProgressiveToGameBox(code)
+    -- Chemin 1 : Codes.Codes.CodeRedeem (spécifique, sans ouvrir le menu)
+    local written = false
     pcall(function()
         local codesGui = PlayerGui:FindFirstChild("Codes"); if not codesGui then return end
         local inner    = codesGui:FindFirstChild("Codes");  if not inner    then return end
@@ -486,7 +490,17 @@ local function writeProgressiveToGameBox(code)
         tb.Text        = code
         pcall(function() tb.CursorPosition = #code + 1 end)
         inner.Visible  = wasVis
+        written        = true
     end)
+    -- Chemin 2 (Gamma Hub) : findCodeTextBox() — détection dynamique
+    if not written then
+        pcall(function()
+            local tb = findCodeTextBox()
+            if not tb then return end
+            tb.Text = code
+            pcall(function() tb.CursorPosition = #code + 1 end)
+        end)
+    end
 end
 
 local function appendToBox(text)
@@ -570,7 +584,7 @@ local function dispatch(text, trusted)
         collectRemain = collectRemain - 1
         setScanState("COLLECTING " .. collectRemain)
         if collectRemain <= 0 then
-            local result = table.concat(collectBuf)
+            local result = table.concat(collectBuf, partSeparator)
             logStatus("Force → " .. result)
             setLastCode(result)
             appendToBox(result)
@@ -587,7 +601,7 @@ local function dispatch(text, trusted)
             local part = rep ~= nil and rep or text
             table.insert(collectBuf, part)
             collectRemain = collectRemain - 1
-            local current = table.concat(collectBuf)
+            local current = table.concat(collectBuf, partSeparator)
             setLastCode(current)
             writeProgressiveToGameBox(current)
             setScanState("PARTS " .. #collectBuf .. "/" .. captureCount)
@@ -1077,7 +1091,7 @@ addCorner(partsRow, 8)
 addLivingStroke(partsRow, 1)
 
 local partsLbl = Instance.new("TextLabel", partsRow)
-partsLbl.Size                   = UDim2.new(0.55, 0, 1, 0)
+partsLbl.Size                   = UDim2.new(0.40, 0, 1, 0)
 partsLbl.Position               = UDim2.new(0, 8, 0, 0)
 partsLbl.BackgroundTransparency = 1
 partsLbl.Text                   = "Code parts:"
@@ -1089,7 +1103,7 @@ partsLbl.ZIndex                 = 13
 
 local partsMinBtn = Instance.new("TextButton", partsRow)
 partsMinBtn.Size             = UDim2.new(0, 22, 0.8, 0)
-partsMinBtn.Position         = UDim2.new(0.55, 4, 0.1, 0)
+partsMinBtn.Position         = UDim2.new(0.40, 4, 0.1, 0)
 partsMinBtn.BackgroundColor3 = C_OFF
 partsMinBtn.Text             = "-"
 partsMinBtn.TextColor3       = C_WHITE
@@ -1102,8 +1116,8 @@ addCorner(partsMinBtn, 5)
 addLivingTextGradient(partsMinBtn)
 
 local partsValLbl = Instance.new("TextLabel", partsRow)
-partsValLbl.Size                   = UDim2.new(0, 30, 1, 0)
-partsValLbl.Position               = UDim2.new(0.55, 30, 0, 0)
+partsValLbl.Size                   = UDim2.new(0, 26, 1, 0)
+partsValLbl.Position               = UDim2.new(0.40, 28, 0, 0)
 partsValLbl.BackgroundTransparency = 1
 partsValLbl.Text                   = captureCount == 0 and "off" or tostring(captureCount)
 partsValLbl.TextColor3             = captureCount == 0 and C_DIM or C_WHITE
@@ -1115,7 +1129,7 @@ addLivingTextGradient(partsValLbl)
 
 local partsPlusBtn = Instance.new("TextButton", partsRow)
 partsPlusBtn.Size             = UDim2.new(0, 22, 0.8, 0)
-partsPlusBtn.Position         = UDim2.new(0.55, 64, 0.1, 0)
+partsPlusBtn.Position         = UDim2.new(0.40, 56, 0.1, 0)
 partsPlusBtn.BackgroundColor3 = C_OFF
 partsPlusBtn.Text             = "+"
 partsPlusBtn.TextColor3       = C_WHITE
@@ -1126,6 +1140,40 @@ partsPlusBtn.AutoButtonColor  = false
 partsPlusBtn.ZIndex           = 13
 addCorner(partsPlusBtn, 5)
 addLivingTextGradient(partsPlusBtn)
+
+-- Séparateur entre parties (logique Gamma Hub : CODE_SEPARATOR)
+local sepLbl = Instance.new("TextLabel", partsRow)
+sepLbl.Size                   = UDim2.new(0, 14, 1, 0)
+sepLbl.Position               = UDim2.new(0.40, 82, 0, 0)
+sepLbl.BackgroundTransparency = 1
+sepLbl.Text                   = "sep"
+sepLbl.TextColor3             = C_DIM
+sepLbl.Font                   = Enum.Font.Gotham
+sepLbl.TextSize               = 8
+sepLbl.TextXAlignment         = Enum.TextXAlignment.Right
+sepLbl.ZIndex                 = 13
+
+local sepBox = Instance.new("TextBox", partsRow)
+sepBox.Size                   = UDim2.new(0, 34, 0.8, 0)
+sepBox.Position               = UDim2.new(0.40, 98, 0.1, 0)
+sepBox.BackgroundColor3       = C_OFF
+sepBox.BorderSizePixel        = 0
+sepBox.Font                   = Enum.Font.GothamBold
+sepBox.TextSize               = 11
+sepBox.TextColor3             = C_WHITE
+sepBox.PlaceholderText        = "—"
+sepBox.PlaceholderColor3      = C_DIM
+sepBox.TextXAlignment         = Enum.TextXAlignment.Center
+sepBox.ClearTextOnFocus       = false
+sepBox.Text                   = partSeparator
+sepBox.ZIndex                 = 13
+addCorner(sepBox, 5)
+addLivingTextGradient(sepBox)
+sepBox.FocusLost:Connect(function()
+    partSeparator      = sepBox.Text
+    cfg.partSeparator  = partSeparator
+    saveConfig()
+end)
 
 local function refreshParts()
     partsValLbl.Text       = captureCount == 0 and "off" or tostring(captureCount)
