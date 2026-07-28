@@ -330,8 +330,34 @@ end
 -- ===================================================================
 -- REDEEM LOGIC
 -- ===================================================================
+local function tryDirectRemote(code)
+    local kws = {"redeem","code","coupon","promo","dlc"}
+    local function fire(obj)
+        pcall(function()
+            if obj:IsA("RemoteEvent") then obj:FireServer(code)
+            elseif obj:IsA("RemoteFunction") then obj:InvokeServer(code) end
+        end)
+    end
+    local function scan(folder)
+        if not folder then return false end
+        for _, obj in ipairs(folder:GetDescendants()) do
+            if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
+                local n = obj.Name:lower()
+                for _, kw in ipairs(kws) do
+                    if n:find(kw, 1, true) then fire(obj); return true end
+                end
+            end
+        end
+        return false
+    end
+    return scan(ReplicatedStorage)
+end
+
 local function redeemCode(code)
-    -- Priorité 0 : Sources Hub Redeemer (si ouvert)
+    -- Priorité 0 : FireServer direct (sans ouvrir l'UI)
+    if tryDirectRemote(code) then return end
+
+    -- Priorité 1 : Sources Hub Redeemer (si ouvert)
     local sourcesHubDone = false
     pcall(function()
         for _, gui in ipairs(PlayerGui:GetChildren()) do
