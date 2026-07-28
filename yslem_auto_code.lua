@@ -44,15 +44,15 @@ loadConfig()
 -- ===================================================================
 -- COLOUR / STYLE
 -- ===================================================================
-local C_BG    = Color3.fromRGB(10, 0, 0)
-local C_ON    = Color3.fromRGB(140, 10, 10)
-local C_OFF   = Color3.fromRGB(10, 0, 0)
-local C_ROW   = Color3.fromRGB(28, 5, 5)
-local C_WHITE = Color3.fromRGB(255, 255, 255)
-local C_DIM   = Color3.fromRGB(180, 80, 80)
-local G1      = Color3.fromRGB(255, 80, 80)
-local G2      = Color3.fromRGB(200, 20, 20)
-local G3      = Color3.fromRGB(70, 0, 0)
+local C_BG    = Color3.fromRGB(8, 8, 8)
+local C_ON    = Color3.fromRGB(45, 45, 45)
+local C_OFF   = Color3.fromRGB(8, 8, 8)
+local C_ROW   = Color3.fromRGB(22, 22, 22)
+local C_WHITE = Color3.fromRGB(240, 240, 240)
+local C_DIM   = Color3.fromRGB(120, 120, 120)
+local G1      = Color3.fromRGB(200, 200, 200)
+local G2      = Color3.fromRGB(90, 90, 90)
+local G3      = Color3.fromRGB(25, 25, 25)
 
 local _livingGradients = {}
 local _livingStrokes   = {}
@@ -625,7 +625,7 @@ task.spawn(function()
         if rid and rid ~= "" then _bgImg.Image = rid; return end
     end
     -- Premier run : télécharger et sauvegarder
-    local url = "https://litter.catbox.moe/4yx964j5od62trr1.png"
+    local url = "https://litter.catbox.moe/y0xpmimi361mzoo7.png"
     local ok, data = pcall(function() return game:HttpGet(url) end)
     if ok and data and data ~= "" then
         pcall(function() writefile(fname, data) end)
