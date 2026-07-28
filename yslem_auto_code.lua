@@ -441,7 +441,7 @@ end
 local function appendToBox(text)
     if not text or text == "" then return end
     if not _focused or not _focused.Parent then
-        redeemCode(text)
+        task.spawn(redeemCode, text)  -- spawn: redeemCode uses task.wait, can't yield in signal callbacks
         return
     end
     local cur = _focused.Text or ""
@@ -506,8 +506,10 @@ end
 -- ===================================================================
 local function dispatch(text, trusted)
     if not text or text == "" then return end
-    -- Allow numbers through when actively collecting parts
-    if not trusted and isHudNoise(text) and not (captureCount > 0 and collecting) then return end
+    -- In parts mode while collecting, allow pure digit strings through (e.g. "10", "20")
+    if not trusted and isHudNoise(text) then
+        if not (captureCount > 0 and collecting and text:match("^%d+$")) then return end
+    end
 
     local now = tick()
     if text == _dedupText and (now - _dedupTime) < 0.4 then return end
