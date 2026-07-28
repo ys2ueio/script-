@@ -331,6 +331,8 @@ end
 -- REDEEM LOGIC
 -- ===================================================================
 
+local _redeemLock = false
+
 local function forceParentVisible(obj)
     local cur = obj.Parent
     while cur and cur ~= PlayerGui and cur ~= game:GetService("CoreGui") do
@@ -349,40 +351,54 @@ local function submitBox(box, code)
 end
 
 local function redeemCode(code)
+    if _redeemLock then return end
+    _redeemLock = true
     logStatus("Redeem: " .. code)
 
-    -- 1. Clic bouton Codes (PlayerGui.LeftCenter.LeftCenter.Buttons.Codes)
+    -- 1. Clic bouton Codes pour ouvrir le menu
+    local codesBtn = nil
     pcall(function()
-        local lc   = PlayerGui:FindFirstChild("LeftCenter"); if not lc then return end
-        local lc2  = lc:FindFirstChild("LeftCenter");        if not lc2 then return end
+        local lc   = PlayerGui:FindFirstChild("LeftCenter"); if not lc   then return end
+        local lc2  = lc:FindFirstChild("LeftCenter");        if not lc2  then return end
         local btns = lc2:FindFirstChild("Buttons");          if not btns then return end
-        local btn  = btns:FindFirstChild("Codes");           if not btn then return end
-        logStatus("Clic Codes")
-        fireSignalHelper(btn)
+        codesBtn   = btns:FindFirstChild("Codes");           if not codesBtn then return end
+        fireSignalHelper(codesBtn)
         task.wait(0.25)
     end)
 
-    -- 2. PlayerGui.Codes.Codes.CodeRedeem.TextBox  (chemin exact du diag)
+    -- 2. PlayerGui.Codes.Codes.CodeRedeem.TextBox
     local submitted = false
     pcall(function()
-        local codesGui = PlayerGui:FindFirstChild("Codes");          if not codesGui then return end
-        local inner    = codesGui:FindFirstChild("Codes");           if not inner    then return end
-        local cr       = inner:FindFirstChild("CodeRedeem");         if not cr       then return end
-        local tb       = cr:FindFirstChildWhichIsA("TextBox");       if not tb       then return end
-        logStatus("Box: " .. tb:GetFullName())
+        local codesGui = PlayerGui:FindFirstChild("Codes");    if not codesGui then return end
+        local inner    = codesGui:FindFirstChild("Codes");     if not inner    then return end
+        local cr       = inner:FindFirstChild("CodeRedeem");   if not cr       then return end
+        local tb       = cr:FindFirstChildWhichIsA("TextBox"); if not tb       then return end
         submitBox(tb, code)
+        task.wait(0.1)
+        fireSubmitButton(cr) or fireSubmitButton(inner)
         submitted = true
-        if not fireSubmitButton(cr) then fireSubmitButton(inner) end
     end)
-    if submitted then return end
 
-    -- 3. PlayerGui.Shop.Shop (autre chemin du diag)
+    -- 3. Fermer le panel Codes après submit (restaure les boutons à gauche)
+    task.delay(0.8, function()
+        pcall(function()
+            local inner = PlayerGui:FindFirstChild("Codes")
+            inner = inner and inner:FindFirstChild("Codes")
+            if inner then inner.Visible = false end
+        end)
+    end)
+
+    if submitted then
+        task.delay(4, function() _redeemLock = false end)
+        return
+    end
+
+    -- 4. Fallback Shop path
     pcall(function()
         local shopGui = PlayerGui:FindFirstChild("Shop"); if not shopGui then return end
         for _, d in ipairs(shopGui:GetDescendants()) do
             if d:IsA("TextBox") and not isOwnedByUs(d)
             and (d.PlaceholderText or ""):lower():find("code", 1, true) then
-                logStatus("Shop box: " .. d:GetFullName())
                 submitBox(d, code)
                 submitted = true
                 local scope = d.Parent
@@ -394,39 +410,43 @@ local function redeemCode(code)
             end
         end
     end)
-    if submitted then return end
 
-    -- 4. Sources Hub (PlaceholderText contient "captured")
-    pcall(function()
-        for _, obj in ipairs(PlayerGui:GetDescendants()) do
-            if obj:IsA("TextBox") and (obj.PlaceholderText or ""):lower():find("captured", 1, true) then
-                submitBox(obj, code)
-                local scope = obj.Parent
-                for _ = 1, 6 do
-                    for _, btn in ipairs(scope:GetChildren()) do
-                        local t = (btn:IsA("TextButton") and btn.Text:lower()) or ""
-                        if (btn:IsA("TextButton") or btn:IsA("ImageButton")) and t:find("redeem",1,true) then
-                            fireSignalHelper(btn); return
+    -- 5. Fallback Sources Hub
+    if not submitted then
+        pcall(function()
+            for _, obj in ipairs(PlayerGui:GetDescendants()) do
+                if obj:IsA("TextBox") and (obj.PlaceholderText or ""):lower():find("captured", 1, true) then
+                    submitBox(obj, code)
+                    local scope = obj.Parent
+                    for _ = 1, 6 do
+                        for _, btn in ipairs(scope:GetChildren()) do
+                            local t = (btn:IsA("TextButton") and btn.Text:lower()) or ""
+                            if (btn:IsA("TextButton") or btn:IsA("ImageButton")) and t:find("redeem",1,true) then
+                                fireSignalHelper(btn); submitted = true; return
+                            end
                         end
+                        if scope.Parent then scope = scope.Parent else break end
                     end
-                    if scope.Parent then scope = scope.Parent else break end
+                    return
                 end
-                return
+            end
+        end)
+    end
+
+    -- 6. Fallback findCodeTextBox
+    if not submitted then
+        local box = findCodeTextBox()
+        if box then
+            submitBox(box, code)
+            local scope = box.Parent
+            for _ = 1, 8 do
+                if fireSubmitButton(scope) then break end
+                if scope and scope.Parent then scope = scope.Parent else break end
             end
         end
-    end)
-
-    -- 5. Fallback : findCodeTextBox avec forceVisible
-    local box = findCodeTextBox()
-    if box then
-        logStatus("Fallback box: " .. box:GetFullName())
-        submitBox(box, code)
-        local scope = box.Parent
-        for _ = 1, 8 do
-            if fireSubmitButton(scope) then break end
-            if scope and scope.Parent then scope = scope.Parent else break end
-        end
     end
+
+    task.delay(4, function() _redeemLock = false end)
 end
 
 local function appendToBox(text)
@@ -484,7 +504,6 @@ local function addPending(code)
     _flushToken  = _flushToken + 1
     local token  = _flushToken
     if redeemDelay <= 0 then
-        logStatus("→ " .. code)
         flushPending(token)
     else
         setScanState("ATTENTE " .. redeemDelay .. "s")
