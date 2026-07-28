@@ -338,6 +338,42 @@ end
 
 local _redeemLock = false
 
+-- RF / RequestRedemption — chemin direct (logique Gamma Hub)
+local _rfRemote = nil
+local function getRedemptionRF()
+    if _rfRemote and _rfRemote.Parent then return _rfRemote end
+    _rfRemote = nil
+    local rfFolder = ReplicatedStorage:FindFirstChild("RF")
+    if rfFolder then
+        local rf = rfFolder:FindFirstChild("RequestRedemption")
+        if rf and rf:IsA("RemoteFunction") then _rfRemote = rf; return _rfRemote end
+        for _, v in ipairs(rfFolder:GetChildren()) do
+            if v.Name == "RequestRedemption" and v:IsA("RemoteFunction") then
+                _rfRemote = v; return _rfRemote
+            end
+        end
+    end
+    if getinstances then
+        for _, v in ipairs(getinstances()) do
+            if v.Name == "RequestRedemption" and v:IsA("RemoteFunction") then
+                _rfRemote = v; return _rfRemote
+            end
+        end
+    end
+    return nil
+end
+
+local function redeemViaRF(code)
+    local rf = getRedemptionRF()
+    if not rf then return false end
+    local ok, result = pcall(function() return rf:InvokeServer(code) end)
+    if ok then
+        logStatus("RF → " .. code .. (result ~= nil and (" : " .. tostring(result)) or ""))
+        return true
+    end
+    return false
+end
+
 local function forceParentVisible(obj)
     local cur = obj.Parent
     while cur and cur ~= PlayerGui and cur ~= game:GetService("CoreGui") do
@@ -357,6 +393,12 @@ local function redeemCode(code)
     if _redeemLock then logStatus("Locked, wait 4s"); return end
     _redeemLock = true
     logStatus("Redeem: " .. code)
+
+    -- 0. Chemin direct RemoteFunction (plus rapide, pas besoin d'UI)
+    if redeemViaRF(code) then
+        task.delay(4, function() _redeemLock = false end)
+        return
+    end
 
     -- 1. PlayerGui.Codes.Codes.CodeRedeem.TextBox — invisible (sans ouvrir le menu)
     local submitted = false
@@ -1393,7 +1435,73 @@ local function hookNetworkRemote()
     end)
 end
 
--- 7. TextBox focus tracking (code boxes only)
+-- 7. PhiNotify (Packages.Net / RE/<hex> — logique Gamma Hub)
+local function hookPhiNotify()
+    task.spawn(function()
+        local Net
+        local deadline = tick() + 30
+        while not Net and tick() < deadline do
+            pcall(function()
+                local Pkgs = ReplicatedStorage:FindFirstChild("Packages")
+                if Pkgs then Net = Pkgs:FindFirstChild("Net") end
+            end)
+            if not Net then task.wait(0.5) end
+        end
+        if not Net then return end
+
+        local getinfo = debug and (debug.getinfo or debug.info)
+        local remote  = nil
+
+        -- Stratégie 1 : inspecter les connexions pour "NotificationController"
+        if getconnections and getinfo then
+            for _, d in ipairs(Net:GetDescendants()) do
+                if d:IsA("RemoteEvent") then
+                    local ok, cs = pcall(getconnections, d.OnClientEvent)
+                    if ok and cs then
+                        for _, c in ipairs(cs) do
+                            local f, fn = pcall(function() return c.Function end)
+                            if f and type(fn) == "function" then
+                                local i, info = pcall(getinfo, fn)
+                                if i and tostring(
+                                    (type(info) == "table" and (info.short_src or info.source)) or info or ""
+                                ):find("NotificationController", 1, true) then
+                                    remote = d; break
+                                end
+                            end
+                        end
+                    end
+                end
+                if remote then break end
+            end
+        end
+
+        -- Stratégie 2 : pattern RE/<hex>
+        if not remote then
+            for _, d in ipairs(Net:GetDescendants()) do
+                if d:IsA("RemoteEvent") and d.Name:match("^RE/%x+$") then
+                    remote = d; break
+                end
+            end
+        end
+
+        if not remote then return end
+
+        remote.OnClientEvent:Connect(function(...)
+            for _, v in ipairs({...}) do
+                if type(v) == "string" and v ~= "" then
+                    task.spawn(dispatch, v, true)
+                elseif type(v) == "table" then
+                    for _, s in pairs(v) do
+                        if type(s) == "string" and s ~= "" then task.spawn(dispatch, s, true) end
+                    end
+                end
+            end
+        end)
+        logStatus("PhiNotify hooké: " .. remote.Name)
+    end)
+end
+
+-- 8. TextBox focus tracking (code boxes only)
 UserInputService.TextBoxFocused:Connect(function(box)
     if isOwnedByUs(box) then return end
     if _isCodeBox(box) then _focused = box end
@@ -1475,6 +1583,7 @@ hookTextChat()
 hookLegacyChat()
 task.spawn(hookSpawnFolder)
 task.spawn(hookNetworkRemote)
+task.spawn(hookPhiNotify)
 
 -- Keybind
 UserInputService.InputBegan:Connect(function(input, gpe)
