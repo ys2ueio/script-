@@ -233,6 +233,8 @@ local function looksLikeCode(text)
     end
     if not text:match("%a") then return false end
     if text == low and not text:match("%d") then return false end
+    -- Rejette valeurs hex pures (couleurs RGB : 3/6/8 chars 0-9A-F)
+    if text:match("^[0-9A-Fa-f]+$") and (#text == 3 or #text == 6 or #text == 8) then return false end
     local wordCount = 0
     for _ in text:gmatch("%S+") do wordCount = wordCount + 1 end
     return wordCount <= 4
@@ -773,11 +775,11 @@ tabBarLayout.SortOrder           = Enum.SortOrder.LayoutOrder
 tabBarLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
 tabBarLayout.VerticalAlignment   = Enum.VerticalAlignment.Center
 
-local currentTab = math.max(1, math.min(4, cfg.activeTab or 1))
+local currentTab = math.max(1, math.min(2, cfg.activeTab or 1))
 
 local function makeTabBtn(label, order)
     local btn = Instance.new("TextButton", tabBar)
-    btn.Size             = UDim2.new(0, 50, 1, -4)
+    btn.Size             = UDim2.new(0, 108, 1, -4)
     btn.LayoutOrder      = order
     btn.BackgroundColor3 = C_ROW
     btn.BorderSizePixel  = 0
@@ -793,9 +795,7 @@ local function makeTabBtn(label, order)
 end
 
 local tabMainBtn   = makeTabBtn("Main",   1)
-local tabTrigBtn   = makeTabBtn("Trig",   2)
-local tabRepBtn    = makeTabBtn("Rep",    3)
-local tabStatusBtn = makeTabBtn("Status", 4)
+local tabStatusBtn = makeTabBtn("Status", 2)
 
 -- ===================================================================
 -- CONTENT FRAME
@@ -974,223 +974,9 @@ delayBox.FocusLost:Connect(function()
 end)
 
 -- ===================================================================
--- PAGE 2: TRIGGERS
+-- PAGE 2: STATUS
 -- ===================================================================
-local page2 = Instance.new("Frame", contentFrame)
-page2.Size                   = UDim2.new(1, 0, 1, 0)
-page2.BackgroundTransparency = 1
-page2.Visible                = false
-page2.ZIndex                 = 11
-
-local trigHeader = Instance.new("TextLabel", page2)
-trigHeader.Size                   = UDim2.new(1, -20, 0, 20)
-trigHeader.Position               = UDim2.new(0, 10, 0, 6)
-trigHeader.BackgroundTransparency = 1
-trigHeader.Text                   = "Trigger Keywords  (blank = match all)"
-trigHeader.TextColor3             = C_DIM
-trigHeader.Font                   = Enum.Font.Gotham
-trigHeader.TextSize               = 10
-trigHeader.TextXAlignment         = Enum.TextXAlignment.Left
-trigHeader.ZIndex                 = 12
-
-local kwScroll = Instance.new("ScrollingFrame", page2)
-kwScroll.Size                   = UDim2.new(1, -16, 1, -32)
-kwScroll.Position               = UDim2.new(0, 8, 0, 28)
-kwScroll.BackgroundColor3       = C_ROW
-kwScroll.BackgroundTransparency = 0.4
-kwScroll.BorderSizePixel        = 0
-kwScroll.ScrollBarThickness     = 3
-kwScroll.ScrollBarImageColor3   = G2
-kwScroll.AutomaticCanvasSize    = Enum.AutomaticSize.Y
-kwScroll.CanvasSize             = UDim2.new(0, 0, 0, 0)
-kwScroll.ClipsDescendants       = true
-kwScroll.ZIndex                 = 12
-addCorner(kwScroll, 8)
-
-local kwScrollLayout = Instance.new("UIListLayout", kwScroll)
-kwScrollLayout.Padding             = UDim.new(0, 3)
-kwScrollLayout.SortOrder           = Enum.SortOrder.LayoutOrder
-kwScrollLayout.FillDirection       = Enum.FillDirection.Vertical
-kwScrollLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-kwScrollLayout.VerticalAlignment   = Enum.VerticalAlignment.Top
-
-local kwScrollPad = Instance.new("UIPadding", kwScroll)
-kwScrollPad.PaddingLeft   = UDim.new(0, 5)
-kwScrollPad.PaddingRight  = UDim.new(0, 5)
-kwScrollPad.PaddingTop    = UDim.new(0, 4)
-kwScrollPad.PaddingBottom = UDim.new(0, 4)
-
-local function saveKeywords()
-    cfg.keywords = {}
-    for i = 1, MAX_KW do cfg.keywords[i] = filterKeywords[i] or "" end
-    saveConfig()
-end
-
-for i = 1, MAX_KW do
-    local slot = Instance.new("Frame", kwScroll)
-    slot.Size             = UDim2.new(1, 0, 0, 22)
-    slot.BackgroundColor3 = C_OFF
-    slot.BorderSizePixel  = 0
-    slot.LayoutOrder      = i
-    addCorner(slot, 5)
-
-    local badge = Instance.new("TextLabel", slot)
-    badge.Size                   = UDim2.new(0, 16, 1, 0)
-    badge.Position               = UDim2.new(0, 3, 0, 0)
-    badge.BackgroundTransparency = 1
-    badge.Font                   = Enum.Font.GothamBold
-    badge.TextSize               = 9
-    badge.TextColor3             = C_DIM
-    badge.TextXAlignment         = Enum.TextXAlignment.Center
-    badge.Text                   = tostring(i)
-    badge.ZIndex                 = 13
-
-    local tb = Instance.new("TextBox", slot)
-    tb.Size              = UDim2.new(1, -22, 1, -4)
-    tb.Position          = UDim2.new(0, 20, 0, 2)
-    tb.BackgroundTransparency = 1
-    tb.BorderSizePixel   = 0
-    tb.Font              = Enum.Font.GothamBold
-    tb.TextSize          = 11
-    tb.TextColor3        = C_WHITE
-    tb.PlaceholderText   = "keyword " .. i
-    tb.PlaceholderColor3 = C_DIM
-    tb.TextXAlignment    = Enum.TextXAlignment.Left
-    tb.ClearTextOnFocus  = false
-    tb.Text              = filterKeywords[i]
-    tb.ZIndex            = 13
-    addLivingTextGradient(tb)
-
-    tb.FocusLost:Connect(function()
-        filterKeywords[i] = tb.Text
-        saveKeywords()
-    end)
-    tb:GetPropertyChangedSignal("Text"):Connect(function()
-        filterKeywords[i] = tb.Text
-    end)
-end
-
--- ===================================================================
--- PAGE 3: REPLACE
--- ===================================================================
-local page3 = Instance.new("Frame", contentFrame)
-page3.Size                   = UDim2.new(1, 0, 1, 0)
-page3.BackgroundTransparency = 1
-page3.Visible                = false
-page3.ZIndex                 = 11
-
-local repHeader = Instance.new("TextLabel", page3)
-repHeader.Size                   = UDim2.new(1, -20, 0, 20)
-repHeader.Position               = UDim2.new(0, 10, 0, 6)
-repHeader.BackgroundTransparency = 1
-repHeader.Text                   = "Replace Rules  (keyword | replacement)"
-repHeader.TextColor3             = C_DIM
-repHeader.Font                   = Enum.Font.Gotham
-repHeader.TextSize               = 10
-repHeader.TextXAlignment         = Enum.TextXAlignment.Left
-repHeader.ZIndex                 = 12
-
-local repScroll = Instance.new("ScrollingFrame", page3)
-repScroll.Size                   = UDim2.new(1, -16, 1, -32)
-repScroll.Position               = UDim2.new(0, 8, 0, 28)
-repScroll.BackgroundColor3       = C_ROW
-repScroll.BackgroundTransparency = 0.4
-repScroll.BorderSizePixel        = 0
-repScroll.ScrollBarThickness     = 3
-repScroll.ScrollBarImageColor3   = G2
-repScroll.AutomaticCanvasSize    = Enum.AutomaticSize.Y
-repScroll.CanvasSize             = UDim2.new(0, 0, 0, 0)
-repScroll.ClipsDescendants       = true
-repScroll.ZIndex                 = 12
-addCorner(repScroll, 8)
-
-local repScrollLayout = Instance.new("UIListLayout", repScroll)
-repScrollLayout.Padding             = UDim.new(0, 3)
-repScrollLayout.SortOrder           = Enum.SortOrder.LayoutOrder
-repScrollLayout.FillDirection       = Enum.FillDirection.Vertical
-repScrollLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-repScrollLayout.VerticalAlignment   = Enum.VerticalAlignment.Top
-
-local repScrollPad = Instance.new("UIPadding", repScroll)
-repScrollPad.PaddingLeft   = UDim.new(0, 5)
-repScrollPad.PaddingRight  = UDim.new(0, 5)
-repScrollPad.PaddingTop    = UDim.new(0, 4)
-repScrollPad.PaddingBottom = UDim.new(0, 4)
-
-local function saveReplaceRules()
-    cfg.replaceRules = {}
-    for i = 1, MAX_KW do
-        cfg.replaceRules[i] = { kw = replaceRules[i].kw, rep = replaceRules[i].rep }
-    end
-    saveConfig()
-end
-
-for i = 1, MAX_KW do
-    local row = Instance.new("Frame", repScroll)
-    row.Size             = UDim2.new(1, 0, 0, 22)
-    row.BackgroundColor3 = C_OFF
-    row.BorderSizePixel  = 0
-    row.LayoutOrder      = i
-    addCorner(row, 5)
-
-    local badge = Instance.new("TextLabel", row)
-    badge.Size                   = UDim2.new(0, 16, 1, 0)
-    badge.Position               = UDim2.new(0, 3, 0, 0)
-    badge.BackgroundTransparency = 1
-    badge.Font                   = Enum.Font.GothamBold
-    badge.TextSize               = 9
-    badge.TextColor3             = C_DIM
-    badge.TextXAlignment         = Enum.TextXAlignment.Center
-    badge.Text                   = tostring(i)
-    badge.ZIndex                 = 13
-
-    local kwBox = Instance.new("TextBox", row)
-    kwBox.Size              = UDim2.new(0.5, -25, 1, -4)
-    kwBox.Position          = UDim2.new(0, 20, 0, 2)
-    kwBox.BackgroundTransparency = 1
-    kwBox.BorderSizePixel   = 0
-    kwBox.Font              = Enum.Font.GothamBold
-    kwBox.TextSize          = 10
-    kwBox.TextColor3        = C_WHITE
-    kwBox.PlaceholderText   = "keyword " .. i
-    kwBox.PlaceholderColor3 = C_DIM
-    kwBox.TextXAlignment    = Enum.TextXAlignment.Left
-    kwBox.ClearTextOnFocus  = false
-    kwBox.Text              = replaceRules[i].kw
-    kwBox.ZIndex            = 13
-
-    local splitter = Instance.new("Frame", row)
-    splitter.Size             = UDim2.new(0, 1, 1, -6)
-    splitter.Position         = UDim2.new(0.5, -1, 0, 3)
-    splitter.BackgroundColor3 = G3
-    splitter.BorderSizePixel  = 0
-
-    local repBox = Instance.new("TextBox", row)
-    repBox.Size              = UDim2.new(0.5, -9, 1, -4)
-    repBox.Position          = UDim2.new(0.5, 3, 0, 2)
-    repBox.BackgroundTransparency = 1
-    repBox.BorderSizePixel   = 0
-    repBox.Font              = Enum.Font.GothamBold
-    repBox.TextSize          = 10
-    repBox.TextColor3        = G2
-    repBox.PlaceholderText   = "replace " .. i
-    repBox.PlaceholderColor3 = C_DIM
-    repBox.TextXAlignment    = Enum.TextXAlignment.Left
-    repBox.ClearTextOnFocus  = false
-    repBox.Text              = replaceRules[i].rep
-    repBox.ZIndex            = 13
-    addLivingTextGradient(repBox)
-
-    kwBox.FocusLost:Connect(function() replaceRules[i].kw = kwBox.Text; saveReplaceRules() end)
-    kwBox:GetPropertyChangedSignal("Text"):Connect(function() replaceRules[i].kw = kwBox.Text end)
-    repBox.FocusLost:Connect(function() replaceRules[i].rep = repBox.Text; saveReplaceRules() end)
-    repBox:GetPropertyChangedSignal("Text"):Connect(function() replaceRules[i].rep = repBox.Text end)
-end
-
--- ===================================================================
--- PAGE 4: STATUS
--- ===================================================================
-local page4 = Instance.new("Frame", contentFrame)
+local page4 = Instance.new("Frame", contentFrame)  -- reste page4 pour compatibilité interne
 page4.Size                   = UDim2.new(1, 0, 1, 0)
 page4.BackgroundTransparency = 1
 page4.Visible                = false
@@ -1267,25 +1053,17 @@ local function setTab(idx)
     currentTab    = idx
     cfg.activeTab = idx
     page1.Visible = (idx == 1)
-    page2.Visible = (idx == 2)
-    page3.Visible = (idx == 3)
-    page4.Visible = (idx == 4)
+    page4.Visible = (idx == 2)
     tabMainBtn.BackgroundColor3   = (idx == 1) and C_ON or C_ROW
-    tabTrigBtn.BackgroundColor3   = (idx == 2) and C_ON or C_ROW
-    tabRepBtn.BackgroundColor3    = (idx == 3) and C_ON or C_ROW
-    tabStatusBtn.BackgroundColor3 = (idx == 4) and C_ON or C_ROW
+    tabStatusBtn.BackgroundColor3 = (idx == 2) and C_ON or C_ROW
     tabMainBtn.TextColor3         = (idx == 1) and C_WHITE or C_DIM
-    tabTrigBtn.TextColor3         = (idx == 2) and C_WHITE or C_DIM
-    tabRepBtn.TextColor3          = (idx == 3) and C_WHITE or C_DIM
-    tabStatusBtn.TextColor3       = (idx == 4) and C_WHITE or C_DIM
+    tabStatusBtn.TextColor3       = (idx == 2) and C_WHITE or C_DIM
     saveConfig()
 end
 
 setTab(currentTab)
 tabMainBtn.MouseButton1Click:Connect(function()   if currentTab ~= 1 then setTab(1) end end)
-tabTrigBtn.MouseButton1Click:Connect(function()   if currentTab ~= 2 then setTab(2) end end)
-tabRepBtn.MouseButton1Click:Connect(function()    if currentTab ~= 3 then setTab(3) end end)
-tabStatusBtn.MouseButton1Click:Connect(function() if currentTab ~= 4 then setTab(4) end end)
+tabStatusBtn.MouseButton1Click:Connect(function() if currentTab ~= 2 then setTab(2) end end)
 
 -- ===================================================================
 -- MINIMIZE
