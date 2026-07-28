@@ -348,9 +348,11 @@ end
 
 local function submitBox(box, code)
     forceParentVisible(box)
+    pcall(function() box:CaptureFocus() end)
     box.Text = code
     pcall(function() box.CursorPosition = #code + 1 end)
     task.wait(0.05)
+    pcall(function() box:ReleaseFocus(true) end)
 end
 
 local function redeemCode(code)
@@ -367,8 +369,11 @@ local function redeemCode(code)
         local tb       = cr:FindFirstChildWhichIsA("TextBox"); if not tb       then return end
         local wasVis   = inner.Visible
         inner.Visible  = true
+        pcall(function() tb:CaptureFocus() end)
         tb.Text = code
         pcall(function() tb.CursorPosition = #code + 1 end)
+        task.wait(0.05)
+        pcall(function() tb:ReleaseFocus(true) end)
         task.wait(0.1)
         if not fireSubmitButton(cr) then fireSubmitButton(inner) end
         inner.Visible = wasVis
