@@ -105,7 +105,7 @@ end)
 local MAX_KW       = 10
 local autoCode     = cfg.autoCode == true
 local captureCount = cfg.captureCount or 0
-local redeemDelay  = cfg.redeemDelay or 3
+local redeemDelay  = 0
 
 local filterKeywords = {}
 local replaceRules   = {}
@@ -447,9 +447,14 @@ local function addPending(code)
     _pendingCode = code
     _flushToken  = _flushToken + 1
     local token  = _flushToken
-    setScanState("ATTENTE " .. redeemDelay .. "s")
-    logStatus(redeemDelay .. "s → " .. code)
-    task.delay(redeemDelay, function() flushPending(token) end)
+    if redeemDelay <= 0 then
+        logStatus("→ " .. code)
+        flushPending(token)
+    else
+        setScanState("ATTENTE " .. redeemDelay .. "s")
+        logStatus(redeemDelay .. "s → " .. code)
+        task.delay(redeemDelay, function() flushPending(token) end)
+    end
 end
 
 -- ===================================================================
@@ -903,7 +908,7 @@ delayBox.BorderSizePixel        = 0
 delayBox.Font                   = Enum.Font.GothamBold
 delayBox.TextSize               = 11
 delayBox.TextColor3             = C_WHITE
-delayBox.PlaceholderText        = "3"
+delayBox.PlaceholderText        = "0"
 delayBox.PlaceholderColor3      = C_DIM
 delayBox.TextXAlignment         = Enum.TextXAlignment.Center
 delayBox.ClearTextOnFocus       = false
@@ -913,7 +918,7 @@ addCorner(delayBox, 5)
 addLivingTextGradient(delayBox)
 delayBox.FocusLost:Connect(function()
     local n = tonumber(delayBox.Text)
-    if n and n >= 0.5 and n <= 30 then
+    if n and n >= 0 and n <= 30 then
         redeemDelay     = n
         cfg.redeemDelay = n
         saveConfig()
