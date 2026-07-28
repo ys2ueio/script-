@@ -346,37 +346,57 @@ local function submitBox(box, code)
     pcall(function() box.CursorPosition = #code + 1 end)
     task.wait(0.05)
     pcall(function() box:ReleaseFocus(true) end)
-    local scope = box.Parent
-    for _ = 1, 10 do
-        if fireSubmitButton(scope) then break end
-        if scope and scope.Parent then scope = scope.Parent else break end
-    end
 end
 
 local function redeemCode(code)
     logStatus("Redeem: " .. code)
 
-    -- 0. Direct RF Knit : ReplicatedStorage.Packages.Net.RF["MerchShop/RedeemCode"]
-    local rfOk = false
+    -- 1. Clic bouton Codes (PlayerGui.LeftCenter.LeftCenter.Buttons.Codes)
     pcall(function()
-        local pkg = ReplicatedStorage:FindFirstChild("Packages"); if not pkg then return end
-        local net = pkg:FindFirstChild("Net"); if not net then return end
-        local rfFolder = net:FindFirstChild("RF"); if not rfFolder then return end
-        local rf = rfFolder:FindFirstChild("MerchShop/RedeemCode")
-        if not rf then
-            local ms = rfFolder:FindFirstChild("MerchShop")
-            if ms then rf = ms:FindFirstChild("RedeemCode") end
-        end
-        if not rf then logStatus("RF: introuvable"); return end
-        logStatus("RF: InvokeServer...")
-        local ok, res = pcall(function() return rf:InvokeServer(code) end)
-        logStatus("RF: " .. (ok and "OK" or "ERR") .. " → " .. tostring(res))
-        rfOk = ok
+        local lc   = PlayerGui:FindFirstChild("LeftCenter"); if not lc then return end
+        local lc2  = lc:FindFirstChild("LeftCenter");        if not lc2 then return end
+        local btns = lc2:FindFirstChild("Buttons");          if not btns then return end
+        local btn  = btns:FindFirstChild("Codes");           if not btn then return end
+        logStatus("Clic Codes")
+        fireSignalHelper(btn)
+        task.wait(0.25)
     end)
-    if rfOk then return end
 
-    -- 1. Sources Hub Redeemer (TextBox PlaceholderText="captured")
-    local hubDone = false
+    -- 2. PlayerGui.Codes.Codes.CodeRedeem.TextBox  (chemin exact du diag)
+    local submitted = false
+    pcall(function()
+        local codesGui = PlayerGui:FindFirstChild("Codes");          if not codesGui then return end
+        local inner    = codesGui:FindFirstChild("Codes");           if not inner    then return end
+        local cr       = inner:FindFirstChild("CodeRedeem");         if not cr       then return end
+        local tb       = cr:FindFirstChildWhichIsA("TextBox");       if not tb       then return end
+        logStatus("Box: " .. tb:GetFullName())
+        submitBox(tb, code)
+        submitted = true
+        if not fireSubmitButton(cr) then fireSubmitButton(inner) end
+    end)
+    if submitted then return end
+
+    -- 3. PlayerGui.Shop.Shop (autre chemin du diag)
+    pcall(function()
+        local shopGui = PlayerGui:FindFirstChild("Shop"); if not shopGui then return end
+        for _, d in ipairs(shopGui:GetDescendants()) do
+            if d:IsA("TextBox") and not isOwnedByUs(d)
+            and (d.PlaceholderText or ""):lower():find("code", 1, true) then
+                logStatus("Shop box: " .. d:GetFullName())
+                submitBox(d, code)
+                submitted = true
+                local scope = d.Parent
+                for _ = 1, 8 do
+                    if fireSubmitButton(scope) then break end
+                    if scope and scope.Parent then scope = scope.Parent else break end
+                end
+                return
+            end
+        end
+    end)
+    if submitted then return end
+
+    -- 4. Sources Hub (PlaceholderText contient "captured")
     pcall(function()
         for _, obj in ipairs(PlayerGui:GetDescendants()) do
             if obj:IsA("TextBox") and (obj.PlaceholderText or ""):lower():find("captured", 1, true) then
@@ -386,59 +406,26 @@ local function redeemCode(code)
                     for _, btn in ipairs(scope:GetChildren()) do
                         local t = (btn:IsA("TextButton") and btn.Text:lower()) or ""
                         if (btn:IsA("TextButton") or btn:IsA("ImageButton")) and t:find("redeem",1,true) then
-                            fireSignalHelper(btn); hubDone = true; return
+                            fireSignalHelper(btn); return
                         end
                     end
                     if scope.Parent then scope = scope.Parent else break end
                 end
-                hubDone = true; return
+                return
             end
         end
     end)
-    if hubDone then return end
 
-    -- 2. TextBox "Code Here..." — cherche même si caché, force la visibilité
+    -- 5. Fallback : findCodeTextBox avec forceVisible
     local box = findCodeTextBox()
     if box then
-        logStatus("Box: " .. box:GetFullName())
+        logStatus("Fallback box: " .. box:GetFullName())
         submitBox(box, code)
-        return
-    end
-
-    -- 3. Structure SAB / VON : PlayerGui.Codes
-    pcall(function()
-        local codesGui = PlayerGui:FindFirstChild("Codes"); if not codesGui then return end
-        local inner    = codesGui:FindFirstChild("Codes"); if not inner then return end
-        local cr       = inner:FindFirstChild("CodeRedeem"); if not cr then return end
-        local tb       = cr:FindFirstChildWhichIsA("TextBox"); if not tb then return end
-        logStatus("SAB/VON box trouvé")
-        submitBox(tb, code)
-        local confirmFrame = inner:FindFirstChild("Confirm")
-        if confirmFrame then
-            local btn = confirmFrame:FindFirstChildWhichIsA("TextButton") or confirmFrame
-            fireSignalHelper(btn)
+        local scope = box.Parent
+        for _ = 1, 8 do
+            if fireSubmitButton(scope) then break end
+            if scope and scope.Parent then scope = scope.Parent else break end
         end
-    end)
-
-    -- 4. Fallback général : cherche n'importe quelle TextBox avec "code" dans toute la hiérarchie
-    if not box then
-        pcall(function()
-            local roots = {PlayerGui, game:GetService("CoreGui")}
-            for _, root in ipairs(roots) do
-                for _, d in ipairs(root:GetDescendants()) do
-                    if d:IsA("TextBox") and not isOwnedByUs(d) then
-                        local n  = d.Name:lower()
-                        local ph = (d.PlaceholderText or ""):lower()
-                        if n:find("code",1,true) or ph:find("code",1,true)
-                        or n:find("redeem",1,true) or ph:find("enter",1,true) then
-                            logStatus("Fallback box: " .. d:GetFullName())
-                            submitBox(d, code)
-                            return
-                        end
-                    end
-                end
-            end
-        end)
     end
 end
 
