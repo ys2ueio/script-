@@ -527,11 +527,13 @@ enterBtn.MouseButton1Click:Connect(function()
         return
     end
     _capturedParts = {}
+    _lastStatusMsg = nil
     local ok, res = aceRedeem(code)
     if ok then
         setStatus("Redeemed: " .. code, COLORS.Green)
         flashCode(code, COLORS.Green)
     else
+        _lastStatusMsg = nil
         setStatus("Failed: " .. tostring(res), COLORS.Red)
     end
     TweenService:Create(enterBtn, TweenInfo.new(0.1), {BackgroundColor3 = C_ON}):Play()
@@ -991,14 +993,17 @@ function appendToBox(text)
             local ok, res = aceRedeem(combinedCode)
             local success = ok and (type(res) ~= "table" or res.success or res.Success)
             if success then
+                _lastStatusMsg = nil
                 setStatus("Redeemed: " .. combinedCode, COLORS.Green)
             else
                 local restored = restoreRejectedText(box, combinedCode)
                 clearPendingSubmission()
                 if restored then
+                    _lastStatusMsg = nil
                     setStatus("Invalid - repasted: " .. combinedCode, COLORS.Text)
                     flashCode(combinedCode, COLORS.Red)
                 else
+                    _lastStatusMsg = nil
                     setStatus("Invalid / cooldown", COLORS.Red)
                 end
             end
