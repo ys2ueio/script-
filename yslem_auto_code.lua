@@ -78,6 +78,7 @@ local KNOWN_CODE_BOX_PATH = {"Codes", "Codes", "CodeRedeem", "TextBox"}
 local setStatus, flashCode, appendToBox
 local rememberPendingSubmission, clearPendingSubmission, handleRedemptionFeedback
 local clearAceCapture
+local _lastStatusMsg = nil
 local Net         = ReplicatedStorage:WaitForChild("Packages"):WaitForChild("Net")
 local getupvalues = (debug and debug.getupvalues) or getupvalues
 local getconns    = getconnections or (debug and debug.getconnections)
@@ -493,6 +494,7 @@ autoBtn.MouseButton1Click:Connect(function()
     autoBtn.TextColor3 = _enabled and C_WHITE or C_DIM
     TweenService:Create(autoBtn, TweenInfo.new(0.15), {BackgroundColor3 = _enabled and C_ON or C_OFF}):Play()
     if not _enabled and clearAceCapture then clearAceCapture() end
+    _lastStatusMsg = nil
     saveConfig()
 end)
 
@@ -787,6 +789,8 @@ end
 
 function setStatus(msg, col)
     if not _enabled then return end
+    if msg == _lastStatusMsg then return end
+    _lastStatusMsg = msg
     local t = os.date and os.date("%H:%M:%S") or "??"
     logToScroll("[" .. t .. "] " .. tostring(msg))
     if _pillLbl then _pillLbl.Text = tostring(msg):sub(1, 26) end
