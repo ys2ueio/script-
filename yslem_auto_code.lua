@@ -93,23 +93,23 @@ local rememberPending, clearPending, handleFeedback
 -- COLORS
 -- ===================================================================
 local C = {
-    Window  = Color3.fromRGB(6,   6,   7),
-    Row     = Color3.fromRGB(15,  15,  17),
-    Control = Color3.fromRGB(35,  35,  39),
-    Log     = Color3.fromRGB(10,  10,  12),
-    White   = Color3.fromRGB(245, 245, 245),
-    Text    = Color3.fromRGB(190, 190, 196),
-    Dim     = Color3.fromRGB(120, 120, 130),
-    Accent  = Color3.fromRGB(245, 245, 245),
-    Green   = Color3.fromRGB(70,  210, 100),
-    Red     = Color3.fromRGB(255, 70,  70),
+    Window  = Color3.fromRGB(8,   8,   12),
+    Row     = Color3.fromRGB(18,  18,  28),
+    Control = Color3.fromRGB(36,  36,  52),
+    Log     = Color3.fromRGB(10,  10,  16),
+    White   = Color3.fromRGB(220, 220, 255),
+    Text    = Color3.fromRGB(175, 175, 205),
+    Dim     = Color3.fromRGB(100, 100, 130),
+    Accent  = Color3.fromRGB(130, 80,  220),
+    Green   = Color3.fromRGB(80,  210, 140),
+    Red     = Color3.fromRGB(255, 80,  80),
 }
 local CC = {
-    Dim   = "rgb(124,127,135)",
-    Amber = "rgb(214,158,92)",
-    Green = "rgb(105,190,132)",
-    Red   = "rgb(218,105,105)",
-    Cyan  = "rgb(101,174,183)",
+    Dim   = "rgb(100,100,130)",
+    Amber = "rgb(180,140,240)",
+    Green = "rgb(80,210,140)",
+    Red   = "rgb(255,80,80)",
+    Cyan  = "rgb(100,200,220)",
 }
 
 -- ===================================================================
@@ -668,18 +668,19 @@ if getgenv then
 end
 
 -- ===================================================================
--- UI — Window (310×370, top-right, matches ACE layout)
+-- UI — Window (290×370, left-center)
 -- ===================================================================
 local Window = Instance.new("Frame", gui)
 Window.Name             = "Window"
-Window.Size             = UDim2.fromOffset(310, 370)
-Window.AnchorPoint      = Vector2.new(1, 0)
-Window.Position         = UDim2.new(1, -8, 0, 8)
+Window.Size             = UDim2.fromOffset(290, 370)
+Window.AnchorPoint      = Vector2.new(0, 0.5)
+Window.Position         = UDim2.new(0, 8, 0.5, 0)
 Window.BackgroundColor3 = C.Window
+Window.BackgroundTransparency = 0.04
 Window.BorderSizePixel  = 0
 Window.ClipsDescendants = true
-addCorner(Window, 14)
-addStroke(Window, C.White, 1, 0.58)
+addCorner(Window, 12)
+addStroke(Window, C.Accent, 1, 0.45)
 
 -- Mobile UIScale
 local uiScale = Instance.new("UIScale", Window)
@@ -690,7 +691,7 @@ local function updateScale()
     local cam = workspace.CurrentCamera
     if not cam then uiScale.Scale = 0.92; return end
     local vp  = cam.ViewportSize
-    local fit = math.min((vp.X - 16) / 310, (vp.Y - 16) / 370)
+    local fit = math.min((vp.X - 16) / 290, (vp.Y - 16) / 370)
     if UserInputService.TouchEnabled then
         uiScale.Scale = math.max(0.45, math.min(0.72, fit))
     else
@@ -713,62 +714,47 @@ watchViewport()
 local BgImg = Instance.new("ImageLabel", Window)
 BgImg.Size              = UDim2.new(1,0,1,0)
 BgImg.BackgroundTransparency = 1
-BgImg.Image             = "rbxassetid://137692455767789"
-BgImg.ImageTransparency = 0
-BgImg.ScaleType         = Enum.ScaleType.Stretch
+BgImg.Image             = "https://litter.catbox.moe/2wfsx1k13uv3vbj2.png"
+BgImg.ImageTransparency = 0.30
+BgImg.ScaleType         = Enum.ScaleType.Crop
 BgImg.ZIndex            = 1
-addCorner(BgImg, 14)
+addCorner(BgImg, 12)
 
 -- ===================================================================
 -- HEADER
 -- ===================================================================
 local Header = Instance.new("Frame", Window)
 Header.Name             = "Header"
-Header.Size             = UDim2.new(1, 0, 0, 64)
+Header.Size             = UDim2.new(1, 0, 0, 58)
 Header.BackgroundTransparency = 1
 Header.Active           = true
 Header.ZIndex           = 3
 
-local BrandMark = Instance.new("Frame", Header)
-BrandMark.Size              = UDim2.fromOffset(30, 30)
-BrandMark.Position          = UDim2.fromOffset(17, 15)
-BrandMark.BackgroundTransparency = 1
-BrandMark.ClipsDescendants  = true
-addCorner(BrandMark, 15)
-local BrandImg = Instance.new("ImageLabel", BrandMark)
-BrandImg.Size               = UDim2.fromScale(1, 1)
-BrandImg.BackgroundTransparency = 1
-BrandImg.Image              = "rbxassetid://71891923282375"
-BrandImg.ScaleType          = Enum.ScaleType.Fit
-addCorner(BrandImg, 15)
-
 makeLabel(Header, "Title", "YSLEM AUTO CODE",
-    UDim2.fromOffset(180, 25), UDim2.fromOffset(56, 17), 15, C.White, Enum.Font.GothamBold)
+    UDim2.fromOffset(192, 26), UDim2.fromOffset(16, 8), 15, C.White, Enum.Font.GothamBold)
+makeLabel(Header, "Sub", "code sniper",
+    UDim2.fromOffset(140, 15), UDim2.fromOffset(16, 34), 10, C.Accent, Enum.Font.GothamMedium)
 
--- Master ON/OFF toggle switch
+-- Toggle — text pill
 local ToggleBtn = Instance.new("TextButton", Header)
 ToggleBtn.Name             = "Toggle"
-ToggleBtn.Size             = UDim2.fromOffset(47, 24)
-ToggleBtn.Position         = UDim2.new(1, -64, 0, 18)
+ToggleBtn.Size             = UDim2.fromOffset(44, 22)
+ToggleBtn.Position         = UDim2.new(1, -56, 0, 16)
 ToggleBtn.BackgroundColor3 = C.Accent
 ToggleBtn.BorderSizePixel  = 0
 ToggleBtn.AutoButtonColor  = false
-ToggleBtn.Text             = ""
-addCorner(ToggleBtn, 12)
-local ToggleStroke = addStroke(ToggleBtn, C.White, 1, 0.62)
-local ToggleKnob = Instance.new("Frame", ToggleBtn)
-ToggleKnob.Name             = "Knob"
-ToggleKnob.Size             = UDim2.fromOffset(20, 20)
-ToggleKnob.BackgroundColor3 = C.Window
-ToggleKnob.BorderSizePixel  = 0
-ToggleKnob.Position         = UDim2.new(1, -22, 0.5, -10)
-addCorner(ToggleKnob, 10)
+ToggleBtn.Text             = "ON"
+ToggleBtn.TextSize         = 10
+ToggleBtn.TextColor3       = C.White
+ToggleBtn.Font             = Enum.Font.GothamBold
+addCorner(ToggleBtn, 5)
+local ToggleStroke = addStroke(ToggleBtn, C.Accent, 1, 0.42)
 
--- Larger touch target on mobile
+-- Mobile touch target
 if UserInputService.TouchEnabled then
     local tt = Instance.new("TextButton", Header)
-    tt.Size               = UDim2.fromOffset(62, 62)
-    tt.Position           = UDim2.new(1, -70, 0, 1)
+    tt.Size               = UDim2.fromOffset(62, 52)
+    tt.Position           = UDim2.new(1, -64, 0, 1)
     tt.BackgroundTransparency = 1
     tt.Text               = ""
     tt.AutoButtonColor    = false
@@ -776,12 +762,12 @@ if UserInputService.TouchEnabled then
     tt.Activated:Connect(function() ToggleBtn.MouseButton1Click:Fire() end)
 end
 
--- Header divider
+-- Divider
 local Divider = Instance.new("Frame", Header)
-Divider.Size              = UDim2.new(1, -34, 0, 1)
-Divider.Position          = UDim2.fromOffset(17, 54)
-Divider.BackgroundColor3  = C.White
-Divider.BackgroundTransparency = 0.72
+Divider.Size              = UDim2.new(1, -32, 0, 1)
+Divider.Position          = UDim2.fromOffset(16, 50)
+Divider.BackgroundColor3  = C.Accent
+Divider.BackgroundTransparency = 0.52
 Divider.BorderSizePixel   = 0
 
 -- ===================================================================
@@ -791,8 +777,8 @@ local featureStates = {}
 
 local Settings = Instance.new("Frame", Window)
 Settings.Name             = "Settings"
-Settings.Size             = UDim2.new(1, 0, 0, 154)
-Settings.Position         = UDim2.fromOffset(0, 65)
+Settings.Size             = UDim2.new(1, 0, 0, 155)
+Settings.Position         = UDim2.fromOffset(0, 61)
 Settings.BackgroundTransparency = 1
 Settings.ZIndex           = 3
 
@@ -826,10 +812,16 @@ local function makeCard(name, pos, size)
     card.Position         = pos
     card.Size             = size
     card.BackgroundColor3 = C.Row
-    card.BackgroundTransparency = 0.68
+    card.BackgroundTransparency = 0.44
     card.BorderSizePixel  = 0
-    addCorner(card, 9)
-    addStroke(card, C.White, 1, 0.76)
+    addCorner(card, 8)
+    local bar = Instance.new("Frame", card)
+    bar.Size             = UDim2.fromOffset(3, 18)
+    bar.Position         = UDim2.new(0, 8, 0.5, -9)
+    bar.BackgroundColor3 = C.Accent
+    bar.BackgroundTransparency = 0.25
+    bar.BorderSizePixel  = 0
+    addCorner(bar, 1)
     return card
 end
 
@@ -838,30 +830,30 @@ local function makeToggleCard(parent, on, consoleName, onToggle)
     featureStates[consoleName] = on
     local btn = Instance.new("TextButton", parent)
     btn.Name             = "State"
-    btn.Size             = UDim2.fromOffset(42, 20)
-    btn.Position         = UDim2.new(1, -50, 0.5, -10)
+    btn.Size             = UDim2.fromOffset(40, 19)
+    btn.Position         = UDim2.new(1, -47, 0.5, -9)
     btn.BackgroundColor3 = on and C.Accent or C.Control
     btn.BorderSizePixel  = 0
     btn.AutoButtonColor  = false
     btn.Text             = on and "ON" or "OFF"
-    btn.TextSize         = 8
-    btn.TextColor3       = on and C.Window or C.Dim
+    btn.TextSize         = 9
+    btn.TextColor3       = on and C.White or C.Dim
     btn.Font             = Enum.Font.GothamBold
-    addCorner(btn, 6)
-    local outline = addStroke(btn, C.White, 1, on and 0.62 or 0.88)
+    addCorner(btn, 4)
+    local outline = addStroke(btn, on and C.Accent or C.Dim, 1, on and 0.45 or 0.78)
     local state = on
     local function toggle()
         state = not state
         featureStates[consoleName] = state
         btn.Text             = state and "ON" or "OFF"
         btn.BackgroundColor3 = state and C.Accent or C.Control
-        btn.TextColor3       = state and C.Window or C.Dim
-        outline.Transparency = state and 0.62 or 0.88
+        btn.TextColor3       = state and C.White or C.Dim
+        outline.Color        = state and C.Accent or C.Dim
+        outline.Transparency = state and 0.45 or 0.78
         if CFG.codeSniper then appendConsoleStatus(consoleName, state) end
         if onToggle then onToggle(state) end
     end
     btn.MouseButton1Click:Connect(toggle)
-    -- clicking anywhere on card also toggles (excluding button area)
     parent.InputBegan:Connect(function(inp)
         if inp.UserInputType ~= Enum.UserInputType.MouseButton1
         and inp.UserInputType ~= Enum.UserInputType.Touch then return end
@@ -875,61 +867,62 @@ local function makeToggleCard(parent, on, consoleName, onToggle)
 end
 
 -- Auto submit
-local AutoCard = makeCard("AutoSubmit", UDim2.fromOffset(17, 0), UDim2.fromOffset(135, 50))
+local AutoCard = makeCard("AutoSubmit", UDim2.fromOffset(16, 0), UDim2.fromOffset(124, 46))
 makeLabel(AutoCard, "Title", "Auto submit",
-    UDim2.new(1,-58,1,0), UDim2.fromOffset(12,0), 11, C.White, Enum.Font.GothamMedium)
+    UDim2.new(1,-52,1,0), UDim2.fromOffset(20,0), 11, C.Text, Enum.Font.GothamMedium)
 makeToggleCard(AutoCard, CFG.autoSubmit, "Auto submit", function(state)
     CFG.autoSubmit = state; saveConfig()
 end)
 
 -- Riddle solver
-local AICard = makeCard("AIRiddles", UDim2.fromOffset(158, 0), UDim2.fromOffset(135, 50))
+local AICard = makeCard("AIRiddles", UDim2.fromOffset(146, 0), UDim2.fromOffset(128, 46))
 makeLabel(AICard, "Title", "Riddle solver",
-    UDim2.new(1,-58,1,0), UDim2.fromOffset(12,0), 11, C.White, Enum.Font.GothamMedium)
+    UDim2.new(1,-52,1,0), UDim2.fromOffset(20,0), 11, C.Text, Enum.Font.GothamMedium)
 makeToggleCard(AICard, CFG.riddleSolver, "Riddle solver", function(state)
     CFG.riddleSolver = state; saveConfig()
 end)
 
--- Submit after msgs (counter)
-local DelayCard = makeCard("SubmitAfter", UDim2.fromOffset(17, 57), UDim2.fromOffset(276, 43))
+-- Submit after (counter)
+local DelayCard = makeCard("SubmitAfter", UDim2.fromOffset(16, 53), UDim2.fromOffset(258, 43))
 makeLabel(DelayCard, "Title", "Submit after msgs",
-    UDim2.fromOffset(145,43), UDim2.fromOffset(12,0), 11, C.White, Enum.Font.GothamMedium)
+    UDim2.fromOffset(140,43), UDim2.fromOffset(20,0), 11, C.Text, Enum.Font.GothamMedium)
 
 local CounterShell = Instance.new("Frame", DelayCard)
-CounterShell.Size              = UDim2.fromOffset(96, 31)
-CounterShell.Position          = UDim2.new(1, -105, 0.5, -15)
-CounterShell.BackgroundColor3  = C.Window
-CounterShell.BackgroundTransparency = 0.05
+CounterShell.Size              = UDim2.fromOffset(92, 29)
+CounterShell.Position          = UDim2.new(1, -100, 0.5, -14)
+CounterShell.BackgroundColor3  = C.Control
+CounterShell.BackgroundTransparency = 0.28
 CounterShell.BorderSizePixel   = 0
-addCorner(CounterShell, 7)
-addStroke(CounterShell, C.White, 1, 0.86)
+addCorner(CounterShell, 6)
+addStroke(CounterShell, C.Accent, 1, 0.70)
 
 local function makeCountBtn(text, pos)
     local btn = Instance.new("TextButton", CounterShell)
-    btn.Size             = UDim2.fromOffset(25, 25)
+    btn.Size             = UDim2.fromOffset(24, 23)
     btn.Position         = pos
-    btn.BackgroundColor3 = C.Control
+    btn.BackgroundColor3 = C.Window
+    btn.BackgroundTransparency = 0.08
     btn.BorderSizePixel  = 0
     btn.AutoButtonColor  = false
     btn.Text             = text
-    btn.TextSize         = 16
-    btn.TextColor3       = C.Text
+    btn.TextSize         = 15
+    btn.TextColor3       = C.Accent
     btn.Font             = Enum.Font.GothamBold
-    addCorner(btn, 5)
+    addCorner(btn, 4)
     return btn
 end
 
-local MinusBtn  = makeCountBtn("-", UDim2.fromOffset(3, 3))
-local CountLbl  = Instance.new("TextLabel", CounterShell)
-CountLbl.Size               = UDim2.fromOffset(28, 25)
-CountLbl.Position           = UDim2.fromOffset(34, 3)
+local MinusBtn = makeCountBtn("-", UDim2.fromOffset(3, 3))
+local CountLbl = Instance.new("TextLabel", CounterShell)
+CountLbl.Size               = UDim2.fromOffset(28, 23)
+CountLbl.Position           = UDim2.fromOffset(32, 3)
 CountLbl.BackgroundTransparency = 1
 CountLbl.Text               = tostring(CFG.submitAfter)
-CountLbl.TextSize           = 17
+CountLbl.TextSize           = 16
 CountLbl.TextColor3         = C.White
 CountLbl.Font               = Enum.Font.GothamBold
 CountLbl.TextXAlignment     = Enum.TextXAlignment.Center
-local PlusBtn = makeCountBtn("+", UDim2.fromOffset(68, 3))
+local PlusBtn = makeCountBtn("+", UDim2.fromOffset(65, 3))
 
 MinusBtn.MouseButton1Click:Connect(function()
     CFG.submitAfter = math.max(1, CFG.submitAfter - 1)
@@ -943,22 +936,23 @@ PlusBtn.MouseButton1Click:Connect(function()
 end)
 
 -- Retype invalid
-local RetypeCard = makeCard("RetypeInvalid", UDim2.fromOffset(17, 103), UDim2.fromOffset(276, 38))
+local RetypeCard = makeCard("RetypeInvalid", UDim2.fromOffset(16, 103), UDim2.fromOffset(258, 38))
 makeLabel(RetypeCard, "Title", "Retype invalid",
-    UDim2.new(1,-65,1,0), UDim2.fromOffset(12,0), 11, C.White, Enum.Font.GothamMedium)
+    UDim2.new(1,-60,1,0), UDim2.fromOffset(20,0), 11, C.Text, Enum.Font.GothamMedium)
 local retypeBtn = makeToggleCard(RetypeCard, CFG.retypeInvalid, "Retype invalid", function(state)
     CFG.retypeInvalid = state; saveConfig()
 end)
-retypeBtn.Position = UDim2.new(1, -50, 0.5, -10)
+retypeBtn.Position = UDim2.new(1, -47, 0.5, -9)
 
 -- ===================================================================
--- CONSOLE — scrolling RichText log
+-- CONSOLE
 -- ===================================================================
 Console = Instance.new("ScrollingFrame", Window)
 Console.Name                  = "Console"
-Console.Size                  = UDim2.new(1, -34, 0, 127)
-Console.Position              = UDim2.fromOffset(17, 216)
+Console.Size                  = UDim2.new(1, -32, 0, 122)
+Console.Position              = UDim2.fromOffset(16, 220)
 Console.BackgroundColor3      = C.Log
+Console.BackgroundTransparency = 0.20
 Console.BorderSizePixel       = 0
 Console.ClipsDescendants      = true
 Console.Active                = true
@@ -968,20 +962,20 @@ Console.ElasticBehavior       = Enum.ElasticBehavior.WhenScrollable
 Console.VerticalScrollBarInset = Enum.ScrollBarInset.ScrollBar
 Console.CanvasSize            = UDim2.new(0,0,0,0)
 Console.AutomaticCanvasSize   = Enum.AutomaticSize.None
-Console.ScrollBarThickness    = 4
-Console.ScrollBarImageColor3  = C.Dim
+Console.ScrollBarThickness    = 3
+Console.ScrollBarImageColor3  = C.Accent
 Console.ZIndex                = 3
-addCorner(Console, 9)
-addStroke(Console, C.White, 1, 0.88)
+addCorner(Console, 8)
+addStroke(Console, C.Accent, 1, 0.72)
 
 ConsoleOutput = Instance.new("TextLabel", Console)
 ConsoleOutput.Name              = "Output"
-ConsoleOutput.Size              = UDim2.new(1, -18, 0, 115)
+ConsoleOutput.Size              = UDim2.new(1, -16, 0, 110)
 ConsoleOutput.AutomaticSize     = Enum.AutomaticSize.Y
-ConsoleOutput.Position          = UDim2.fromOffset(9, 6)
+ConsoleOutput.Position          = UDim2.fromOffset(8, 5)
 ConsoleOutput.BackgroundTransparency = 1
 ConsoleOutput.RichText          = true
-ConsoleOutput.TextSize          = 14
+ConsoleOutput.TextSize          = 13
 ConsoleOutput.Font              = Enum.Font.Code
 ConsoleOutput.TextColor3        = C.Dim
 ConsoleOutput.TextXAlignment    = Enum.TextXAlignment.Left
@@ -997,13 +991,12 @@ ConsoleOutput.Text = CFG.codeSniper
 
 updateConsoleCanvas = function()
     if not Console or not ConsoleOutput then return end
-    local h = ConsoleOutput.Position.Y.Offset + ConsoleOutput.AbsoluteSize.Y + 30
+    local h = ConsoleOutput.Position.Y.Offset + ConsoleOutput.AbsoluteSize.Y + 28
     Console.CanvasSize = UDim2.new(0, 0, 0, h)
 end
 ConsoleOutput:GetPropertyChangedSignal("AbsoluteSize"):Connect(updateConsoleCanvas)
 task.defer(updateConsoleCanvas)
 
--- color mapper for rich text
 local function toCC(col)
     if col == C.Green  then return CC.Green end
     if col == C.Red    then return CC.Red   end
@@ -1014,7 +1007,6 @@ local function toCC(col)
         math.floor(col.R*255+0.5), math.floor(col.G*255+0.5), math.floor(col.B*255+0.5))
 end
 
--- implement setStatus + flashCode now that ConsoleOutput exists
 setStatus = function(msg, col)
     if not ConsoleOutput or not CFG.codeSniper then return end
     if msg == _lastStatusMsg then return end
@@ -1038,12 +1030,11 @@ local function applyMasterToggle(on)
     CFG.codeSniper = on
     if not on then clearCapture() end
     _lastStatusMsg = nil
-    ToggleBtn.BackgroundColor3  = on and C.Accent or C.Control
-    ToggleStroke.Transparency   = on and 0.62 or 0.88
-    ToggleKnob.BackgroundColor3 = on and C.Window or C.White
-    ToggleKnob.Position         = on
-        and UDim2.new(1, -22, 0.5, -10)
-        or  UDim2.new(0,  2,  0.5, -10)
+    ToggleBtn.BackgroundColor3 = on and C.Accent or C.Control
+    ToggleStroke.Color         = on and C.Accent or C.Dim
+    ToggleStroke.Transparency  = on and 0.42 or 0.72
+    ToggleBtn.Text             = on and "ON" or "OFF"
+    ToggleBtn.TextColor3       = on and C.White or C.Dim
     saveConfig()
     if ConsoleOutput then
         if on then
@@ -1065,7 +1056,7 @@ applyMasterToggle(CFG.codeSniper)
 ToggleBtn.MouseButton1Click:Connect(function() applyMasterToggle(not CFG.codeSniper) end)
 
 -- ===================================================================
--- DRAG — with threshold (ACE style)
+-- DRAG — threshold
 -- ===================================================================
 do
     local dragging, activeDrag, dragStart, startPos, dragMoved
@@ -1074,7 +1065,7 @@ do
     local function isOverControl(pos)
         if not UserInputService.TouchEnabled then return false end
         local hp = Header.AbsolutePosition; local hs = Header.AbsoluteSize
-        return pos.X >= hp.X + hs.X - 76
+        return pos.X >= hp.X + hs.X - 70
             and pos.Y >= hp.Y
             and pos.Y <= hp.Y + hs.Y
     end
