@@ -78,7 +78,6 @@ local KNOWN_CODE_BOX_PATH = {"Codes", "Codes", "CodeRedeem", "TextBox"}
 local setStatus, flashCode, appendToBox
 local rememberPendingSubmission, clearPendingSubmission, handleRedemptionFeedback
 local clearAceCapture
-local _lastStatusMsg = nil
 local Net         = ReplicatedStorage:WaitForChild("Packages"):WaitForChild("Net")
 local getupvalues = (debug and debug.getupvalues) or getupvalues
 local getconns    = getconnections or (debug and debug.getconnections)
@@ -788,16 +787,15 @@ end
 
 function setStatus(msg, col)
     if not _enabled then return end
-    if msg == _lastStatusMsg then return end
-    _lastStatusMsg = msg
     local t = os.date and os.date("%H:%M:%S") or "??"
     logToScroll("[" .. t .. "] " .. tostring(msg))
-    if _pillLbl then _pillLbl.Text = tostring(msg):sub(1, 24) end
+    if _pillLbl then _pillLbl.Text = tostring(msg):sub(1, 26) end
 end
 
 function flashCode(code, col)
     if not code or code == "" or code == "—" then return end
-    setStatus("[code] -> " .. tostring(code), col or COLORS.White)
+    local t = os.date and os.date("%H:%M:%S") or "??"
+    logToScroll("[" .. t .. "] [code] -> " .. tostring(code))
     if _codeBarLbl then
         _codeBarLbl.Text       = tostring(code)
         _codeBarLbl.TextColor3 = C_WHITE
