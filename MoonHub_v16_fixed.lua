@@ -1547,6 +1547,8 @@ local _akOldNamecall = nil
 local _akMt          = nil
 local _akPosConn     = nil
 local _akDeathConn   = nil
+local _akHealthConn  = nil  -- HealthChanged event (restore immédiat)
+local _akMaxHpConn   = nil  -- MaxHealth signal (reset seulement si changé)
 local _akLastSafe    = nil
 local _akRemoteConns = {}   -- connections from blockRemoteKicks
 local _akCharOldNI   = nil  -- saved __newindex for blockCharacterDestruction restore
@@ -1578,11 +1580,22 @@ local function startAntiKick()
 	local char0 = LP.Character
 	local hum0  = char0 and char0:FindFirstChildOfClass("Humanoid")
 	if hum0 then
+		-- StateChanged : Dead / Dying / Freefall
 		_akDeathConn = hum0.StateChanged:Connect(function(_, new)
-			if new == Enum.HumanoidStateType.Dead or new == Enum.HumanoidStateType.Dying then
+			if new == Enum.HumanoidStateType.Dead
+			or new == Enum.HumanoidStateType.Dying
+			or new == Enum.HumanoidStateType.FallingDown then
 				hum0:ChangeState(Enum.HumanoidStateType.GettingUp)
 				hum0.Health = hum0.MaxHealth
 			end
+		end)
+		-- HealthChanged : restore immédiat (event-driven, pas de polling)
+		_akHealthConn = hum0.HealthChanged:Connect(function(hp)
+			if hp <= 0 then hum0.Health = hum0.MaxHealth end
+		end)
+		-- MaxHealth signal : reset seulement quand la valeur change (évite les writes constants)
+		_akMaxHpConn = hum0:GetPropertyChangedSignal("MaxHealth"):Connect(function()
+			if hum0.MaxHealth ~= 100 then hum0.MaxHealth = 100 end
 		end)
 	end
 	-- 3. Position safety (anti-teleport >150 studs while not moving) + velocity clamp
@@ -1674,7 +1687,9 @@ local function stopAntiKick()
 	if not _akActive then return end
 	_akLoopActive = false
 	if _akPosConn   then pcall(function() _akPosConn:Disconnect() end);   _akPosConn   = nil end
-	if _akDeathConn then pcall(function() _akDeathConn:Disconnect() end); _akDeathConn = nil end
+	if _akDeathConn  then pcall(function() _akDeathConn:Disconnect()  end); _akDeathConn  = nil end
+	if _akHealthConn then pcall(function() _akHealthConn:Disconnect() end); _akHealthConn = nil end
+	if _akMaxHpConn  then pcall(function() _akMaxHpConn:Disconnect()  end); _akMaxHpConn  = nil end
 	-- disconnect remote event intercepts
 	for _, c in ipairs(_akRemoteConns) do pcall(function() c:Disconnect() end) end
 	_akRemoteConns = {}
