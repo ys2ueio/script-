@@ -9,7 +9,6 @@ local ReplicatedStorage = cloneref(game:GetService("ReplicatedStorage"))
 local RunService        = cloneref(game:GetService("RunService"))
 local TweenService      = game:GetService("TweenService")
 local UserInputService  = cloneref(game:GetService("UserInputService"))
-local HttpService       = cloneref(game:GetService("HttpService"))
 local player    = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 if getgenv and getgenv().StopAura then pcall(getgenv().StopAura) end
@@ -17,7 +16,6 @@ if getgenv and getgenv().StopAura then pcall(getgenv().StopAura) end
 -- ================================================================
 -- CONFIG
 -- ================================================================
-local CONFIG_FILE = "ace_code_sniper_auto_redeem_test_config.json"
 local savedConfig = {
     codeSniper    = true,
     autoSubmit    = true,
@@ -25,31 +23,6 @@ local savedConfig = {
     retypeInvalid = false,
     riddleSolver  = false,
 }
-pcall(function()
-    if type(isfile) == "function" and type(readfile) == "function"
-    and isfile(CONFIG_FILE) then
-        local decoded = HttpService:JSONDecode(readfile(CONFIG_FILE))
-        if type(decoded) == "table" then
-            if type(decoded.codeSniper)    == "boolean" then savedConfig.codeSniper    = decoded.codeSniper    end
-            if type(decoded.autoSubmit)    == "boolean" then savedConfig.autoSubmit    = decoded.autoSubmit    end
-            if type(decoded.submitAfter)   == "number"  then savedConfig.submitAfter   = math.max(1, math.floor(decoded.submitAfter)) end
-            if type(decoded.retypeInvalid) == "boolean" then savedConfig.retypeInvalid = decoded.retypeInvalid end
-            if type(decoded.riddleSolver)  == "boolean" then savedConfig.riddleSolver  = decoded.riddleSolver  end
-        end
-    end
-end)
-local function saveConfig()
-    if type(writefile) ~= "function" then return end
-    pcall(function()
-        writefile(CONFIG_FILE, HttpService:JSONEncode({
-            codeSniper    = savedConfig.codeSniper,
-            autoSubmit    = savedConfig.autoSubmit,
-            submitAfter   = savedConfig.submitAfter,
-            retypeInvalid = savedConfig.retypeInvalid,
-            riddleSolver  = savedConfig.riddleSolver,
-        }))
-    end)
-end
 
 -- ================================================================
 -- ACE STATE
@@ -489,13 +462,11 @@ addCorner(autoBtn, 8)
 addLivingTextGradient(autoBtn)
 autoBtn.MouseButton1Click:Connect(function()
     _enabled = not _enabled
-    savedConfig.codeSniper = _enabled
     autoBtn.Text       = _enabled and "AUTO ENTER CODE: ON" or "AUTO ENTER CODE: OFF"
     autoBtn.TextColor3 = _enabled and C_WHITE or C_DIM
     TweenService:Create(autoBtn, TweenInfo.new(0.15), {BackgroundColor3 = _enabled and C_ON or C_OFF}):Play()
     if not _enabled and clearAceCapture then clearAceCapture() end
     _lastStatusMsg = nil
-    saveConfig()
 end)
 
 -- CLEAR CAPTURE button
@@ -664,16 +635,12 @@ addLivingTextGradient(partsPlusBtn)
 partsMinBtn.MouseButton1Click:Connect(function()
     _submitAfter = math.max(1, _submitAfter - 1)
     partsValLbl.Text = tostring(_submitAfter)
-    savedConfig.submitAfter = _submitAfter
     if clearAceCapture then clearAceCapture() end
-    saveConfig()
 end)
 partsPlusBtn.MouseButton1Click:Connect(function()
     _submitAfter = _submitAfter + 1
     partsValLbl.Text = tostring(_submitAfter)
-    savedConfig.submitAfter = _submitAfter
     if clearAceCapture then clearAceCapture() end
-    saveConfig()
 end)
 
 -- ================================================================
