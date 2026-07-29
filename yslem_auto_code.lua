@@ -5,27 +5,58 @@ local Players           = cloneref(game:GetService("Players"))
 local ReplicatedStorage = cloneref(game:GetService("ReplicatedStorage"))
 local RunService        = cloneref(game:GetService("RunService"))
 local UserInputService  = cloneref(game:GetService("UserInputService"))
+local HttpService       = cloneref(game:GetService("HttpService"))
 local LP                = Players.LocalPlayer
 local PlayerGui         = LP:WaitForChild("PlayerGui")
 
 if getgenv and getgenv().YslemStop then pcall(getgenv().YslemStop) end
 
 -- ===================================================================
--- CONFIG
+-- CONFIG + PERSISTENCE
 -- ===================================================================
+local CFG_FILE = "yslem_autocode_cfg.json"
 local CFG = {
-    enabled       = true,
-    submitAfter   = 1,      -- accumulate N parts before submitting
-    retypeInvalid = false,  -- retype code if game says "invalid"
-    caseMode      = "EXACT",-- "EXACT" | "UPPER" | "lower"
-    wordCount     = 1,      -- words per announcement to collect
+    codeSniper    = true,
+    autoSubmit    = true,
+    submitAfter   = 1,
+    retypeInvalid = false,
+    riddleSolver  = false,
+    caseMode      = "EXACT",  -- "EXACT" | "UPPER" | "lower"
+    wordCount     = 1,
     keywords      = { "code is", "use code", "new code", "code:", "promo", "redeem" },
 }
 
--- ACE Duels-specific paths / GUID
-local ACE_NET_PATH      = { "Packages", "Net" }
-local ACE_REDEEM_GUID   = "7d14a912-1040-4867-b005-98838eb9acc4"
-local KNOWN_BOX_PATH    = { "Codes", "Codes", "CodeRedeem", "TextBox" }
+pcall(function()
+    if type(isfile) ~= "function" or type(readfile) ~= "function" then return end
+    if not isfile(CFG_FILE) then return end
+    local ok, dec = pcall(function() return HttpService:JSONDecode(readfile(CFG_FILE)) end)
+    if not (ok and type(dec) == "table") then return end
+    for _, k in ipairs({ "codeSniper","autoSubmit","retypeInvalid","riddleSolver" }) do
+        if type(dec[k]) == "boolean" then CFG[k] = dec[k] end
+    end
+    if type(dec.submitAfter) == "number" then
+        CFG.submitAfter = math.max(1, math.floor(dec.submitAfter))
+    end
+    if type(dec.caseMode) == "string" then CFG.caseMode = dec.caseMode end
+end)
+
+local function saveConfig()
+    if type(writefile) ~= "function" then return end
+    pcall(function()
+        writefile(CFG_FILE, HttpService:JSONEncode({
+            codeSniper    = CFG.codeSniper,
+            autoSubmit    = CFG.autoSubmit,
+            submitAfter   = CFG.submitAfter,
+            retypeInvalid = CFG.retypeInvalid,
+            riddleSolver  = CFG.riddleSolver,
+        }))
+    end)
+end
+
+-- ACE Duels-specific
+local ACE_NET_PATH    = { "Packages", "Net" }
+local ACE_REDEEM_GUID = "7d14a912-1040-4867-b005-98838eb9acc4"
+local KNOWN_BOX_PATH  = { "Codes", "Codes", "CodeRedeem", "TextBox" }
 
 -- ===================================================================
 -- STATE
@@ -47,18 +78,75 @@ local _RedeemRemote         = nil
 local _NotifyRemote         = nil
 local _listenConn           = nil
 local _collectBuffer        = {}
+local _lastStatusMsg        = nil
 
--- executor upvalue APIs
 local getupvalues = (debug and debug.getupvalues) or getupvalues
 local getconns    = getconnections or (debug and debug.getconnections)
 local setupv      = (debug and debug.setupvalue) or setupvalue
 
--- forward declarations (used before their definitions)
-local setStatus, appendToBox, clearCapture
+-- forward declarations
+local setStatus, flashCode, appendConsoleStatus
+local appendToBox, clearCapture
 local rememberPending, clearPending, handleFeedback
 
 -- ===================================================================
--- GUI root — created early so redeem logic can exclude it
+-- COLORS
+-- ===================================================================
+local C = {
+    Window  = Color3.fromRGB(6,   6,   7),
+    Row     = Color3.fromRGB(15,  15,  17),
+    Control = Color3.fromRGB(35,  35,  39),
+    Log     = Color3.fromRGB(10,  10,  12),
+    White   = Color3.fromRGB(245, 245, 245),
+    Text    = Color3.fromRGB(190, 190, 196),
+    Dim     = Color3.fromRGB(120, 120, 130),
+    Accent  = Color3.fromRGB(245, 245, 245),
+    Green   = Color3.fromRGB(70,  210, 100),
+    Red     = Color3.fromRGB(255, 70,  70),
+}
+local CC = {
+    Dim   = "rgb(124,127,135)",
+    Amber = "rgb(214,158,92)",
+    Green = "rgb(105,190,132)",
+    Red   = "rgb(218,105,105)",
+    Cyan  = "rgb(101,174,183)",
+}
+
+-- ===================================================================
+-- UI HELPERS
+-- ===================================================================
+local function addCorner(parent, r)
+    local c = Instance.new("UICorner", parent)
+    c.CornerRadius = UDim.new(0, r or 8)
+    return c
+end
+
+local function addStroke(parent, color, thickness, transparency)
+    local s = Instance.new("UIStroke", parent)
+    s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    s.Color        = color or C.White
+    s.Thickness    = thickness or 1
+    s.Transparency = transparency or 0
+    return s
+end
+
+local function makeLabel(parent, name, text, size, pos, textSize, color, font)
+    local lbl = Instance.new("TextLabel", parent)
+    lbl.Name               = name
+    lbl.Size               = size
+    lbl.Position           = pos
+    lbl.BackgroundTransparency = 1
+    lbl.Text               = text
+    lbl.TextSize           = textSize or 11
+    lbl.TextColor3         = color or C.Text
+    lbl.Font               = font or Enum.Font.GothamMedium
+    lbl.TextXAlignment     = Enum.TextXAlignment.Left
+    lbl.TextYAlignment     = Enum.TextYAlignment.Center
+    return lbl
+end
+
+-- ===================================================================
+-- GUI ROOT — early so redeem logic can exclude it
 -- ===================================================================
 pcall(function()
     for _, n in ipairs({ "YslemAutoCode" }) do
@@ -93,7 +181,7 @@ local function findCodeBox()
         node = node:FindFirstChild(name)
     end
     if node and node:IsA("TextBox") then return node end
-    -- 2. scan PlayerGui for code-hinted TextBox
+    -- 2. scan for code-hinted TextBox
     for _, d in ipairs(PlayerGui:GetDescendants()) do
         if d:IsA("TextBox") and not d:IsDescendantOf(gui) then
             local ph = (d.PlaceholderText or ""):lower()
@@ -106,7 +194,7 @@ local function findCodeBox()
     return nil
 end
 
--- Kill boolean debounce flags in a function's upvalues
+-- Kill boolean debounce upvalues in the game's FocusLost handler
 local function killDebounce(fn)
     if not (fn and setupv and getupvalues) then return end
     local ok, ups = pcall(getupvalues, fn)
@@ -117,7 +205,7 @@ local function killDebounce(fn)
     end
 end
 
--- Fire FocusLost connections directly (most reliable method)
+-- Fire FocusLost connections directly — most reliable method
 local function redeemViaBox(code)
     if not getconns then return false, "no getconnections" end
     local box = findCodeBox()
@@ -135,16 +223,14 @@ local function redeemViaBox(code)
     return fired, fired and "sent" or "fire failed"
 end
 
--- RemoteFunction fallback (ACE GUID → general RequestRedemption → getinstances)
 local function resolveRedeemRemote()
     if _RedeemRemote and _RedeemRemote.Parent then return _RedeemRemote end
     _RedeemRemote = nil
-    -- ACE Duels: Net package + GUID
+    -- ACE: Net package + GUID
     pcall(function()
         local net = ReplicatedStorage
         for _, part in ipairs(ACE_NET_PATH) do
-            net = net:WaitForChild(part, 2)
-            if not net then return end
+            net = net:WaitForChild(part, 2); if not net then return end
         end
         local ok, api = pcall(require, net)
         if ok and type(api) == "table" then
@@ -152,11 +238,10 @@ local function resolveRedeemRemote()
             if rok and typeof(rf) == "Instance" then _RedeemRemote = rf end
         end
     end)
-    -- General: RF/RequestRedemption folder
+    -- General: RF/RequestRedemption
     if not _RedeemRemote then
         pcall(function()
-            local rfFolder = ReplicatedStorage:FindFirstChild("RF")
-            if not rfFolder then return end
+            local rfFolder = ReplicatedStorage:FindFirstChild("RF"); if not rfFolder then return end
             for _, v in ipairs(rfFolder:GetChildren()) do
                 if v.Name == "RequestRedemption" and v:IsA("RemoteFunction") then
                     _RedeemRemote = v; return
@@ -164,7 +249,7 @@ local function resolveRedeemRemote()
             end
         end)
     end
-    -- Last resort: getinstances scan
+    -- Last resort: getinstances
     if not _RedeemRemote and getinstances then
         for _, v in ipairs(getinstances()) do
             if v.Name == "RequestRedemption" and v:IsA("RemoteFunction") then
@@ -258,14 +343,14 @@ end
 -- REDEMPTION FEEDBACK — retype invalid
 -- ===================================================================
 clearPending = function()
-    _pendingRejectedToken = _pendingRejectedToken + 1
+    _pendingRejectedToken += 1
     _pendingRejectedText = nil; _pendingRejectedBox = nil; _pendingRejectedUntil = 0
 end
 
 rememberPending = function(box, text, replace)
     if not CFG.retypeInvalid or not text or text == "" then return end
     if not replace and _pendingRejectedText and os.clock() <= _pendingRejectedUntil then return end
-    _pendingRejectedToken = _pendingRejectedToken + 1
+    _pendingRejectedToken += 1
     local token = _pendingRejectedToken
     _pendingRejectedText = text; _pendingRejectedBox = box
     _pendingRejectedUntil = os.clock() + 8
@@ -289,15 +374,18 @@ handleFeedback = function(text, obj)
     if os.clock() > _pendingRejectedUntil then clearPending(); return end
     if obj and obj:IsDescendantOf(gui) then return end
     local low = tostring(text or ""):lower()
-    local bad = low:find("invalid code",1,true) or low:find("code is invalid",1,true)
-        or low:find("expired",1,true) or low:find("already redeemed",1,true)
-        or low:find("already used",1,true) or low:find("doesn't exist",1,true)
-        or low:find("not found",1,true) or low:find("rejected",1,true)
+    local bad = low:find("invalid code",1,true)    or low:find("code is invalid",1,true)
+        or low:find("expired",1,true)              or low:find("already redeemed",1,true)
+        or low:find("already used",1,true)         or low:find("doesn't exist",1,true)
+        or low:find("not found",1,true)            or low:find("rejected",1,true)
     if not bad then return end
     local prev = _pendingRejectedText; local prevBox = _pendingRejectedBox
     local ok = restoreRejected(prevBox, prev)
     clearPending()
-    if ok then setStatus("Invalid — repasted: " .. prev) end
+    if ok then
+        setStatus("Invalid — repasted: " .. prev, C.Text)
+        flashCode(prev, C.Red)
+    end
 end
 
 -- ===================================================================
@@ -312,6 +400,7 @@ appendToBox = function(text)
     _capturedParts[#_capturedParts+1] = text
     local combined = table.concat(_capturedParts)
     local count    = #_capturedParts
+
     if box then
         _lastBox = box
         watchBoxReset(box)
@@ -324,20 +413,30 @@ appendToBox = function(text)
             end)
         end
     else
-        setStatus("Captured (box closed): " .. combined)
+        setStatus("Captured; code box is closed", C.Text)
     end
-    setStatus("Part " .. count .. "/" .. CFG.submitAfter .. " → " .. combined)
+
+    setStatus("Pasted " .. count .. "/" .. CFG.submitAfter, C.Green)
+    flashCode(combined, C.Green)
+
     if count >= CFG.submitAfter then
         _capturedParts = {}
-        rememberPending(box, combined, true)
-        local ok, res = doRedeem(combined)
-        local success = ok and (type(res) ~= "table" or res.success or res.Success)
-        if success then
-            setStatus("✓ " .. combined)
-        else
-            local restored = restoreRejected(box, combined)
-            clearPending()
-            setStatus(restored and ("Invalid — repasted: " .. combined) or "Invalid / cooldown")
+        if CFG.autoSubmit then
+            rememberPending(box, combined, true)
+            local ok, res = doRedeem(combined)
+            local success = ok and (type(res) ~= "table" or res.success or res.Success)
+            if success then
+                setStatus("Redeemed: " .. combined, C.Green)
+            else
+                local restored = restoreRejected(box, combined)
+                clearPending()
+                if restored then
+                    setStatus("Invalid — repasted: " .. combined, C.Text)
+                    flashCode(combined, C.Red)
+                else
+                    setStatus("Invalid / cooldown", C.Red)
+                end
+            end
         end
     end
 end
@@ -375,7 +474,7 @@ local function applyCase(code)
 end
 
 local function onAnnouncement(...)
-    if not CFG.enabled then return end
+    if not CFG.codeSniper then return end
     local text = stripRich(tostring((...) or ""))
     text = text:match("^%s*(.-)%s*$") or ""
     if text == "" or text:find("%s") then return end
@@ -443,7 +542,7 @@ end
 
 local _dedupText = ""; local _dedupTime = 0
 local function dispatchText(text)
-    if not CFG.enabled or _isNoise(text) then return end
+    if not CFG.codeSniper or _isNoise(text) then return end
     local now = tick()
     if text == _dedupText and now - _dedupTime < 0.4 then return end
     _dedupText = text; _dedupTime = now
@@ -487,20 +586,50 @@ UserInputService.TextBoxFocused:Connect(function(box)
     if box:IsDescendantOf(gui) then return end
     _focused = box; _lastBox = box
     watchBoxReset(box)
+    if CFG.codeSniper then setStatus("Ready", C.Green) end
 end)
 
 UserInputService.TextBoxFocusReleased:Connect(function(box)
     if box:IsDescendantOf(gui) then return end
+    local codeBox = findCodeBox()
+    if box ~= codeBox and box ~= _lastBox then return end
     if CFG.retypeInvalid then
         local submitted = box.Text ~= "" and box.Text or _lastNonBlankBoxText
         rememberPending(box, submitted, false)
     end
-    if _focused == box then _focused = nil end
+    if _focused == box then
+        _focused = nil
+        if CFG.codeSniper then
+            setStatus(
+                (_lastBox and _lastBox.Parent) and "Ready" or "Click code box first",
+                (_lastBox and _lastBox.Parent) and C.Green or C.Dim
+            )
+        end
+    end
 end)
 
 -- ===================================================================
 -- NOTIFICATION REMOTE — ACE NotificationController approach
 -- ===================================================================
+local function aceRemotesFromFunction(fn)
+    if not getupvalues then return {} end
+    local ok, ups = pcall(getupvalues, fn)
+    local out = {}
+    if not (ok and type(ups) == "table") then return out end
+    local net = ReplicatedStorage
+    for _, part in ipairs(ACE_NET_PATH) do
+        net = net:FindFirstChild(part); if not net then return out end
+    end
+    for _, v in pairs(ups) do
+        if typeof(v) == "Instance"
+        and (v:IsA("RemoteEvent") or v:IsA("RemoteFunction") or v:IsA("UnreliableRemoteEvent"))
+        and v.Parent == net then
+            out[#out+1] = v
+        end
+    end
+    return out
+end
+
 local function resolveNotifyRemote()
     if _NotifyRemote and _NotifyRemote.Parent then return _NotifyRemote end
     _NotifyRemote = nil
@@ -509,16 +638,8 @@ local function resolveNotifyRemote()
             return require(ReplicatedStorage.Controllers:FindFirstChild("NotificationController", true))
         end)
         if not (ok and type(ctrl) == "table" and type(ctrl.Start) == "function") then return end
-        if not getupvalues then return end
-        local ok2, ups = pcall(getupvalues, ctrl.Start)
-        if not (ok2 and type(ups) == "table") then return end
-        local net = ReplicatedStorage
-        for _, part in ipairs(ACE_NET_PATH) do net = net:FindFirstChild(part) if not net then return end end
-        for _, v in pairs(ups) do
-            if typeof(v) == "Instance" and v:IsA("RemoteEvent") and v.Parent == net then
-                _NotifyRemote = v; return
-            end
-        end
+        local remotes = aceRemotesFromFunction(ctrl.Start)
+        if remotes[1] then _NotifyRemote = remotes[1] end
     end)
     return _NotifyRemote
 end
@@ -531,7 +652,7 @@ local function connectNotifyRemote()
         if prev then pcall(function() prev:Disconnect() end) end
     end
     _listenConn = remote.OnClientEvent:Connect(function(...)
-        if not CFG.enabled or not isAceAnnouncement(...) then return end
+        if not CFG.codeSniper or not isAceAnnouncement(...) then return end
         pcall(onAnnouncement, ...)
     end)
     if getgenv then getgenv().YslemNotifyConn = _listenConn end
@@ -547,113 +668,452 @@ if getgenv then
 end
 
 -- ===================================================================
--- UI
+-- UI — Window (310×370, top-right, matches ACE layout)
 -- ===================================================================
-local C = {
-    BG     = Color3.fromRGB(6, 6, 7),
-    CTRL   = Color3.fromRGB(35, 35, 39),
-    BORDER = Color3.fromRGB(82, 82, 89),
-    WHITE  = Color3.fromRGB(245, 245, 245),
-    DIM    = Color3.fromRGB(120, 120, 130),
-    GREEN  = Color3.fromRGB(70, 210, 100),
-    RED    = Color3.fromRGB(255, 70, 70),
-}
-
-local function mkCorner(p, r)
-    local c = Instance.new("UICorner", p); c.CornerRadius = UDim.new(0, r or 8); return c
-end
-local function mkStroke(p, col, t)
-    local s = Instance.new("UIStroke", p)
-    s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-    s.Color = col or C.WHITE; s.Thickness = t or 1; return s
-end
-
--- Window
 local Window = Instance.new("Frame", gui)
-Window.Name            = "Window"
-Window.Size            = UDim2.fromOffset(240, 68)
-Window.Position        = UDim2.new(1, -248, 0, 8)
-Window.BackgroundColor3 = C.BG
-Window.BorderSizePixel = 0
-mkCorner(Window, 12)
-mkStroke(Window, C.WHITE).Transparency = 0.58
+Window.Name             = "Window"
+Window.Size             = UDim2.fromOffset(310, 370)
+Window.AnchorPoint      = Vector2.new(1, 0)
+Window.Position         = UDim2.new(1, -8, 0, 8)
+Window.BackgroundColor3 = C.Window
+Window.BorderSizePixel  = 0
+Window.ClipsDescendants = true
+addCorner(Window, 14)
+addStroke(Window, C.White, 1, 0.58)
 
--- Title
-local titleLbl = Instance.new("TextLabel", Window)
-titleLbl.Size             = UDim2.fromOffset(185, 22)
-titleLbl.Position         = UDim2.fromOffset(10, 6)
-titleLbl.BackgroundTransparency = 1
-titleLbl.Font             = Enum.Font.GothamBold
-titleLbl.TextSize         = 12
-titleLbl.TextColor3       = C.WHITE
-titleLbl.TextXAlignment   = Enum.TextXAlignment.Left
-titleLbl.Text             = "YSLEM AUTO CODE"
+-- Mobile UIScale
+local uiScale = Instance.new("UIScale", Window)
+uiScale.Scale = 0.92
 
--- Toggle button (styled like ACE switch)
-local toggleBtn = Instance.new("TextButton", Window)
-toggleBtn.Name            = "Toggle"
-toggleBtn.Size            = UDim2.fromOffset(46, 22)
-toggleBtn.Position        = UDim2.new(1, -54, 0, 6)
-toggleBtn.BackgroundColor3 = C.WHITE
-toggleBtn.Font            = Enum.Font.GothamBold
-toggleBtn.TextSize        = 9
-toggleBtn.TextColor3      = C.BG
-toggleBtn.Text            = "ON"
-toggleBtn.BorderSizePixel = 0
-toggleBtn.AutoButtonColor = false
-mkCorner(toggleBtn, 6)
-local toggleStroke = mkStroke(toggleBtn, C.WHITE)
-toggleStroke.Transparency = 0.62
-
--- Status label
-local statusLbl = Instance.new("TextLabel", Window)
-statusLbl.Size            = UDim2.new(1, -12, 0, 24)
-statusLbl.Position        = UDim2.fromOffset(10, 34)
-statusLbl.BackgroundTransparency = 1
-statusLbl.Font            = Enum.Font.Code
-statusLbl.TextSize        = 11
-statusLbl.TextColor3      = C.DIM
-statusLbl.TextXAlignment  = Enum.TextXAlignment.Left
-statusLbl.Text            = "scanning…"
-statusLbl.TextTruncate    = Enum.TextTruncate.AtEnd
-
--- Now define setStatus (uses statusLbl)
-setStatus = function(msg, col)
-    statusLbl.Text       = tostring(msg or "")
-    statusLbl.TextColor3 = col or C.DIM
-end
-
--- Toggle logic
-local function applyToggle(on)
-    CFG.enabled              = on
-    toggleBtn.Text           = on and "ON" or "OFF"
-    toggleBtn.BackgroundColor3 = on and C.WHITE or C.CTRL
-    toggleBtn.TextColor3     = on and C.BG or C.DIM
-    toggleStroke.Transparency = on and 0.62 or 0.88
-    if not on then clearCapture() end
-    setStatus(on and "scanning…" or "paused", on and C.DIM or C.RED)
-end
-
-toggleBtn.MouseButton1Click:Connect(function() applyToggle(not CFG.enabled) end)
-
--- Drag
-local _drag, _dragStart, _winStart
-Window.InputBegan:Connect(function(inp)
-    if inp.UserInputType == Enum.UserInputType.MouseButton1
-    or inp.UserInputType == Enum.UserInputType.Touch then
-        _drag = true; _dragStart = inp.Position; _winStart = Window.Position
-        inp.Changed:Connect(function()
-            if inp.UserInputState == Enum.UserInputState.End then _drag = false end
-        end)
+local viewportConn
+local function updateScale()
+    local cam = workspace.CurrentCamera
+    if not cam then uiScale.Scale = 0.92; return end
+    local vp  = cam.ViewportSize
+    local fit = math.min((vp.X - 16) / 310, (vp.Y - 16) / 370)
+    if UserInputService.TouchEnabled then
+        uiScale.Scale = math.max(0.45, math.min(0.72, fit))
+    else
+        uiScale.Scale = 0.92
     end
+end
+
+local function watchViewport()
+    if viewportConn then viewportConn:Disconnect(); viewportConn = nil end
+    local cam = workspace.CurrentCamera
+    if cam then
+        viewportConn = cam:GetPropertyChangedSignal("ViewportSize"):Connect(updateScale)
+    end
+    updateScale()
+end
+workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(watchViewport)
+watchViewport()
+
+-- Background image
+local BgImg = Instance.new("ImageLabel", Window)
+BgImg.Size              = UDim2.new(1,0,1,0)
+BgImg.BackgroundTransparency = 1
+BgImg.Image             = "rbxassetid://137692455767789"
+BgImg.ImageTransparency = 0
+BgImg.ScaleType         = Enum.ScaleType.Stretch
+BgImg.ZIndex            = 1
+addCorner(BgImg, 14)
+
+-- ===================================================================
+-- HEADER
+-- ===================================================================
+local Header = Instance.new("Frame", Window)
+Header.Name             = "Header"
+Header.Size             = UDim2.new(1, 0, 0, 64)
+Header.BackgroundTransparency = 1
+Header.Active           = true
+Header.ZIndex           = 3
+
+local BrandMark = Instance.new("Frame", Header)
+BrandMark.Size              = UDim2.fromOffset(30, 30)
+BrandMark.Position          = UDim2.fromOffset(17, 15)
+BrandMark.BackgroundTransparency = 1
+BrandMark.ClipsDescendants  = true
+addCorner(BrandMark, 15)
+local BrandImg = Instance.new("ImageLabel", BrandMark)
+BrandImg.Size               = UDim2.fromScale(1, 1)
+BrandImg.BackgroundTransparency = 1
+BrandImg.Image              = "rbxassetid://71891923282375"
+BrandImg.ScaleType          = Enum.ScaleType.Fit
+addCorner(BrandImg, 15)
+
+makeLabel(Header, "Title", "YSLEM AUTO CODE",
+    UDim2.fromOffset(180, 25), UDim2.fromOffset(56, 17), 15, C.White, Enum.Font.GothamBold)
+
+-- Master ON/OFF toggle switch
+local ToggleBtn = Instance.new("TextButton", Header)
+ToggleBtn.Name             = "Toggle"
+ToggleBtn.Size             = UDim2.fromOffset(47, 24)
+ToggleBtn.Position         = UDim2.new(1, -64, 0, 18)
+ToggleBtn.BackgroundColor3 = C.Accent
+ToggleBtn.BorderSizePixel  = 0
+ToggleBtn.AutoButtonColor  = false
+ToggleBtn.Text             = ""
+addCorner(ToggleBtn, 12)
+local ToggleStroke = addStroke(ToggleBtn, C.White, 1, 0.62)
+local ToggleKnob = Instance.new("Frame", ToggleBtn)
+ToggleKnob.Name             = "Knob"
+ToggleKnob.Size             = UDim2.fromOffset(20, 20)
+ToggleKnob.BackgroundColor3 = C.Window
+ToggleKnob.BorderSizePixel  = 0
+ToggleKnob.Position         = UDim2.new(1, -22, 0.5, -10)
+addCorner(ToggleKnob, 10)
+
+-- Larger touch target on mobile
+if UserInputService.TouchEnabled then
+    local tt = Instance.new("TextButton", Header)
+    tt.Size               = UDim2.fromOffset(62, 62)
+    tt.Position           = UDim2.new(1, -70, 0, 1)
+    tt.BackgroundTransparency = 1
+    tt.Text               = ""
+    tt.AutoButtonColor    = false
+    tt.ZIndex             = 10
+    tt.Activated:Connect(function() ToggleBtn.MouseButton1Click:Fire() end)
+end
+
+-- Header divider
+local Divider = Instance.new("Frame", Header)
+Divider.Size              = UDim2.new(1, -34, 0, 1)
+Divider.Position          = UDim2.fromOffset(17, 54)
+Divider.BackgroundColor3  = C.White
+Divider.BackgroundTransparency = 0.72
+Divider.BorderSizePixel   = 0
+
+-- ===================================================================
+-- SETTINGS CARDS
+-- ===================================================================
+local featureStates = {}
+
+local Settings = Instance.new("Frame", Window)
+Settings.Name             = "Settings"
+Settings.Size             = UDim2.new(1, 0, 0, 154)
+Settings.Position         = UDim2.fromOffset(0, 65)
+Settings.BackgroundTransparency = 1
+Settings.ZIndex           = 3
+
+local Console, ConsoleOutput, updateConsoleCanvas
+
+local function scrollConsole()
+    task.defer(function()
+        task.wait()
+        if not Console then return end
+        if updateConsoleCanvas then updateConsoleCanvas() end
+        local bottom = math.max(0, Console.AbsoluteCanvasSize.Y - Console.AbsoluteWindowSize.Y)
+        Console.CanvasPosition = Vector2.new(0, bottom)
+    end)
+end
+
+appendConsoleStatus = function(name, on)
+    if not ConsoleOutput then return end
+    local col  = on and CC.Green or CC.Red
+    local line = '<font color="' .. CC.Dim .. '">[setting]</font> '
+        .. '<font color="' .. CC.Amber .. '">' .. name .. "</font> "
+        .. '<font color="' .. CC.Dim .. '">-&gt;</font> '
+        .. '<font color="' .. col .. '">' .. (on and "ON" or "OFF") .. "</font>"
+    ConsoleOutput.Text = ConsoleOutput.Text == "" and line
+        or (ConsoleOutput.Text .. "\n\n" .. line)
+    scrollConsole()
+end
+
+local function makeCard(name, pos, size)
+    local card = Instance.new("Frame", Settings)
+    card.Name             = name
+    card.Position         = pos
+    card.Size             = size
+    card.BackgroundColor3 = C.Row
+    card.BackgroundTransparency = 0.68
+    card.BorderSizePixel  = 0
+    addCorner(card, 9)
+    addStroke(card, C.White, 1, 0.76)
+    return card
+end
+
+local function makeToggleCard(parent, on, consoleName, onToggle)
+    parent.Active = true
+    featureStates[consoleName] = on
+    local btn = Instance.new("TextButton", parent)
+    btn.Name             = "State"
+    btn.Size             = UDim2.fromOffset(42, 20)
+    btn.Position         = UDim2.new(1, -50, 0.5, -10)
+    btn.BackgroundColor3 = on and C.Accent or C.Control
+    btn.BorderSizePixel  = 0
+    btn.AutoButtonColor  = false
+    btn.Text             = on and "ON" or "OFF"
+    btn.TextSize         = 8
+    btn.TextColor3       = on and C.Window or C.Dim
+    btn.Font             = Enum.Font.GothamBold
+    addCorner(btn, 6)
+    local outline = addStroke(btn, C.White, 1, on and 0.62 or 0.88)
+    local state = on
+    local function toggle()
+        state = not state
+        featureStates[consoleName] = state
+        btn.Text             = state and "ON" or "OFF"
+        btn.BackgroundColor3 = state and C.Accent or C.Control
+        btn.TextColor3       = state and C.Window or C.Dim
+        outline.Transparency = state and 0.62 or 0.88
+        if CFG.codeSniper then appendConsoleStatus(consoleName, state) end
+        if onToggle then onToggle(state) end
+    end
+    btn.MouseButton1Click:Connect(toggle)
+    -- clicking anywhere on card also toggles (excluding button area)
+    parent.InputBegan:Connect(function(inp)
+        if inp.UserInputType ~= Enum.UserInputType.MouseButton1
+        and inp.UserInputType ~= Enum.UserInputType.Touch then return end
+        local ptr = inp.Position
+        local bp  = btn.AbsolutePosition; local bs = btn.AbsoluteSize
+        if not (ptr.X >= bp.X and ptr.X <= bp.X+bs.X and ptr.Y >= bp.Y and ptr.Y <= bp.Y+bs.Y) then
+            toggle()
+        end
+    end)
+    return btn
+end
+
+-- Auto submit
+local AutoCard = makeCard("AutoSubmit", UDim2.fromOffset(17, 0), UDim2.fromOffset(135, 50))
+makeLabel(AutoCard, "Title", "Auto submit",
+    UDim2.new(1,-58,1,0), UDim2.fromOffset(12,0), 11, C.White, Enum.Font.GothamMedium)
+makeToggleCard(AutoCard, CFG.autoSubmit, "Auto submit", function(state)
+    CFG.autoSubmit = state; saveConfig()
 end)
-UserInputService.InputChanged:Connect(function(inp)
-    if not _drag then return end
-    if inp.UserInputType ~= Enum.UserInputType.MouseMovement
-    and inp.UserInputType ~= Enum.UserInputType.Touch then return end
-    local d = inp.Position - _dragStart
-    Window.Position = UDim2.new(
-        _winStart.X.Scale, _winStart.X.Offset + d.X,
-        _winStart.Y.Scale, _winStart.Y.Offset + d.Y
-    )
+
+-- Riddle solver
+local AICard = makeCard("AIRiddles", UDim2.fromOffset(158, 0), UDim2.fromOffset(135, 50))
+makeLabel(AICard, "Title", "Riddle solver",
+    UDim2.new(1,-58,1,0), UDim2.fromOffset(12,0), 11, C.White, Enum.Font.GothamMedium)
+makeToggleCard(AICard, CFG.riddleSolver, "Riddle solver", function(state)
+    CFG.riddleSolver = state; saveConfig()
 end)
+
+-- Submit after msgs (counter)
+local DelayCard = makeCard("SubmitAfter", UDim2.fromOffset(17, 57), UDim2.fromOffset(276, 43))
+makeLabel(DelayCard, "Title", "Submit after msgs",
+    UDim2.fromOffset(145,43), UDim2.fromOffset(12,0), 11, C.White, Enum.Font.GothamMedium)
+
+local CounterShell = Instance.new("Frame", DelayCard)
+CounterShell.Size              = UDim2.fromOffset(96, 31)
+CounterShell.Position          = UDim2.new(1, -105, 0.5, -15)
+CounterShell.BackgroundColor3  = C.Window
+CounterShell.BackgroundTransparency = 0.05
+CounterShell.BorderSizePixel   = 0
+addCorner(CounterShell, 7)
+addStroke(CounterShell, C.White, 1, 0.86)
+
+local function makeCountBtn(text, pos)
+    local btn = Instance.new("TextButton", CounterShell)
+    btn.Size             = UDim2.fromOffset(25, 25)
+    btn.Position         = pos
+    btn.BackgroundColor3 = C.Control
+    btn.BorderSizePixel  = 0
+    btn.AutoButtonColor  = false
+    btn.Text             = text
+    btn.TextSize         = 16
+    btn.TextColor3       = C.Text
+    btn.Font             = Enum.Font.GothamBold
+    addCorner(btn, 5)
+    return btn
+end
+
+local MinusBtn  = makeCountBtn("-", UDim2.fromOffset(3, 3))
+local CountLbl  = Instance.new("TextLabel", CounterShell)
+CountLbl.Size               = UDim2.fromOffset(28, 25)
+CountLbl.Position           = UDim2.fromOffset(34, 3)
+CountLbl.BackgroundTransparency = 1
+CountLbl.Text               = tostring(CFG.submitAfter)
+CountLbl.TextSize           = 17
+CountLbl.TextColor3         = C.White
+CountLbl.Font               = Enum.Font.GothamBold
+CountLbl.TextXAlignment     = Enum.TextXAlignment.Center
+local PlusBtn = makeCountBtn("+", UDim2.fromOffset(68, 3))
+
+MinusBtn.MouseButton1Click:Connect(function()
+    CFG.submitAfter = math.max(1, CFG.submitAfter - 1)
+    CountLbl.Text = tostring(CFG.submitAfter)
+    clearCapture(); saveConfig()
+end)
+PlusBtn.MouseButton1Click:Connect(function()
+    CFG.submitAfter += 1
+    CountLbl.Text = tostring(CFG.submitAfter)
+    clearCapture(); saveConfig()
+end)
+
+-- Retype invalid
+local RetypeCard = makeCard("RetypeInvalid", UDim2.fromOffset(17, 103), UDim2.fromOffset(276, 38))
+makeLabel(RetypeCard, "Title", "Retype invalid",
+    UDim2.new(1,-65,1,0), UDim2.fromOffset(12,0), 11, C.White, Enum.Font.GothamMedium)
+local retypeBtn = makeToggleCard(RetypeCard, CFG.retypeInvalid, "Retype invalid", function(state)
+    CFG.retypeInvalid = state; saveConfig()
+end)
+retypeBtn.Position = UDim2.new(1, -50, 0.5, -10)
+
+-- ===================================================================
+-- CONSOLE — scrolling RichText log
+-- ===================================================================
+Console = Instance.new("ScrollingFrame", Window)
+Console.Name                  = "Console"
+Console.Size                  = UDim2.new(1, -34, 0, 127)
+Console.Position              = UDim2.fromOffset(17, 216)
+Console.BackgroundColor3      = C.Log
+Console.BorderSizePixel       = 0
+Console.ClipsDescendants      = true
+Console.Active                = true
+Console.ScrollingEnabled      = true
+Console.ScrollingDirection    = Enum.ScrollingDirection.Y
+Console.ElasticBehavior       = Enum.ElasticBehavior.WhenScrollable
+Console.VerticalScrollBarInset = Enum.ScrollBarInset.ScrollBar
+Console.CanvasSize            = UDim2.new(0,0,0,0)
+Console.AutomaticCanvasSize   = Enum.AutomaticSize.None
+Console.ScrollBarThickness    = 4
+Console.ScrollBarImageColor3  = C.Dim
+Console.ZIndex                = 3
+addCorner(Console, 9)
+addStroke(Console, C.White, 1, 0.88)
+
+ConsoleOutput = Instance.new("TextLabel", Console)
+ConsoleOutput.Name              = "Output"
+ConsoleOutput.Size              = UDim2.new(1, -18, 0, 115)
+ConsoleOutput.AutomaticSize     = Enum.AutomaticSize.Y
+ConsoleOutput.Position          = UDim2.fromOffset(9, 6)
+ConsoleOutput.BackgroundTransparency = 1
+ConsoleOutput.RichText          = true
+ConsoleOutput.TextSize          = 14
+ConsoleOutput.Font              = Enum.Font.Code
+ConsoleOutput.TextColor3        = C.Dim
+ConsoleOutput.TextXAlignment    = Enum.TextXAlignment.Left
+ConsoleOutput.TextYAlignment    = Enum.TextYAlignment.Top
+ConsoleOutput.TextWrapped       = true
+ConsoleOutput.ZIndex            = 4
+ConsoleOutput.Text = CFG.codeSniper
+    and ('<font color="' .. CC.Amber .. '">&gt;</font> '
+        .. '<font color="' .. CC.Dim .. '">scanning for codes...</font>')
+    or  ('<font color="' .. CC.Dim .. '">status:</font> '
+        .. '<font color="' .. CC.Red .. '">OFF</font>\n'
+        .. '<font color="' .. CC.Dim .. '">code sniper paused</font>')
+
+updateConsoleCanvas = function()
+    if not Console or not ConsoleOutput then return end
+    local h = ConsoleOutput.Position.Y.Offset + ConsoleOutput.AbsoluteSize.Y + 30
+    Console.CanvasSize = UDim2.new(0, 0, 0, h)
+end
+ConsoleOutput:GetPropertyChangedSignal("AbsoluteSize"):Connect(updateConsoleCanvas)
+task.defer(updateConsoleCanvas)
+
+-- color mapper for rich text
+local function toCC(col)
+    if col == C.Green  then return CC.Green end
+    if col == C.Red    then return CC.Red   end
+    if col == C.Text   then return CC.Amber end
+    if col == C.White  then return CC.Cyan  end
+    if col == C.Dim    then return CC.Dim   end
+    return ("rgb(%d,%d,%d)"):format(
+        math.floor(col.R*255+0.5), math.floor(col.G*255+0.5), math.floor(col.B*255+0.5))
+end
+
+-- implement setStatus + flashCode now that ConsoleOutput exists
+setStatus = function(msg, col)
+    if not ConsoleOutput or not CFG.codeSniper then return end
+    if msg == _lastStatusMsg then return end
+    _lastStatusMsg = msg
+    col = col or C.Dim
+    local line = '<font color="' .. toCC(col) .. '">' .. tostring(msg) .. "</font>"
+    ConsoleOutput.Text = ConsoleOutput.Text == "" and line
+        or (ConsoleOutput.Text .. "\n\n" .. line)
+    scrollConsole()
+end
+
+flashCode = function(code, col)
+    if not code or code == "" then return end
+    setStatus("[code] -> " .. tostring(code), col or C.White)
+end
+
+-- ===================================================================
+-- MASTER TOGGLE
+-- ===================================================================
+local function applyMasterToggle(on)
+    CFG.codeSniper = on
+    if not on then clearCapture() end
+    _lastStatusMsg = nil
+    ToggleBtn.BackgroundColor3  = on and C.Accent or C.Control
+    ToggleStroke.Transparency   = on and 0.62 or 0.88
+    ToggleKnob.BackgroundColor3 = on and C.Window or C.White
+    ToggleKnob.Position         = on
+        and UDim2.new(1, -22, 0.5, -10)
+        or  UDim2.new(0,  2,  0.5, -10)
+    saveConfig()
+    if ConsoleOutput then
+        if on then
+            ConsoleOutput.Text = '<font color="' .. CC.Amber .. '">&gt;</font> '
+                .. '<font color="' .. CC.Dim .. '">scanning for codes...</font>'
+            for name, state in pairs(featureStates) do
+                if state then appendConsoleStatus(name, true) end
+            end
+        else
+            ConsoleOutput.Text = '<font color="' .. CC.Dim .. '">status:</font> '
+                .. '<font color="' .. CC.Red .. '">OFF</font>\n'
+                .. '<font color="' .. CC.Dim .. '">code sniper paused</font>'
+        end
+        scrollConsole()
+    end
+end
+
+applyMasterToggle(CFG.codeSniper)
+ToggleBtn.MouseButton1Click:Connect(function() applyMasterToggle(not CFG.codeSniper) end)
+
+-- ===================================================================
+-- DRAG — with threshold (ACE style)
+-- ===================================================================
+do
+    local dragging, activeDrag, dragStart, startPos, dragMoved
+    local THRESHOLD = UserInputService.TouchEnabled and 10 or 3
+
+    local function isOverControl(pos)
+        if not UserInputService.TouchEnabled then return false end
+        local hp = Header.AbsolutePosition; local hs = Header.AbsoluteSize
+        return pos.X >= hp.X + hs.X - 76
+            and pos.Y >= hp.Y
+            and pos.Y <= hp.Y + hs.Y
+    end
+
+    local function stopDrag(inp)
+        if inp ~= activeDrag then return end
+        dragging = false; activeDrag = nil; dragStart = nil; startPos = nil
+    end
+
+    Header.InputBegan:Connect(function(inp)
+        if inp.UserInputType ~= Enum.UserInputType.MouseButton1
+        and inp.UserInputType ~= Enum.UserInputType.Touch then return end
+        if dragging or isOverControl(inp.Position) then return end
+        dragging = true; activeDrag = inp
+        dragStart = Vector2.new(inp.Position.X, inp.Position.Y)
+        startPos = Window.Position; dragMoved = false
+        inp.Changed:Connect(function()
+            if inp.UserInputState == Enum.UserInputState.End
+            or inp.UserInputState == Enum.UserInputState.Cancel then
+                stopDrag(inp)
+            end
+        end)
+    end)
+
+    UserInputService.InputChanged:Connect(function(inp)
+        if not dragging or not activeDrag then return end
+        local isTouch = activeDrag.UserInputType == Enum.UserInputType.Touch and inp == activeDrag
+        local isMouse = activeDrag.UserInputType == Enum.UserInputType.MouseButton1
+            and inp.UserInputType == Enum.UserInputType.MouseMovement
+        if not isTouch and not isMouse then return end
+        local cur = Vector2.new(inp.Position.X, inp.Position.Y)
+        local delta = cur - dragStart
+        if not dragMoved then
+            if delta.Magnitude < THRESHOLD then return end
+            dragMoved = true
+        end
+        Window.Position = UDim2.new(
+            startPos.X.Scale, startPos.X.Offset + delta.X,
+            startPos.Y.Scale, startPos.Y.Offset + delta.Y
+        )
+    end)
+end
