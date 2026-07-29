@@ -494,9 +494,9 @@ end
 -- GENERAL TEXTLABEL SCANNER — for non-ACE games
 -- ===================================================================
 local _COMMON = {
-    the=1,and=1,for=1,are=1,but=1,not=1,you=1,all=1,can=1,
-    was=1,one=1,our=1,out=1,get=1,has=1,him=1,his=1,how=1,
-    new=1,now=1,old=1,see=1,two=1,way=1,who=1,did=1,its=1,
+    the=1, ["and"]=1, ["for"]=1, are=1, but=1, ["not"]=1, you=1, all=1, can=1,
+    was=1, one=1, our=1, out=1, get=1, has=1, him=1, his=1, how=1,
+    new=1, now=1, old=1, see=1, two=1, way=1, who=1, did=1, its=1,
 }
 local _BLOCKED = {
     "join","left","welcome","server","update","version","patch",
