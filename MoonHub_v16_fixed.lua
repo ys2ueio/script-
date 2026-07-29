@@ -1553,7 +1553,67 @@ local _akLastSafe    = nil
 local _akRemoteConns = {}   -- connections from blockRemoteKicks
 local _akCharOldNI   = nil  -- saved __newindex for blockCharacterDestruction restore
 local _akCharMtRef   = nil  -- character metatable ref
-local _akLoopActive  = false -- controls workspace/maxHealth while loops
+local _akLoopActive    = false -- controls workspace/maxHealth while loops
+local _akCharAddedConn = nil   -- re-hook humanoid + char protections après respawn
+local _akRespawnCount  = 0     -- rapid-respawn counter (monitorKickAttempts)
+local _akLastRespawn   = 0
+
+-- Re-bind humanoid events to whichever humanoid is currently alive.
+-- Called both at startAntiKick time and on every CharacterAdded.
+local function _akHookHumanoid(char)
+	if _akDeathConn  then pcall(function() _akDeathConn:Disconnect()  end); _akDeathConn  = nil end
+	if _akHealthConn then pcall(function() _akHealthConn:Disconnect() end); _akHealthConn = nil end
+	if _akMaxHpConn  then pcall(function() _akMaxHpConn:Disconnect()  end); _akMaxHpConn  = nil end
+	if not char then return end
+	local hum = char:FindFirstChildOfClass("Humanoid")
+	if not hum then return end
+	_akDeathConn = hum.StateChanged:Connect(function(_, new)
+		if new == Enum.HumanoidStateType.Dead
+		or new == Enum.HumanoidStateType.Dying
+		or new == Enum.HumanoidStateType.FallingDown then
+			hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+			hum.Health = hum.MaxHealth
+		end
+	end)
+	_akHealthConn = hum.HealthChanged:Connect(function(hp)
+		if hp <= 0 then hum.Health = hum.MaxHealth end
+	end)
+	_akMaxHpConn = hum:GetPropertyChangedSignal("MaxHealth"):Connect(function()
+		if hum.MaxHealth ~= 100 then hum.MaxHealth = 100 end
+	end)
+end
+
+-- Full per-character setup: humanoid events + character __newindex + position reset.
+local function _akHookChar(char)
+	_akHookHumanoid(char)
+	-- Restore old __newindex on previous char metatable if any
+	if _akCharMtRef and _akCharOldNI ~= nil then
+		pcall(function()
+			setreadonly(_akCharMtRef, false)
+			_akCharMtRef.__newindex = _akCharOldNI
+			setreadonly(_akCharMtRef, true)
+		end)
+		_akCharOldNI = nil; _akCharMtRef = nil
+	end
+	-- Hook new char metatable to block :Destroy() / Parent = nil
+	pcall(function()
+		if not char then return end
+		local cm = getrawmetatable(char); if not cm then return end
+		setreadonly(cm, false)
+		_akCharOldNI = cm.__newindex
+		local _oldNI = _akCharOldNI
+		cm.__newindex = function(self, key, value)
+			if key == "Parent" and value == nil then return nil end
+			if _oldNI then return _oldNI(self, key, value) end
+			rawset(self, key, value)
+		end
+		setreadonly(cm, true)
+		_akCharMtRef = cm
+	end)
+	-- Reset position safety to new spawn point
+	local hrp = char and char:FindFirstChild("HumanoidRootPart")
+	if hrp then _akLastSafe = hrp.CFrame end
+end
 
 local function startAntiKick()
 	if _akActive then return end
@@ -1576,30 +1636,23 @@ local function startAntiKick()
 		setreadonly(mt, true)
 		_akMt = mt
 	end)
-	-- 2. Block Dead / Dying state transitions
+	-- 2. Per-character protections (humanoid events + char __newindex) + respawn re-hook
 	local char0 = LP.Character
-	local hum0  = char0 and char0:FindFirstChildOfClass("Humanoid")
-	if hum0 then
-		-- StateChanged : Dead / Dying / Freefall
-		_akDeathConn = hum0.StateChanged:Connect(function(_, new)
-			if new == Enum.HumanoidStateType.Dead
-			or new == Enum.HumanoidStateType.Dying
-			or new == Enum.HumanoidStateType.FallingDown then
-				hum0:ChangeState(Enum.HumanoidStateType.GettingUp)
-				hum0.Health = hum0.MaxHealth
-			end
+	_akHookChar(char0)
+	-- CharacterAdded: re-apply every time the player respawns (monitorKickAttempts + full re-hook)
+	_akCharAddedConn = LP.CharacterAdded:Connect(function(newChar)
+		if not _akActive then return end
+		-- Rapid-respawn detection: 3+ respawns in <9s → possible kick loop
+		local now = tick()
+		if now - _akLastRespawn < 3 then _akRespawnCount = _akRespawnCount + 1
+		else _akRespawnCount = 0 end
+		_akLastRespawn = now
+		task.defer(function()
+			if not _akActive then return end
+			_akHookChar(newChar)
 		end)
-		-- HealthChanged : restore immédiat (event-driven, pas de polling)
-		_akHealthConn = hum0.HealthChanged:Connect(function(hp)
-			if hp <= 0 then hum0.Health = hum0.MaxHealth end
-		end)
-		-- MaxHealth signal : reset seulement quand la valeur change (évite les writes constants)
-		_akMaxHpConn = hum0:GetPropertyChangedSignal("MaxHealth"):Connect(function()
-			if hum0.MaxHealth ~= 100 then hum0.MaxHealth = 100 end
-		end)
-	end
+	end)
 	-- 3. Position safety (anti-teleport >150 studs while not moving) + velocity clamp
-	_akLastSafe = char0 and char0:FindFirstChild("HumanoidRootPart") and char0.HumanoidRootPart.CFrame
 	if _akPosConn then pcall(function() _akPosConn:Disconnect() end) end
 	_akPosConn = RunService.Heartbeat:Connect(function()
 		local c2   = LP.Character;                          if not c2 then return end
@@ -1646,22 +1699,7 @@ local function startAntiKick()
 		local c = RS.DescendantAdded:Connect(function(d) pcall(hookRemote, d) end)
 		_akRemoteConns[#_akRemoteConns+1] = c
 	end)
-	-- 5. Block character:Destroy() / Parent = nil via __newindex on character metatable
-	pcall(function()
-		local char5 = LP.Character; if not char5 then return end
-		local cm = getrawmetatable(char5); if not cm then return end
-		setreadonly(cm, false)
-		_akCharOldNI = cm.__newindex
-		local _oldNI = _akCharOldNI
-		cm.__newindex = function(self, key, value)
-			if key == "Parent" and value == nil then return nil end
-			if _oldNI then return _oldNI(self, key, value) end
-			rawset(self, key, value)
-		end
-		setreadonly(cm, true)
-		_akCharMtRef = cm
-	end)
-	-- 6. Workspace monitor + MaxHealth lock — run as cooperative loops
+	-- 5. Workspace monitor + MaxHealth lock — run as cooperative loops
 	_akLoopActive = true
 	task.spawn(function()
 		while _akLoopActive do
@@ -1686,7 +1724,8 @@ end
 local function stopAntiKick()
 	if not _akActive then return end
 	_akLoopActive = false
-	if _akPosConn   then pcall(function() _akPosConn:Disconnect() end);   _akPosConn   = nil end
+	if _akCharAddedConn then pcall(function() _akCharAddedConn:Disconnect() end); _akCharAddedConn = nil end
+	if _akPosConn    then pcall(function() _akPosConn:Disconnect()    end); _akPosConn    = nil end
 	if _akDeathConn  then pcall(function() _akDeathConn:Disconnect()  end); _akDeathConn  = nil end
 	if _akHealthConn then pcall(function() _akHealthConn:Disconnect() end); _akHealthConn = nil end
 	if _akMaxHpConn  then pcall(function() _akMaxHpConn:Disconnect()  end); _akMaxHpConn  = nil end
