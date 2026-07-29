@@ -1,16 +1,13 @@
 -- yslem_auto_code.lua  (strictly private & personal use)
 
-local cloneref = cloneref or function(o) return o end
-local Players           = cloneref(game:GetService("Players"))
-local ReplicatedStorage = cloneref(game:GetService("ReplicatedStorage"))
-local RunService        = cloneref(game:GetService("RunService"))
-local TweenService      = cloneref(game:GetService("TweenService"))
-local UserInputService  = cloneref(game:GetService("UserInputService"))
-local HttpService       = cloneref(game:GetService("HttpService"))
+local Players           = game:GetService("Players")
+local RunService        = game:GetService("RunService")
+local TweenService      = game:GetService("TweenService")
+local HttpService       = game:GetService("HttpService")
+local UserInputService  = game:GetService("UserInputService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local LP                = Players.LocalPlayer
 local PlayerGui         = LP:WaitForChild("PlayerGui")
-
-if getgenv and getgenv().YslemStop then pcall(getgenv().YslemStop) end
 
 -- ===================================================================
 -- CONFIG
@@ -22,7 +19,7 @@ local cfg = {
     captureCount = 0,
     keywords     = { "code is","use code","new code","code:","codes:","promo","redeem","","","" },
     replaceRules = {
-        {kw="admin war",rep="jandel"},
+        {kw="admin war", rep="jandel"},
         {kw="",rep=""},{kw="",rep=""},{kw="",rep=""},
         {kw="",rep=""},{kw="",rep=""},{kw="",rep=""},
         {kw="",rep=""},{kw="",rep=""},{kw="",rep=""},
@@ -100,33 +97,9 @@ local function addLivingStroke(parent, thickness)
 end
 
 RunService.RenderStepped:Connect(function()
-    for _, g in ipairs(_livingGradients) do
-        if g and g.Parent then g.Rotation = (g.Rotation + 0.6) % 360 end
-    end
-    for _, g in ipairs(_livingStrokes) do
-        if g and g.Parent then g.Rotation = (g.Rotation + 0.6) % 360 end
-    end
+    for _, g in ipairs(_livingGradients) do if g and g.Parent then g.Rotation = (g.Rotation + 0.6) % 360 end end
+    for _, g in ipairs(_livingStrokes)   do if g and g.Parent then g.Rotation = (g.Rotation + 0.6) % 360 end end
 end)
-
--- ===================================================================
--- ACE-SPECIFIC CONSTANTS + EXECUTOR ALIASES
--- ===================================================================
-local ACE_NET_PATH    = { "Packages", "Net" }
-local ACE_REDEEM_GUID = "7d14a912-1040-4867-b005-98838eb9acc4"
-local KNOWN_BOX_PATH  = { "Codes", "Codes", "CodeRedeem", "TextBox" }
-
-local ACE_POSITIONS = {
-    Top=1, Bottom=1, Center=1, Middle=1, Left=1, Right=1,
-    TopRight=1, TopLeft=1, BottomRight=1, BottomLeft=1,
-}
-
-local _getupvalues = (debug and debug.getupvalues) or getupvalues
-local _getconns    = getconnections or (debug and debug.getconnections)
-local _setupv      = (debug and debug.setupvalue) or setupvalue
-
-local _RedeemRemote = nil
-local _NotifyRemote = nil
-local _listenConn   = nil
 
 -- ===================================================================
 -- SCANNER STATE
@@ -153,14 +126,14 @@ local forceScanActive = false
 local lastCode        = ""
 local _dedupText      = ""
 local _dedupTime      = 0
-local _pendingCode    = ""
-local _flushToken     = 0
-local _lastRedeem     = { code = "", time = 0 }
-local _redeemLock     = false
 
-local _pillLbl      = nil
-local _codeBarLbl   = nil
-local _focused      = nil
+local _pendingCode  = ""
+local _flushToken   = 0
+local _lastRedeem   = { code = "", time = 0 }
+
+local _pillLbl    = nil
+local _codeBarLbl = nil
+local _focused    = nil
 
 local _statusLog    = {}
 local _lastLogEntry = ""
@@ -169,7 +142,7 @@ local _statusScroll = nil
 local function logStatus(msg)
     if msg == _lastLogEntry then return end
     _lastLogEntry = msg
-    local t     = os.date and os.date("%H:%M:%S") or "??"
+    local t = os.date and os.date("%H:%M:%S") or "??"
     local entry = "[" .. t .. "] " .. msg
     table.insert(_statusLog, entry)
     if _statusScroll then
@@ -205,13 +178,6 @@ end
 -- ===================================================================
 -- GUI ROOT
 -- ===================================================================
-pcall(function()
-    local cg = game:GetService("CoreGui"):FindFirstChild("YslemAutoCode")
-    if cg then cg:Destroy() end
-    local pg = PlayerGui:FindFirstChild("YslemAutoCode")
-    if pg then pg:Destroy() end
-end)
-
 local gui = Instance.new("ScreenGui")
 gui.Name           = "YslemAutoCode"
 gui.ResetOnSpawn   = false
@@ -262,13 +228,15 @@ local function looksLikeCode(text)
     if not text or #text < 3 or #text > 50 then return false end
     if isBlacklisted(text) then return false end
     local low = text:lower()
-    for _, w in ipairs(commonWords) do if low == w then return false end end
+    for _, w in ipairs(commonWords) do
+        if low == w then return false end
+    end
     if not text:match("%a") then return false end
     if text == low and not text:match("%d") then return false end
-    if text:match("^[0-9A-Fa-f]+$") and (#text==3 or #text==6 or #text==8) then return false end
-    local wc = 0
-    for _ in text:gmatch("%S+") do wc = wc + 1 end
-    return wc <= 4
+    if text:match("^[0-9A-Fa-f]+$") and (#text == 3 or #text == 6 or #text == 8) then return false end
+    local wordCount = 0
+    for _ in text:gmatch("%S+") do wordCount = wordCount + 1 end
+    return wordCount <= 4
 end
 
 local function isLoneCode(text)
@@ -278,6 +246,15 @@ local function isLoneCode(text)
     if text:match("%u") and text:match("%d") then return true end
     if text == text:upper() and text:match("%u") and #text >= 7 then return true end
     return false
+end
+
+local function extractCodesFromText(text)
+    if not text or text == "" then return nil end
+    if isLoneCode(text) and looksLikeCode(text) then return text end
+    for token in text:gmatch("[%w%-_]+") do
+        if isLoneCode(token) and looksLikeCode(token) then return token end
+    end
+    return nil
 end
 
 local function extractCode(txt)
@@ -294,12 +271,12 @@ end
 
 local function isHudNoise(txt)
     if not txt or txt == "" then return true end
-    if txt:match("^%d+$")               then return true end
-    if txt:match("^%d+:%d+$")           then return true end
-    if txt:match("^%d+%.%d+$")          then return true end
+    if txt:match("^%d+$") then return true end
+    if txt:match("^%d+:%d+$") then return true end
+    if txt:match("^%d+%.%d+$") then return true end
     if txt:match("^[%+%-]?%d") and #txt < 8 then return true end
-    if txt:match("^%d+[kKmMbBgG]?$")   then return true end
-    if txt:match("^x%d")                then return true end
+    if txt:match("^%d+[kKmMbBgG]?$") then return true end
+    if txt:match("^x%d") then return true end
     return false
 end
 
@@ -311,20 +288,12 @@ local function _isCodeBox(obj)
     local nameL = obj.Name:lower()
     local phL   = (obj.PlaceholderText or ""):lower()
     for _, h in ipairs({"code","redeem","promo","coupon","enter","input"}) do
-        if nameL:find(h,1,true) or phL:find(h,1,true) then return true end
+        if nameL:find(h, 1, true) or phL:find(h, 1, true) then return true end
     end
     return false
 end
 
 local function findCodeTextBox()
-    -- 1. known ACE path
-    local node = PlayerGui
-    for _, name in ipairs(KNOWN_BOX_PATH) do
-        if not node then break end
-        node = node:FindFirstChild(name)
-    end
-    if node and node:IsA("TextBox") then return node end
-    -- 2. cache
     if _cachedBox and _cachedBox.Parent then return _cachedBox end
     _cachedBox = nil
     local function search(root)
@@ -360,83 +329,11 @@ local function fireSubmitButton(root)
 end
 
 -- ===================================================================
--- ACE LOGIC — killDebounce + FocusLost fire + GUID remote
--- ===================================================================
-local function killDebounce(fn)
-    if not (fn and _setupv and _getupvalues) then return end
-    local ok, ups = pcall(_getupvalues, fn)
-    if ok and type(ups) == "table" then
-        for i, v in pairs(ups) do
-            if type(v) == "boolean" then pcall(_setupv, fn, i, false) end
-        end
-    end
-end
-
-local function redeemViaBox(code)
-    if not _getconns then return false, "no getconnections" end
-    local box = findCodeTextBox()
-    if not box then return false, "no codebox" end
-    local ok, conns = pcall(_getconns, box.FocusLost)
-    if not ok or type(conns) ~= "table" or #conns == 0 then return false, "no conn" end
-    local fired = false
-    for _, c in ipairs(conns) do
-        local fn; pcall(function() fn = c.Function end)
-        killDebounce(fn)
-        box.Text = code; box.Active = true; box.Selectable = true
-        local fok = pcall(function() if c.Enabled ~= false then c:Fire(true) end end)
-        fired = fired or fok
-    end
-    return fired, fired and "sent" or "fire failed"
-end
-
-local function resolveRedeemRemote()
-    if _RedeemRemote and _RedeemRemote.Parent then return _RedeemRemote end
-    _RedeemRemote = nil
-    -- ACE: Net package + GUID
-    pcall(function()
-        local net = ReplicatedStorage
-        for _, part in ipairs(ACE_NET_PATH) do
-            net = net:WaitForChild(part, 2); if not net then return end
-        end
-        local ok, api = pcall(require, net)
-        if ok and type(api) == "table" then
-            local rok, rf = pcall(function() return api:RemoteFunction(ACE_REDEEM_GUID) end)
-            if rok and typeof(rf) == "Instance" then _RedeemRemote = rf end
-        end
-    end)
-    -- General RF/RequestRedemption
-    if not _RedeemRemote then
-        pcall(function()
-            local rfFolder = ReplicatedStorage:FindFirstChild("RF"); if not rfFolder then return end
-            for _, v in ipairs(rfFolder:GetChildren()) do
-                if v.Name == "RequestRedemption" and v:IsA("RemoteFunction") then
-                    _RedeemRemote = v; return
-                end
-            end
-        end)
-    end
-    -- Last resort: getinstances
-    if not _RedeemRemote and getinstances then
-        for _, v in ipairs(getinstances()) do
-            if v.Name == "RequestRedemption" and v:IsA("RemoteFunction") then
-                _RedeemRemote = v; break
-            end
-        end
-    end
-    return _RedeemRemote
-end
-
-local function redeemViaRemote(code)
-    local rf = resolveRedeemRemote()
-    if not rf then return false, "no remote" end
-    local ok, result = pcall(function() return rf:InvokeServer(code) end)
-    if not ok then return false, tostring(result) end
-    return true, result
-end
-
--- ===================================================================
 -- REDEEM LOGIC
 -- ===================================================================
+
+local _redeemLock = false
+
 local function forceParentVisible(obj)
     local cur = obj.Parent
     while cur and cur ~= PlayerGui and cur ~= game:GetService("CoreGui") do
@@ -459,23 +356,8 @@ local function redeemCode(code)
     _redeemLock = true
     logStatus("Redeem: " .. code)
 
-    -- 1. ACE: getconnections FocusLost (most reliable for ACE Duels)
-    local boxOk, boxRes = redeemViaBox(code)
-    if boxOk then
-        logStatus("ACE box: " .. tostring(boxRes))
-        task.delay(4, function() _redeemLock = false end); return
-    end
-
-    -- 2. ACE: GUID remote
-    local remOk, remRes = redeemViaRemote(code)
-    if remOk then
-        logStatus("ACE remote: OK")
-        task.delay(4, function() _redeemLock = false end); return
-    end
-
-    -- 3. UI fallbacks
+    -- 1. PlayerGui.Codes.Codes.CodeRedeem.TextBox
     local submitted = false
-
     pcall(function()
         local codesGui = PlayerGui:FindFirstChild("Codes");    if not codesGui then return end
         local inner    = codesGui:FindFirstChild("Codes");     if not inner    then return end
@@ -495,6 +377,7 @@ local function redeemCode(code)
     end)
     if submitted then task.delay(4, function() _redeemLock = false end); return end
 
+    -- 2. Fallback Shop
     pcall(function()
         local shopGui = PlayerGui:FindFirstChild("Shop"); if not shopGui then return end
         for _, d in ipairs(shopGui:GetDescendants()) do
@@ -515,13 +398,36 @@ local function redeemCode(code)
     end)
     if submitted then task.delay(4, function() _redeemLock = false end); return end
 
-    local box = findCodeTextBox()
-    if box then
-        submitBox(box, code)
-        local scope = box.Parent
-        for _ = 1, 8 do
-            if fireSubmitButton(scope) then break end
-            if scope and scope.Parent then scope = scope.Parent else break end
+    -- 3. Fallback Sources Hub
+    pcall(function()
+        for _, obj in ipairs(PlayerGui:GetDescendants()) do
+            if obj:IsA("TextBox") and (obj.PlaceholderText or ""):lower():find("captured", 1, true) then
+                submitBox(obj, code)
+                local scope = obj.Parent
+                for _ = 1, 6 do
+                    for _, btn in ipairs(scope:GetChildren()) do
+                        local t = (btn:IsA("TextButton") and btn.Text:lower()) or ""
+                        if (btn:IsA("TextButton") or btn:IsA("ImageButton")) and t:find("redeem",1,true) then
+                            fireSignalHelper(btn); submitted = true; return
+                        end
+                    end
+                    if scope.Parent then scope = scope.Parent else break end
+                end
+                return
+            end
+        end
+    end)
+
+    -- 4. Fallback findCodeTextBox
+    if not submitted then
+        local box = findCodeTextBox()
+        if box then
+            submitBox(box, code)
+            local scope = box.Parent
+            for _ = 1, 8 do
+                if fireSubmitButton(scope) then break end
+                if scope and scope.Parent then scope = scope.Parent else break end
+            end
         end
     end
 
@@ -530,7 +436,10 @@ end
 
 local function appendToBox(text)
     if not text or text == "" then return end
-    if not _focused or not _focused.Parent then redeemCode(text); return end
+    if not _focused or not _focused.Parent then
+        redeemCode(text)
+        return
+    end
     local cur = _focused.Text or ""
     _focused.Text = cur == "" and text or (cur .. " " .. text)
     setLastCode(text)
@@ -539,7 +448,9 @@ end
 local function matchesKeyword(text)
     if not text or text == "" then return false end
     local hasAny = false
-    for _, kw in ipairs(filterKeywords) do if kw ~= "" then hasAny = true; break end end
+    for _, kw in ipairs(filterKeywords) do
+        if kw ~= "" then hasAny = true; break end
+    end
     if not hasAny then return true end
     local lower = text:lower()
     for _, kw in ipairs(filterKeywords) do
@@ -552,18 +463,23 @@ local function applyReplace(text)
     if not text or text == "" then return nil end
     local lower = text:lower()
     for _, rule in ipairs(replaceRules) do
-        if rule.kw ~= "" and lower:find(rule.kw:lower(), 1, true) then return rule.rep end
+        if rule.kw ~= "" and lower:find(rule.kw:lower(), 1, true) then
+            return rule.rep
+        end
     end
     return nil
 end
 
 local function flushPending(token)
     if token ~= _flushToken then return end
-    local code = _pendingCode; _pendingCode = ""
+    local code = _pendingCode
+    _pendingCode = ""
     if code == "" then return end
     logStatus("✓ " .. code)
-    setLastCode(code); setScanState("SCANNING")
-    _lastRedeem.code = code; _lastRedeem.time = tick()
+    setLastCode(code)
+    setScanState("SCANNING")
+    _lastRedeem.code = code
+    _lastRedeem.time = tick()
     if autoCode then appendToBox(code) end
 end
 
@@ -586,16 +502,21 @@ end
 local function dispatch(text, trusted)
     if not text or text == "" then return end
     if not trusted and isHudNoise(text) then return end
+
     local now = tick()
     if text == _dedupText and (now - _dedupTime) < 0.4 then return end
-    _dedupText = text; _dedupTime = now
+    _dedupText = text
+    _dedupTime = now
 
     if forceScanActive and collecting then
-        table.insert(collectBuf, text); collectRemain = collectRemain - 1
+        table.insert(collectBuf, text)
+        collectRemain = collectRemain - 1
         setScanState("COLLECTING " .. collectRemain)
         if collectRemain <= 0 then
             local result = table.concat(collectBuf)
-            logStatus("Force → " .. result); setLastCode(result); appendToBox(result)
+            logStatus("Force → " .. result)
+            setLastCode(result)
+            appendToBox(result)
             collecting = false; collectBuf = {}; collectRemain = 0; forceScanActive = false
             setScanState("SCANNING")
         end
@@ -607,15 +528,21 @@ local function dispatch(text, trusted)
             if matchesKeyword(text) then
                 collectBuf = {}; collectRemain = captureCount
                 logStatus("Keyword reset → collect " .. captureCount)
-                setScanState("COLLECTING " .. captureCount); return
+                setScanState("COLLECTING " .. captureCount)
+                return
             end
-            local rep = applyReplace(text); local part = rep ~= nil and rep or text
-            table.insert(collectBuf, part); collectRemain = collectRemain - 1
+            local rep = applyReplace(text)
+            local part = rep ~= nil and rep or text
+            table.insert(collectBuf, part)
+            collectRemain = collectRemain - 1
             setScanState("COLLECTING " .. collectRemain)
-            logStatus("Part " .. #collectBuf .. ": " .. part)
+            logStatus("Part " .. (#collectBuf) .. ": " .. part)
             if collectRemain <= 0 then
                 local result = table.concat(collectBuf)
-                if result ~= "" then logStatus("Code → " .. result); addPending(result) end
+                if result ~= "" then
+                    logStatus("Code → " .. result)
+                    addPending(result)
+                end
                 collecting = false; collectBuf = {}; collectRemain = 0
             end
         else
@@ -630,98 +557,42 @@ local function dispatch(text, trusted)
 
     local hasKeywords = false
     for _, kw in ipairs(filterKeywords) do if kw ~= "" then hasKeywords = true; break end end
+
     local result
+
     if collecting then
-        collecting = false; setScanState("SCANNING")
+        collecting = false
+        setScanState("SCANNING")
         local rep = applyReplace(text)
-        result = rep ~= nil and rep or (extractCode(text) or (isLoneCode(text) and looksLikeCode(text) and text or nil))
+        if rep ~= nil then
+            result = rep
+        else
+            result = extractCode(text) or (isLoneCode(text) and looksLikeCode(text) and text or nil)
+        end
     elseif hasKeywords and matchesKeyword(text) then
         local inlineCode = extractCode(text)
-        if inlineCode then result = inlineCode
-        else collecting = true; setScanState("KEYWORD"); return end
+        if inlineCode then
+            result = inlineCode
+        else
+            collecting = true
+            setScanState("KEYWORD")
+            return
+        end
     else
         local rep = applyReplace(text)
-        if rep ~= nil then result = rep
-        elseif trusted then result = isLoneCode(text) and text or extractCode(text)
-        else result = (isLoneCode(text) and looksLikeCode(text)) and text or nil end
+        if rep ~= nil then
+            result = rep
+        elseif trusted then
+            result = isLoneCode(text) and text or extractCode(text)
+        else
+            result = (isLoneCode(text) and looksLikeCode(text)) and text or nil
+        end
     end
 
     if result and result ~= "" then
-        if result:lower() == _lastRedeem.code:lower() and (tick()-_lastRedeem.time) < 30 then return end
-        setLastCode(result); addPending(result)
-    end
-end
-
--- ===================================================================
--- ACE NOTIFICATION — NotificationController remote
--- ===================================================================
-local function isAceAnnouncement(...)
-    local args = table.pack(...)
-    if args.n == 0 or typeof(args[1]) ~= "string" then return false end
-    for i = 2, args.n do
-        local v = args[i]
-        if typeof(v) == "string"
-        and (v:find("Sounds%.",1,true) or v:find("rbxassetid",1,true) or ACE_POSITIONS[v]) then
-            return true
-        end
-    end
-    return false
-end
-
-local function aceRemotesFromFunction(fn)
-    if not _getupvalues then return {} end
-    local ok, ups = pcall(_getupvalues, fn)
-    local out = {}
-    if not (ok and type(ups) == "table") then return out end
-    local net = ReplicatedStorage
-    for _, part in ipairs(ACE_NET_PATH) do
-        net = net:FindFirstChild(part); if not net then return out end
-    end
-    for _, v in pairs(ups) do
-        if typeof(v) == "Instance"
-        and (v:IsA("RemoteEvent") or v:IsA("RemoteFunction") or v:IsA("UnreliableRemoteEvent"))
-        and v.Parent == net then
-            out[#out+1] = v
-        end
-    end
-    return out
-end
-
-local function resolveNotifyRemote()
-    if _NotifyRemote and _NotifyRemote.Parent then return _NotifyRemote end
-    _NotifyRemote = nil
-    pcall(function()
-        local ok, ctrl = pcall(function()
-            return require(ReplicatedStorage.Controllers:FindFirstChild("NotificationController", true))
-        end)
-        if not (ok and type(ctrl) == "table" and type(ctrl.Start) == "function") then return end
-        local remotes = aceRemotesFromFunction(ctrl.Start)
-        if remotes[1] then _NotifyRemote = remotes[1] end
-    end)
-    return _NotifyRemote
-end
-
-local function connectNotifyRemote()
-    local remote = resolveNotifyRemote()
-    if not remote then return end
-    if getgenv then
-        local prev = getgenv().YslemNotifyConn
-        if prev then pcall(function() prev:Disconnect() end) end
-    end
-    _listenConn = remote.OnClientEvent:Connect(function(...)
-        if not isAceAnnouncement(...) then return end
-        local text = tostring((...) or ""):gsub("<[^>]->",""):match("^%s*(.-)%s*$") or ""
-        if text ~= "" then dispatch(text, true) end
-    end)
-    if getgenv then getgenv().YslemNotifyConn = _listenConn end
-end
-
-task.defer(connectNotifyRemote)
-
-if getgenv then
-    getgenv().YslemStop = function()
-        if _listenConn then pcall(function() _listenConn:Disconnect() end); _listenConn = nil end
-        if gui then pcall(function() gui:Destroy() end) end
+        if result:lower() == _lastRedeem.code:lower() and (tick() - _lastRedeem.time) < 30 then return end
+        setLastCode(result)
+        addPending(result)
     end
 end
 
@@ -781,40 +652,43 @@ local panel = Instance.new("Frame", gui)
 panel.Size                   = UDim2.new(0, PANEL_W, 0, FULL_H)
 panel.Position               = UDim2.new(0, cfg.posX, 0, cfg.posY)
 panel.BackgroundColor3       = C_BG
-panel.BackgroundTransparency = 0.05
+panel.BackgroundTransparency = 0.08
 panel.BorderSizePixel        = 0
 panel.Active                 = true
 panel.ZIndex                 = 10
 addCorner(panel, 14)
 addLivingStroke(panel, 1.5)
 
--- Background image (instant from cache, async download on first run)
 local _bgImg = Instance.new("ImageLabel", panel)
 _bgImg.Size                   = UDim2.new(1, 0, 1, 0)
+_bgImg.Position               = UDim2.new(0, 0, 0, 0)
 _bgImg.BackgroundTransparency = 1
 _bgImg.Image                  = ""
 _bgImg.ScaleType              = Enum.ScaleType.Crop
 _bgImg.ImageTransparency      = 0.25
 _bgImg.ZIndex                 = 9
 addCorner(_bgImg, 14)
-
 task.spawn(function()
     local fname = "yslem_bg_v4.png"
     local url   = "https://litter.catbox.moe/2wfsx1k13uv3vbj2.png"
-    if not getcustomasset then logStatus("BG: no getcustomasset"); return end
-    -- Instant load from cache
-    if isfile and isfile(fname) then
-        local rid = getcustomasset(fname)
-        if rid and rid ~= "" then _bgImg.Image = rid; logStatus("BG: instant cache"); return end
-    end
-    -- First-time download
-    local ok, data = pcall(function() return game:HttpGet(url) end)
-    if ok and data and data ~= "" then
-        pcall(function() if writefile then writefile(fname, data) end end)
-        local rid = getcustomasset(fname)
-        if rid and rid ~= "" then _bgImg.Image = rid; logStatus("BG: DL OK") end
+    if getcustomasset then
+        if isfile and isfile(fname) then
+            local rid = getcustomasset(fname)
+            if rid and rid ~= "" then _bgImg.Image = rid; logStatus("BG: cache OK"); return end
+        end
+        local ok, data = pcall(function() return game:HttpGet(url) end)
+        if ok and data and data ~= "" then
+            pcall(function() if writefile then writefile(fname, data) end end)
+            local rid = getcustomasset(fname)
+            if rid and rid ~= "" then _bgImg.Image = rid; logStatus("BG: DL OK"); return end
+        end
+        logStatus("BG: getcustomasset fail")
     else
-        logStatus("BG: HttpGet fail")
+        local ok, data = pcall(function() return game:HttpGet(url) end)
+        if ok and data and data ~= "" then
+            pcall(function() if writefile then writefile(fname, data) end end)
+        end
+        logStatus("BG: no getcustomasset")
     end
 end)
 
@@ -822,8 +696,8 @@ end)
 do
     local dragging, dragStart, startPos = false, nil, nil
     panel.InputBegan:Connect(function(inp)
-        if inp.UserInputType == Enum.UserInputType.MouseButton1
-        or inp.UserInputType == Enum.UserInputType.Touch then
+        if inp.UserInputType == Enum.UserInputType.MouseButton1 or
+           inp.UserInputType == Enum.UserInputType.Touch then
             dragging = true; dragStart = inp.Position; startPos = panel.Position
             inp.Changed:Connect(function()
                 if inp.UserInputState == Enum.UserInputState.End then
@@ -836,8 +710,8 @@ do
         end
     end)
     panel.InputChanged:Connect(function(inp)
-        if dragging and (inp.UserInputType == Enum.UserInputType.MouseMovement
-                      or inp.UserInputType == Enum.UserInputType.Touch) then
+        if dragging and (inp.UserInputType == Enum.UserInputType.MouseMovement or
+                         inp.UserInputType == Enum.UserInputType.Touch) then
             local d = inp.Position - dragStart
             panel.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X,
                                        startPos.Y.Scale, startPos.Y.Offset + d.Y)
@@ -944,7 +818,8 @@ codeBar.Position         = UDim2.new(0, 10, 0, 6)
 codeBar.BackgroundColor3 = C_ROW
 codeBar.BorderSizePixel  = 0
 codeBar.ZIndex           = 12
-addCorner(codeBar, 8); addLivingStroke(codeBar, 1)
+addCorner(codeBar, 8)
+addLivingStroke(codeBar, 1)
 
 _codeBarLbl = Instance.new("TextBox", codeBar)
 _codeBarLbl.Size                   = UDim2.new(1, -16, 1, 0)
@@ -963,7 +838,7 @@ _codeBarLbl.ClearTextOnFocus       = false
 _codeBarLbl.ZIndex                 = 13
 addLivingTextGradient(_codeBarLbl)
 
--- AUTO ENTER CODE
+-- AUTO ENTER CODE toggle
 local autoBtn = Instance.new("TextButton", page1)
 autoBtn.Size             = UDim2.new(1, -20, 0, 24)
 autoBtn.Position         = UDim2.new(0, 10, 0, 42)
@@ -1001,7 +876,7 @@ forceBtn.ZIndex           = 12
 addCorner(forceBtn, 10); addLivingTextGradient(forceBtn)
 
 local function refreshForceBtn()
-    forceBtn.Text = "FORCE SCAN  (Bind: " .. forceKb.Name .. ")"
+    forceBtn.Text       = "FORCE SCAN + CODE  (Bind: " .. forceKb.Name .. ")"
     forceBtn.TextColor3 = C_DIM
     TweenService:Create(forceBtn, TweenInfo.new(0.15), {BackgroundColor3 = C_OFF}):Play()
 end
@@ -1022,17 +897,13 @@ forceBtn.MouseButton2Click:Connect(function()
     waitingForKb = true; forceBtn.Text = "Press a key..."
 end)
 forceBtn.MouseEnter:Connect(function()
-    if not waitingForKb then
-        TweenService:Create(forceBtn, TweenInfo.new(0.15), {TextColor3 = C_WHITE}):Play()
-    end
+    if not waitingForKb then TweenService:Create(forceBtn, TweenInfo.new(0.15), {TextColor3 = C_WHITE}):Play() end
 end)
 forceBtn.MouseLeave:Connect(function()
-    if not waitingForKb then
-        TweenService:Create(forceBtn, TweenInfo.new(0.15), {TextColor3 = C_DIM}):Play()
-    end
+    if not waitingForKb then TweenService:Create(forceBtn, TweenInfo.new(0.15), {TextColor3 = C_DIM}):Play() end
 end)
 
--- ENTER CODE
+-- ENTER CODE button
 local enterBtn = Instance.new("TextButton", page1)
 enterBtn.Size             = UDim2.new(1, -20, 0, 24)
 enterBtn.Position         = UDim2.new(0, 10, 0, 110)
@@ -1050,7 +921,7 @@ enterBtn.MouseButton1Click:Connect(function()
     if code == "" or code == "Nothing detected" then
         if _codeBarLbl then
             _codeBarLbl.Text       = "Nothing detected"
-            _codeBarLbl.TextColor3 = G1
+            _codeBarLbl.TextColor3 = Color3.fromRGB(255, 80, 80)
             task.delay(1.5, function()
                 if _codeBarLbl and _codeBarLbl.Text == "Nothing detected" then
                     _codeBarLbl.Text       = lastCode
@@ -1067,14 +938,15 @@ enterBtn.MouseButton1Click:Connect(function()
     end)
 end)
 
--- Delay row
+-- Delay input row
 local delayRow = Instance.new("Frame", page1)
 delayRow.Size             = UDim2.new(1, -20, 0, 24)
 delayRow.Position         = UDim2.new(0, 10, 0, 142)
 delayRow.BackgroundColor3 = C_ROW
 delayRow.BorderSizePixel  = 0
 delayRow.ZIndex           = 12
-addCorner(delayRow, 8); addLivingStroke(delayRow, 1)
+addCorner(delayRow, 8)
+addLivingStroke(delayRow, 1)
 
 local delayLbl = Instance.new("TextLabel", delayRow)
 delayLbl.Size                   = UDim2.new(0.65, 0, 1, 0)
@@ -1088,24 +960,27 @@ delayLbl.TextXAlignment         = Enum.TextXAlignment.Left
 delayLbl.ZIndex                 = 13
 
 local delayBox = Instance.new("TextBox", delayRow)
-delayBox.Size               = UDim2.new(0.3, -4, 0.8, 0)
-delayBox.Position           = UDim2.new(0.68, 0, 0.1, 0)
-delayBox.BackgroundColor3   = C_OFF
-delayBox.BorderSizePixel    = 0
-delayBox.Font               = Enum.Font.GothamBold
-delayBox.TextSize           = 11
-delayBox.TextColor3         = C_WHITE
-delayBox.PlaceholderText    = "0"
-delayBox.PlaceholderColor3  = C_DIM
-delayBox.TextXAlignment     = Enum.TextXAlignment.Center
-delayBox.ClearTextOnFocus   = false
-delayBox.Text               = tostring(redeemDelay)
-delayBox.ZIndex             = 13
-addCorner(delayBox, 5); addLivingTextGradient(delayBox)
+delayBox.Size                   = UDim2.new(0.3, -4, 0.8, 0)
+delayBox.Position               = UDim2.new(0.68, 0, 0.1, 0)
+delayBox.BackgroundColor3       = C_OFF
+delayBox.BorderSizePixel        = 0
+delayBox.Font                   = Enum.Font.GothamBold
+delayBox.TextSize               = 11
+delayBox.TextColor3             = C_WHITE
+delayBox.PlaceholderText        = "0"
+delayBox.PlaceholderColor3      = C_DIM
+delayBox.TextXAlignment         = Enum.TextXAlignment.Center
+delayBox.ClearTextOnFocus       = false
+delayBox.Text                   = tostring(redeemDelay)
+delayBox.ZIndex                 = 13
+addCorner(delayBox, 5)
+addLivingTextGradient(delayBox)
 delayBox.FocusLost:Connect(function()
     local n = tonumber(delayBox.Text)
     if n and n >= 0 and n <= 30 then
-        redeemDelay = n; cfg.redeemDelay = n; saveConfig()
+        redeemDelay     = n
+        cfg.redeemDelay = n
+        saveConfig()
     else
         delayBox.Text = tostring(redeemDelay)
     end
@@ -1118,7 +993,8 @@ partsRow.Position         = UDim2.new(0, 10, 0, 174)
 partsRow.BackgroundColor3 = C_ROW
 partsRow.BorderSizePixel  = 0
 partsRow.ZIndex           = 12
-addCorner(partsRow, 8); addLivingStroke(partsRow, 1)
+addCorner(partsRow, 8)
+addLivingStroke(partsRow, 1)
 
 local partsLbl = Instance.new("TextLabel", partsRow)
 partsLbl.Size                   = UDim2.new(0.55, 0, 1, 0)
@@ -1142,7 +1018,8 @@ partsMinBtn.TextSize         = 14
 partsMinBtn.BorderSizePixel  = 0
 partsMinBtn.AutoButtonColor  = false
 partsMinBtn.ZIndex           = 13
-addCorner(partsMinBtn, 5); addLivingTextGradient(partsMinBtn)
+addCorner(partsMinBtn, 5)
+addLivingTextGradient(partsMinBtn)
 
 local partsValLbl = Instance.new("TextLabel", partsRow)
 partsValLbl.Size                   = UDim2.new(0, 30, 1, 0)
@@ -1167,13 +1044,16 @@ partsPlusBtn.TextSize         = 14
 partsPlusBtn.BorderSizePixel  = 0
 partsPlusBtn.AutoButtonColor  = false
 partsPlusBtn.ZIndex           = 13
-addCorner(partsPlusBtn, 5); addLivingTextGradient(partsPlusBtn)
+addCorner(partsPlusBtn, 5)
+addLivingTextGradient(partsPlusBtn)
 
 local function refreshParts()
     partsValLbl.Text       = captureCount == 0 and "off" or tostring(captureCount)
     partsValLbl.TextColor3 = captureCount == 0 and C_DIM or C_WHITE
-    cfg.captureCount = captureCount; saveConfig()
+    cfg.captureCount       = captureCount
+    saveConfig()
 end
+
 partsMinBtn.MouseButton1Click:Connect(function()
     if captureCount > 0 then captureCount = captureCount - 1; refreshParts() end
 end)
@@ -1184,13 +1064,13 @@ end)
 -- ===================================================================
 -- PAGE 2: STATUS
 -- ===================================================================
-local page2 = Instance.new("Frame", contentFrame)
-page2.Size                   = UDim2.new(1, 0, 1, 0)
-page2.BackgroundTransparency = 1
-page2.Visible                = false
-page2.ZIndex                 = 11
+local page4 = Instance.new("Frame", contentFrame)
+page4.Size                   = UDim2.new(1, 0, 1, 0)
+page4.BackgroundTransparency = 1
+page4.Visible                = false
+page4.ZIndex                 = 11
 
-local statusScroll = Instance.new("ScrollingFrame", page2)
+local statusScroll = Instance.new("ScrollingFrame", page4)
 statusScroll.Size                   = UDim2.new(1, -16, 1, -36)
 statusScroll.Position               = UDim2.new(0, 8, 0, 6)
 statusScroll.BackgroundColor3       = C_ROW
@@ -1217,7 +1097,7 @@ statusPad.PaddingRight  = UDim.new(0, 4)
 statusPad.PaddingTop    = UDim.new(0, 4)
 statusPad.PaddingBottom = UDim.new(0, 4)
 
-local clearBtn = Instance.new("TextButton", page2)
+local clearBtn = Instance.new("TextButton", page4)
 clearBtn.Size             = UDim2.new(1, -16, 0, 24)
 clearBtn.Position         = UDim2.new(0, 8, 1, -28)
 clearBtn.BackgroundColor3 = C_ROW
@@ -1256,15 +1136,17 @@ end
 -- TAB SWITCHING
 -- ===================================================================
 local function setTab(idx)
-    currentTab    = idx; cfg.activeTab = idx
+    currentTab    = idx
+    cfg.activeTab = idx
     page1.Visible = (idx == 1)
-    page2.Visible = (idx == 2)
-    tabMainBtn.BackgroundColor3   = (idx == 1) and C_ON  or C_ROW
-    tabStatusBtn.BackgroundColor3 = (idx == 2) and C_ON  or C_ROW
+    page4.Visible = (idx == 2)
+    tabMainBtn.BackgroundColor3   = (idx == 1) and C_ON or C_ROW
+    tabStatusBtn.BackgroundColor3 = (idx == 2) and C_ON or C_ROW
     tabMainBtn.TextColor3         = (idx == 1) and C_WHITE or C_DIM
     tabStatusBtn.TextColor3       = (idx == 2) and C_WHITE or C_DIM
     saveConfig()
 end
+
 setTab(currentTab)
 tabMainBtn.MouseButton1Click:Connect(function()   if currentTab ~= 1 then setTab(1) end end)
 tabStatusBtn.MouseButton1Click:Connect(function() if currentTab ~= 2 then setTab(2) end end)
@@ -1273,16 +1155,17 @@ tabStatusBtn.MouseButton1Click:Connect(function() if currentTab ~= 2 then setTab
 -- MINIMIZE
 -- ===================================================================
 local function applyMinimize(instant)
-    local targetH      = minimized and MINI_H or FULL_H
-    tabBar.Visible     = not minimized
-    contentFrame.Visible = not minimized
-    minBtn.Text        = minimized and "+" or "-"
+    local targetH = minimized and MINI_H or FULL_H
+    tabBar.Visible        = not minimized
+    contentFrame.Visible  = not minimized
+    minBtn.Text           = minimized and "+" or "-"
     if instant then
         panel.Size = UDim2.new(0, PANEL_W, 0, targetH)
     else
         TweenService:Create(panel, TweenInfo.new(0.15), {Size = UDim2.new(0, PANEL_W, 0, targetH)}):Play()
     end
 end
+
 minBtn.MouseButton1Click:Connect(function()
     minimized = not minimized; cfg.minimized = minimized
     applyMinimize(false); saveConfig()
@@ -1306,7 +1189,8 @@ local function watchObject(obj)
     for _, child in ipairs(obj:GetDescendants()) do watchObject(child) end
     obj.DescendantAdded:Connect(function(child)
         if isOwnedByUs(child) then return end
-        local isNew = not seen[child]; watchObject(child)
+        local isNew = not seen[child]
+        watchObject(child)
         if isNew then
             local t = (child:IsA("TextLabel") or child:IsA("TextButton") or child:IsA("TextBox")) and child.Text
             if t and t ~= "" then dispatch(t) end
@@ -1323,7 +1207,8 @@ local function hookMetatable()
     if not (getrawmetatable and setreadonly and newcclosure) then return false end
     local ok, mt = pcall(getrawmetatable, game)
     if not ok or not mt then return false end
-    local oldNI = mt.__newindex; if not oldNI then return false end
+    local oldNI = mt.__newindex
+    if not oldNI then return false end
     if not pcall(setreadonly, mt, false) then return false end
     mt.__newindex = newcclosure(function(self, key, value)
         if key == "Text" and type(value) == "string" and #value > 0 and #value <= 300 then
@@ -1331,7 +1216,9 @@ local function hookMetatable()
                 return self:IsA("TextLabel") or self:IsA("TextButton") or self:IsA("TextBox")
             end)
             if ok2 and isText then
-                task.spawn(function() if not isOwnedByUs(self) then dispatch(value) end end)
+                task.spawn(function()
+                    if not isOwnedByUs(self) then dispatch(value) end
+                end)
             end
         end
         return oldNI(self, key, value)
@@ -1340,9 +1227,10 @@ local function hookMetatable()
     return true
 end
 
--- 1. TopNotification
+-- 1. TopNotification container
 local function hookContainers()
     local names = { "TopNotification" }
+
     local function watchTrusted(obj)
         if seen[obj] then return end
         if isOwnedByUs(obj) then return end
@@ -1355,13 +1243,15 @@ local function hookContainers()
         for _, child in ipairs(obj:GetDescendants()) do watchTrusted(child) end
         obj.DescendantAdded:Connect(function(child)
             if isOwnedByUs(child) then return end
-            local isNew = not seen[child]; watchTrusted(child)
+            local isNew = not seen[child]
+            watchTrusted(child)
             if isNew then
                 local t = (child:IsA("TextLabel") or child:IsA("TextButton") or child:IsA("TextBox")) and child.Text
                 if t and t ~= "" then dispatch(t, true) end
             end
         end)
     end
+
     for _, name in ipairs(names) do
         local c = PlayerGui:FindFirstChild(name)
         if c then task.spawn(watchTrusted, c) end
@@ -1416,7 +1306,7 @@ local function hookLegacyChat()
     end)
 end
 
--- 5. Workspace GUIs
+-- 5. Workspace BillboardGui / SurfaceGui
 local function hookWorkspaceGuis()
     pcall(function()
         local ws = game:GetService("Workspace")
@@ -1428,7 +1318,7 @@ local function hookWorkspaceGuis()
     end)
 end
 
--- 6. Network remote heuristic
+-- 6. Network remote
 local _networkRemote = nil
 local function hookNetworkRemote()
     task.wait(3)
@@ -1463,7 +1353,7 @@ local function hookNetworkRemote()
     end)
 end
 
--- 7. Focus tracking
+-- 7. TextBox focus tracking
 UserInputService.TextBoxFocused:Connect(function(box)
     if isOwnedByUs(box) then return end
     if _isCodeBox(box) then _focused = box end
@@ -1472,12 +1362,13 @@ UserInputService.TextBoxFocusReleased:Connect(function(box)
     if _focused == box then _focused = nil end
 end)
 
--- 8. CodesFlags + CodesController
+-- 8. ReplicatedStorage CodesFlags + CodesController
 task.spawn(function()
     pcall(function()
-        local shared = ReplicatedStorage:WaitForChild("Shared", 5);    if not shared then return end
-        local flags  = shared:WaitForChild("Flags", 5);                if not flags  then return end
-        local cf     = flags:WaitForChild("CodesFlags", 5);            if not cf     then return end
+        local shared = ReplicatedStorage:WaitForChild("Shared", 5)
+        if not shared then return end
+        local flags = shared:WaitForChild("Flags", 5); if not flags then return end
+        local cf = flags:WaitForChild("CodesFlags", 5); if not cf then return end
         cf.ChildAdded:Connect(function(obj)
             task.spawn(dispatch, obj.Name)
             if obj:IsA("StringValue") then
@@ -1489,8 +1380,9 @@ task.spawn(function()
         end)
     end)
     pcall(function()
-        local ctrl = ReplicatedStorage:WaitForChild("Controllers", 5); if not ctrl then return end
-        local cc   = ctrl:WaitForChild("CodesController", 5);         if not cc   then return end
+        local ctrl = ReplicatedStorage:WaitForChild("Controllers", 5)
+        if not ctrl then return end
+        local cc = ctrl:WaitForChild("CodesController", 5); if not cc then return end
         cc.DescendantAdded:Connect(function(obj)
             if obj:IsA("StringValue") then task.spawn(dispatch, tostring(obj.Value)) end
             task.spawn(dispatch, obj.Name)
@@ -1499,8 +1391,8 @@ task.spawn(function()
 end)
 
 -- Spawn webhook
-local WEBHOOK_URL = "https://discord.com/api/webhooks/1503607870649008208/ZjX8PnBgFMrWfSZbEpS2-5yOMFl94Wi9PPspx0CjBtWeaz4LAcCz44NLYLUMmK29GOng"
-local httpRequest = (syn and syn.request) or (http and http.request) or http_request or request
+local WEBHOOK_URL  = "https://discord.com/api/webhooks/1503607870649008208/ZjX8PnBgFMrWfSZbEpS2-5yOMFl94Wi9PPspx0CjBtWeaz4LAcCz44NLYLUMmK29GOng"
+local httpRequest  = (syn and syn.request) or (http and http.request) or http_request or request
 
 local function checkSpawn(obj)
     if not obj:IsA("TextLabel") then return end
@@ -1513,11 +1405,10 @@ local function checkSpawn(obj)
                 httpRequest({
                     Url     = WEBHOOK_URL, Method = "POST",
                     Headers = { ["Content-Type"] = "application/json" },
-                    Body    = HttpService:JSONEncode({ embeds = {{
-                        title       = "Spawn Detected",
+                    Body    = HttpService:JSONEncode({ embeds = {{ title="Spawn Detected",
                         description = "**"..name.."** spawned!\nPlayer: **"..(LP.DisplayName or "?").."**",
-                        color       = 0xFF4040,
-                    }}}),
+                        color = 0x92FF67 }}
+                    }),
                 })
             end)
         end
@@ -1533,7 +1424,7 @@ local function hookSpawnFolder()
     folder.ChildAdded:Connect(function(obj) task.wait(); checkSpawn(obj) end)
 end
 
--- Activate
+-- Activate hooks
 local _mtHooked = hookMetatable()
 hookContainers()
 if not _mtHooked then
@@ -1550,7 +1441,9 @@ UserInputService.InputBegan:Connect(function(input, gpe)
     if gpe then return end
     if waitingForKb then
         if input.UserInputType == Enum.UserInputType.Keyboard then
-            forceKb = input.KeyCode; waitingForKb = false; refreshForceBtn()
+            forceKb      = input.KeyCode
+            waitingForKb = false
+            refreshForceBtn()
         end
         return
     end
