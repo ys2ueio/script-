@@ -1700,6 +1700,102 @@ local function stopAntiKick()
 end
 task.spawn(function() pcall(startAntiKick) end)
 
+-- ===================================================================
+-- BRAINROT TOOL SAFETY
+-- Coupe automatiquement les features kick-able quand une tool
+-- brainrot/skibidi/toilet est équipée. Event-driven, zéro polling.
+-- ===================================================================
+local _brtEnabled     = false
+local _brtDetected    = false
+local _brtGlobalConns = {}  -- conn CharacterAdded (vie du script)
+local _brtCharConns   = {}  -- conns ChildAdded/Removed (par character)
+
+local _BRT_KEYWORDS = { "brainrot", "skibidi", "toilet" }
+
+local function _brtIsKickTool(name)
+	local low = name:lower()
+	for _, kw in ipairs(_BRT_KEYWORDS) do
+		if low:find(kw, 1, true) then return true end
+	end
+	return false
+end
+
+local function _brtCountKickTools(char)
+	local n = 0
+	for _, obj in ipairs(char:GetChildren()) do
+		if obj:IsA("Tool") and _brtIsKickTool(obj.Name) then n = n + 1 end
+	end
+	return n
+end
+
+local function _brtOnDetect()
+	if _brtDetected then return end  -- idempotent
+	_brtDetected = true
+	-- Speed booster
+	if _speedBoosterActive then _speedBoosterActive = false end
+	-- Auto left / right
+	if State.autoLeftEnabled  then stopAutoLeft()  end
+	if State.autoRightEnabled then stopAutoRight() end
+	-- Aimbot V1 + V3
+	if AB.active    then AB.stop()    end
+	if AimV3.active then AimV3.stop() end
+	-- Hook UI optionnel (connecté depuis _MH_buildUI si besoin)
+	if _G._MH_onBrainrotDetect then pcall(_G._MH_onBrainrotDetect) end
+end
+
+local function _brtOnClear()
+	_brtDetected = false
+	if _G._MH_onBrainrotClear then pcall(_G._MH_onBrainrotClear) end
+end
+
+local function _brtUnhookChar()
+	for _, c in ipairs(_brtCharConns) do pcall(function() c:Disconnect() end) end
+	_brtCharConns = {}
+end
+
+local function _brtHookChar(char)
+	_brtUnhookChar()
+	if not char then return end
+
+	-- Scan immédiat des tools déjà équipées
+	if _brtCountKickTools(char) > 0 then _brtOnDetect() else _brtOnClear() end
+
+	-- Tool équipée
+	local c1 = char.ChildAdded:Connect(function(obj)
+		if not _brtEnabled then return end
+		if obj:IsA("Tool") and _brtIsKickTool(obj.Name) then _brtOnDetect() end
+	end)
+	table.insert(_brtCharConns, c1)
+
+	-- Tool déséquipée : reset seulement si aucun brainrot tool restant
+	local c2 = char.ChildRemoved:Connect(function(obj)
+		if not _brtEnabled then return end
+		if obj:IsA("Tool") and _brtIsKickTool(obj.Name) then
+			if _brtCountKickTools(char) == 0 then _brtOnClear() end
+		end
+	end)
+	table.insert(_brtCharConns, c2)
+end
+
+local function enableBrainrotSafety()
+	if _brtEnabled then return end
+	_brtEnabled = true
+	_brtHookChar(LP.Character)
+	local c = LP.CharacterAdded:Connect(function(newChar)
+		if not _brtEnabled then return end
+		task.defer(function() _brtHookChar(newChar) end)
+	end)
+	table.insert(_brtGlobalConns, c)
+end
+
+local function disableBrainrotSafety()
+	_brtEnabled  = false
+	_brtDetected = false
+	_brtUnhookChar()
+	for _, c in ipairs(_brtGlobalConns) do pcall(function() c:Disconnect() end) end
+	_brtGlobalConns = {}
+end
+
 local _MH_buildUI
 _MH_buildUI = function()
 local gui = Instance.new("ScreenGui")
