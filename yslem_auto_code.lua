@@ -450,9 +450,9 @@ addLivingTextGradient(_codeBarLbl)
 local autoBtn = Instance.new("TextButton", page1)
 autoBtn.Size             = UDim2.new(1, -20, 0, 24)
 autoBtn.Position         = UDim2.new(0, 10, 0, 42)
-autoBtn.BackgroundColor3 = _enabled and C_ON or C_OFF
-autoBtn.Text             = _enabled and "AUTO ENTER CODE: ON" or "AUTO ENTER CODE: OFF"
-autoBtn.TextColor3       = _enabled and C_WHITE or C_DIM
+autoBtn.BackgroundColor3 = _autoAccept and C_ON or C_OFF
+autoBtn.Text             = _autoAccept and "AUTO ENTER CODE: ON" or "AUTO ENTER CODE: OFF"
+autoBtn.TextColor3       = _autoAccept and C_WHITE or C_DIM
 autoBtn.Font             = Enum.Font.GothamBlack
 autoBtn.TextSize         = 11
 autoBtn.BorderSizePixel  = 0
@@ -461,11 +461,11 @@ autoBtn.ZIndex           = 12
 addCorner(autoBtn, 8)
 addLivingTextGradient(autoBtn)
 autoBtn.MouseButton1Click:Connect(function()
-    _enabled = not _enabled
-    autoBtn.Text       = _enabled and "AUTO ENTER CODE: ON" or "AUTO ENTER CODE: OFF"
-    autoBtn.TextColor3 = _enabled and C_WHITE or C_DIM
-    TweenService:Create(autoBtn, TweenInfo.new(0.15), {BackgroundColor3 = _enabled and C_ON or C_OFF}):Play()
-    if not _enabled and clearAceCapture then clearAceCapture() end
+    _autoAccept = not _autoAccept
+    autoBtn.Text       = _autoAccept and "AUTO ENTER CODE: ON" or "AUTO ENTER CODE: OFF"
+    autoBtn.TextColor3 = _autoAccept and C_WHITE or C_DIM
+    TweenService:Create(autoBtn, TweenInfo.new(0.15), {BackgroundColor3 = _autoAccept and C_ON or C_OFF}):Play()
+    if not _autoAccept and clearAceCapture then clearAceCapture() end
     _lastStatusMsg = nil
 end)
 
@@ -526,7 +526,14 @@ enterBtn.MouseButton1Click:Connect(function()
         end
         return
     end
-    if appendToBox then appendToBox(code) end
+    _capturedParts = {}
+    local ok, res = aceRedeem(code)
+    if ok then
+        setStatus("Redeemed: " .. code, COLORS.Green)
+        flashCode(code, COLORS.Green)
+    else
+        setStatus("Failed: " .. tostring(res), COLORS.Red)
+    end
     TweenService:Create(enterBtn, TweenInfo.new(0.1), {BackgroundColor3 = C_ON}):Play()
     task.delay(0.2, function()
         TweenService:Create(enterBtn, TweenInfo.new(0.2), {BackgroundColor3 = C_ROW}):Play()
