@@ -130,9 +130,7 @@ end
 local function aceRedeem(code)
     local ok, res = aceRedeemViaBox(code)
     if ok then return true, res end
-    -- box was found but connections failed → respect getconns-only policy
-    if getconns and res ~= "no codebox" then return false, res end
-    -- box is nil (game closed it after previous redeem) → remote fallback
+    if getconns then return false, res end
     return aceRedeemViaRemote(code)
 end
 
@@ -955,7 +953,6 @@ function appendToBox(text)
             local ok, res = aceRedeem(combinedCode)
             local success = ok and (type(res) ~= "table" or res.success or res.Success)
             if success then
-                _lastStatusMsg = nil
                 setStatus("Redeemed: " .. combinedCode, COLORS.Green)
                 _autoResetToken += 1
                 local myToken = _autoResetToken
@@ -970,11 +967,9 @@ function appendToBox(text)
                 local restored = restoreRejectedText(box, combinedCode)
                 clearPendingSubmission()
                 if restored then
-                    _lastStatusMsg = nil
                     setStatus("Invalid - repasted: " .. combinedCode, COLORS.Text)
                     flashCode(combinedCode, COLORS.Red)
                 else
-                    _lastStatusMsg = nil
                     setStatus("Invalid / cooldown", COLORS.Red)
                 end
             end
