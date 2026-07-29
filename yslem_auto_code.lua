@@ -51,7 +51,8 @@ local KNOWN_CODE_BOX_PATH = {"Codes", "Codes", "CodeRedeem", "TextBox"}
 local setStatus, flashCode, appendToBox
 local rememberPendingSubmission, clearPendingSubmission, handleRedemptionFeedback
 local clearAceCapture
-local _lastStatusMsg = nil
+local _lastStatusMsg   = nil
+local _autoResetToken  = 0
 local Net         = ReplicatedStorage:WaitForChild("Packages"):WaitForChild("Net")
 local getupvalues = (debug and debug.getupvalues) or getupvalues
 local getconns    = getconnections or (debug and debug.getconnections)
@@ -129,7 +130,9 @@ end
 local function aceRedeem(code)
     local ok, res = aceRedeemViaBox(code)
     if ok then return true, res end
-    if getconns then return false, res end
+    -- box was found but connections failed → respect getconns-only policy
+    if getconns and res ~= "no codebox" then return false, res end
+    -- box is nil (game closed it after previous redeem) → remote fallback
     return aceRedeemViaRemote(code)
 end
 
@@ -256,7 +259,7 @@ pillByLbl.ZIndex                 = 5
 local PANEL_W   = 240
 local TITLE_H   = 28
 local TAB_H     = 26
-local CONTENT_H = 206
+local CONTENT_H = 174
 local FULL_H    = TITLE_H + TAB_H + CONTENT_H
 local MINI_H    = TITLE_H
 
@@ -497,55 +500,10 @@ forceBtn.MouseLeave:Connect(function()
     TweenService:Create(forceBtn, TweenInfo.new(0.15), {TextColor3 = C_DIM}):Play()
 end)
 
--- ENTER CODE button
-local enterBtn = Instance.new("TextButton", page1)
-enterBtn.Size             = UDim2.new(1, -20, 0, 24)
-enterBtn.Position         = UDim2.new(0, 10, 0, 110)
-enterBtn.BackgroundColor3 = C_ROW
-enterBtn.Text             = "ENTER CODE"
-enterBtn.TextColor3       = C_WHITE
-enterBtn.Font             = Enum.Font.GothamBlack
-enterBtn.TextSize         = 11
-enterBtn.BorderSizePixel  = 0
-enterBtn.AutoButtonColor  = false
-enterBtn.ZIndex           = 12
-addCorner(enterBtn, 8)
-addLivingTextGradient(enterBtn)
-enterBtn.MouseButton1Click:Connect(function()
-    local code = (_codeBarLbl and _codeBarLbl.Text or ""):match("^%s*(.-)%s*$")
-    if code == "" then
-        if _codeBarLbl then
-            _codeBarLbl.Text       = "Nothing detected"
-            _codeBarLbl.TextColor3 = Color3.fromRGB(255, 80, 80)
-            task.delay(1.5, function()
-                if _codeBarLbl and _codeBarLbl.Text == "Nothing detected" then
-                    _codeBarLbl.Text       = ""
-                    _codeBarLbl.TextColor3 = C_DIM
-                end
-            end)
-        end
-        return
-    end
-    _capturedParts = {}
-    _lastStatusMsg = nil
-    local ok, res = aceRedeem(code)
-    if ok then
-        setStatus("Redeemed: " .. code, COLORS.Green)
-        flashCode(code, COLORS.Green)
-    else
-        _lastStatusMsg = nil
-        setStatus("Failed: " .. tostring(res), COLORS.Red)
-    end
-    TweenService:Create(enterBtn, TweenInfo.new(0.1), {BackgroundColor3 = C_ON}):Play()
-    task.delay(0.2, function()
-        TweenService:Create(enterBtn, TweenInfo.new(0.2), {BackgroundColor3 = C_ROW}):Play()
-    end)
-end)
-
 -- Delay row (UI element kept; no delay logic in ACE)
 local delayRow = Instance.new("Frame", page1)
 delayRow.Size             = UDim2.new(1, -20, 0, 24)
-delayRow.Position         = UDim2.new(0, 10, 0, 142)
+delayRow.Position         = UDim2.new(0, 10, 0, 110)
 delayRow.BackgroundColor3 = C_ROW
 delayRow.BorderSizePixel  = 0
 delayRow.ZIndex           = 12
@@ -583,7 +541,7 @@ addLivingTextGradient(delayBox)
 -- Parts row → _submitAfter
 local partsRow = Instance.new("Frame", page1)
 partsRow.Size             = UDim2.new(1, -20, 0, 24)
-partsRow.Position         = UDim2.new(0, 10, 0, 174)
+partsRow.Position         = UDim2.new(0, 10, 0, 142)
 partsRow.BackgroundColor3 = C_ROW
 partsRow.BorderSizePixel  = 0
 partsRow.ZIndex           = 12
@@ -791,6 +749,10 @@ end
 
 clearAceCapture = function()
     _capturedParts = {}
+    _autoResetToken += 1
+    _lastStatusMsg = nil
+    if _codeBarLbl then _codeBarLbl.Text = "" end
+    setStatus("Ready", COLORS.Green)
 end
 
 local function clearBoxWatchers()
@@ -995,6 +957,15 @@ function appendToBox(text)
             if success then
                 _lastStatusMsg = nil
                 setStatus("Redeemed: " .. combinedCode, COLORS.Green)
+                _autoResetToken += 1
+                local myToken = _autoResetToken
+                task.delay(3, function()
+                    if myToken ~= _autoResetToken then return end
+                    _lastStatusMsg = nil
+                    _capturedParts = {}
+                    if _codeBarLbl then _codeBarLbl.Text = "" end
+                    setStatus("Ready", COLORS.Green)
+                end)
             else
                 local restored = restoreRejectedText(box, combinedCode)
                 clearPendingSubmission()
