@@ -226,53 +226,61 @@ local function isBlacklisted(text)
     return false
 end
 
-local function looksLikeCode(text)
-    if not text or #text < 3 or #text > 50 then return false end
-    if isBlacklisted(text) then return false end
-    local low = text:lower()
-    for _, w in ipairs(commonWords) do
-        if low == w then return false end
-    end
-    if not text:match("%a") then return false end
-    if text == low and not text:match("%d") then return false end
-    -- Rejette valeurs hex pures (couleurs RGB : 3/6/8 chars 0-9A-F)
-    if text:match("^[0-9A-Fa-f]+$") and (#text == 3 or #text == 6 or #text == 8) then return false end
-    local wordCount = 0
-    for _ in text:gmatch("%S+") do wordCount = wordCount + 1 end
-    return wordCount <= 4
+local function looksLikeCode(token)
+    if not token then return false end
+    if #token < 4 or #token > 25 then return false end
+    if not token:match("^%w[%w%-_]*%w$") and not token:match("^%w%w$") then return false end
+    if isBlacklisted(token) then return false end
+    local low = token:lower()
+    for _, w in ipairs(commonWords) do if low == w then return false end end
+    local letterCount = 0
+    for _ in token:gmatch("%a") do letterCount = letterCount + 1 end
+    if letterCount < 3 then return false end
+    if token:match("^%d+[smhdSMHD]$") then return false end
+    local hasDigit   = token:match("%d") ~= nil
+    local letterOnly = token:gsub("[%-_]", "")
+    local isAllUpper = (letterOnly == letterOnly:upper()) and letterOnly:match("%a") ~= nil
+    if not (hasDigit or (isAllUpper and #token >= 5)) then return false end
+    return true
 end
 
 local function isLoneCode(text)
     if not text then return false end
-    if not text:match("^[%w%-_]+$") then return false end
-    if #text < 4 or #text > 30 then return false end
-    -- uppercase + digit: standard code format (CODE2025, EPIC100, etc.)
-    if text:match("%u") and text:match("%d") then return true end
-    -- all-caps no digit: only if 7+ chars (avoids UI labels like SHOP, DUELS, RARE)
-    if text == text:upper() and text:match("%u") and #text >= 7 then return true end
-    return false
+    text = text:match("^%s*(.-)%s*$")
+    if text == "" or text:find("%s") then return false end
+    if #text < 3 or #text > 25 then return false end
+    if not text:match("^[%w][%w%-_]*$") then return false end
+    if isBlacklisted(text) then return false end
+    if text:match("^%d+[smhdSMHD]$") then return false end
+    if text:match("^%d+$") then return false end
+    local letters = 0
+    for _ in text:gmatch("%a") do letters = letters + 1 end
+    return letters >= 2
 end
 
+-- Gamma Hub scan: extrait TOUS les codes d'un texte (table)
 local function extractCodesFromText(text)
-    if not text or text == "" then return nil end
-    if isLoneCode(text) and looksLikeCode(text) then return text end
-    for token in text:gmatch("[%w%-_]+") do
-        if isLoneCode(token) and looksLikeCode(token) then return token end
+    local found = {}
+    if not text then return found end
+    if isHudNoise(text) then return found end
+    local trimmed = text:match("^%s*(.-)%s*$")
+    trimmed = trimmed:gsub("<[^>]->", "")
+    if isLoneCode(trimmed) and looksLikeCode(trimmed) then
+        table.insert(found, trimmed)
+        return found
     end
-    return nil
+    local seen = {}
+    for token in trimmed:gmatch("[%w][%w%-_]*") do
+        if not seen[token] and looksLikeCode(token) then
+            seen[token] = true
+            table.insert(found, token)
+        end
+    end
+    return found
 end
 
 local function extractCode(txt)
-    if not txt then return nil end
-    for token in txt:gmatch("[A-Z][A-Z0-9%-_]+") do
-        -- reject short all-caps no-digit tokens (LUCKY, BLACK, RARE, GOLD, etc.)
-        if #token >= 4 and looksLikeCode(token) and (token:match("%d") or #token >= 7) then
-            local letters = 0
-            for _ in token:gmatch("%a") do letters = letters + 1 end
-            if letters >= 3 then return token end
-        end
-    end
-    return nil
+    return extractCodesFromText(txt)[1]
 end
 
 local function isHudNoise(txt)
@@ -566,6 +574,16 @@ local function addPending(code)
     end
 end
 
+-- File tous les codes trouvés (Gamma Hub multi-code)
+local function pendingCodes(codes)
+    for _, code in ipairs(codes) do
+        if not (code:lower() == _lastRedeem.code:lower() and (tick() - _lastRedeem.time) < 30) then
+            setLastCode(code)
+            addPending(code)
+        end
+    end
+end
+
 -- ===================================================================
 -- DISPATCH
 -- ===================================================================
@@ -654,27 +672,21 @@ local function dispatch(text, trusted)
         if rep ~= nil then
             result = rep
         else
-            result = extractCode(text) or (isLoneCode(text) and looksLikeCode(text) and text or nil)
+            pendingCodes(extractCodesFromText(text)); return
         end
     elseif hasKeywords and matchesKeyword(text) then
-        -- Try to extract the code from this same text first (e.g. "Use Code ABC123!")
-        local inlineCode = extractCode(text)
-        if inlineCode then
-            result = inlineCode
+        local codes = extractCodesFromText(text)
+        if #codes > 0 then
+            pendingCodes(codes); return
         else
-            collecting = true
-            setScanState("KEYWORD")
-            return
+            collecting = true; setScanState("KEYWORD"); return
         end
     else
         local rep = applyReplace(text)
         if rep ~= nil then
             result = rep
-        elseif trusted then
-            result = isLoneCode(text) and text or extractCode(text)
         else
-            -- untrusted, no keyword: only accept if the full text IS a lone code
-            result = (isLoneCode(text) and looksLikeCode(text)) and text or nil
+            pendingCodes(extractCodesFromText(text)); return
         end
     end
 
