@@ -920,6 +920,7 @@ end
 -- APPEND TO BOX
 -- ================================================================
 function appendToBox(text)
+    _autoResetToken += 1
     if not text or text == "" then return end
     if _lastWatchedBox and not isBoxStillOpen(_lastWatchedBox) then
         resetPasteCounter()
@@ -959,7 +960,6 @@ function appendToBox(text)
                 task.delay(3, function()
                     if myToken ~= _autoResetToken then return end
                     _lastStatusMsg = nil
-                    _capturedParts = {}
                     if _codeBarLbl then _codeBarLbl.Text = "" end
                     setStatus("Ready", COLORS.Green)
                 end)
