@@ -130,6 +130,7 @@ end
 local function aceRedeem(code)
     local ok, res = aceRedeemViaBox(code)
     if ok then return true, res end
+    if getconns then return false, res end
     return aceRedeemViaRemote(code)
 end
 
@@ -344,7 +345,7 @@ local titleLbl = Instance.new("TextLabel", panel)
 titleLbl.Size                   = UDim2.new(1, -40, 0, TITLE_H)
 titleLbl.Position               = UDim2.new(0, 10, 0, 0)
 titleLbl.BackgroundTransparency = 1
-titleLbl.Text                   = "YSLEM AUTO CODE"
+titleLbl.Text                   = "MOON HUB AUTO CODE"
 titleLbl.TextColor3             = C_WHITE
 titleLbl.Font                   = Enum.Font.GothamBlack
 titleLbl.TextSize               = 13
