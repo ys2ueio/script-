@@ -130,7 +130,6 @@ end
 local function aceRedeem(code)
     local ok, res = aceRedeemViaBox(code)
     if ok then return true, res end
-    if getconns then return false, res end
     return aceRedeemViaRemote(code)
 end
 
