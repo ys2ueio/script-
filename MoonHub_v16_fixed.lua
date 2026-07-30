@@ -14,17 +14,6 @@ local LP            = Players.LocalPlayer
 if not LP.Character then LP.CharacterAdded:Wait() end
 
 -- ===================================================================
--- SECURITY KERNEL
--- ===================================================================
-local _K = {
-	promptCache = nil, promptCacheTime = 0,
-	lastHrpPos = Vector3.new(0,0,0),
-	cacheValidityTime = 0.08, cacheDistanceThreshold = 1, stealRadius = 60,
-	randomDelayBase = 0.05, randomDelayVariation = 0.03,
-	methodNameMap = {}, testHistory = {}, maxHistory = 50,
-}
-
--- ===================================================================
 -- COLOR PALETTE
 -- ===================================================================
 local C_BG      = Color3.fromRGB(0,0,0)
@@ -324,10 +313,6 @@ RunService.RenderStepped:Connect(function()
 end)
 
 -- ===================================================================
--- MOONSCAPE
--- ===================================================================
-
--- ===================================================================
 -- DESTROY EXISTING
 -- ===================================================================
 local function destroyAllMoonHub()
@@ -424,14 +409,6 @@ RunService.Stepped:Connect(function()
 	local md = h.MoveDirection
 	if md.Magnitude > 0 then proxyMove(md, getCurrentSpeed()) end
 end)
-
--- ===================================================================
--- PLOT DETECTION
--- ===================================================================
-
--- ===================================================================
--- PROMPT DETECTION
--- ===================================================================
 
 -- ===================================================================
 -- AUTO STEAL (Auto Grab — logique Irish Hub / test_speed.lua)
@@ -1060,8 +1037,6 @@ local function antiLagAdvStop()
 end
 
 -- ===================================================================
--- ===================================================================
--- MEDUSA COUNTER (logique raw__59_)
 -- MEDUSA COUNTER (raw__59_ logic)
 local _medLastUsed = 0
 local _medDebounce = false
@@ -1168,7 +1143,6 @@ LP.CharacterAdded:Connect(function(char)
 end)
 
 
--- ANTI BAT (logique Envy — spike 1000 + restore XZ)
 -- ANTI BAT (Envy logic — 1000 spike + XZ restore)
 local BC = {active=false, conn=nil}
 
@@ -1193,7 +1167,6 @@ function BC.stop()
 end
 
 -- ===================================================================
--- BAT AIMBOT + AIM BYPASS (logique raw__59_)
 -- BAT AIMBOT + AIM BYPASS (raw__59_ logic)
 local VYSE_HIT_DIST = 5
 local AB_SPEED      = 58
@@ -1279,9 +1252,7 @@ function AB.stop()
 	if hum then hum.AutoRotate=true end
 end
 
--- Aim Bypass (face tracking)
 -- ===================================================================
--- AIM V3 (anti-desync + TP ennemi + frappe)
 -- AIM V3 (anti-desync + enemy TP + strike)
 local AimV3 = {active=false, conn=nil}
 local _av3HitCD = false
@@ -1406,13 +1377,6 @@ end
 -- BUILD PAGES
 -- ===================================================================
 local applyAntiBatState
-local setAutoStealRowVisual
-local setAntiRagdollRowVisual
-local setAntiBatQuickBtnVisual
-local setBatCounterRowVisual
-local setAimbotRowVisual
-local setAimbotV2RowVisual
-local setInfJumpRowVisual
 
 	-- Bat Counter — source bat_counter.txt (RemoteEvent support + "bat" keyword fallback)
 local BatCounter = {active=false, conn=nil}
@@ -1457,85 +1421,6 @@ end
 function BatCounter.stop()
 	if BatCounter.conn then BatCounter.conn:Disconnect(); BatCounter.conn=nil end
 	_bcDebounce=false
-end
-
--- ===================================================================
--- ANTI-DIE (source: anti_die_made_by_mehneymarish_11.txt)
--- ===================================================================
-local _adLoop    = nil
-local _adCharConn = nil
-local _adInvincibleUntil = 0
-local _adConfig  = { healthThreshold=25, fallDamageProtection=true, ragdollProtection=true, invincibilityFrames=0.5 }
-
-local function _adSuperHeal(hum)
-	if not hum or not hum.Parent then return end
-	local max = hum.MaxHealth or 100
-	if hum.Health >= max and hum.Health > 0 then return end
-	hum.Health = max
-	_adInvincibleUntil = tick() + _adConfig.invincibilityFrames
-	pcall(function()
-		local char = hum.Parent
-		for _, child in ipairs(char:GetChildren()) do
-			if child:IsA("NumberValue") then
-				local n = child.Name:lower()
-				if n:find("health") or n:find("hp") or n:find("life") then child.Value = 100 end
-			elseif child:IsA("BoolValue") and child.Name:lower():find("dead") then
-				child.Value = false
-			end
-		end
-	end)
-end
-
-local function _adSetup(char)
-	if not char then return end
-	local hum  = char:FindFirstChildOfClass("Humanoid"); if not hum then return end
-	local root = char:FindFirstChild("HumanoidRootPart")
-	if _adLoop then pcall(function() _adLoop:Disconnect() end); _adLoop = nil end
-	_adLoop = RunService.Heartbeat:Connect(function()
-		if not hum or not hum.Parent then return end
-		if hum.Health <= 0 then
-			_adSuperHeal(hum)
-			hum:ChangeState(Enum.HumanoidStateType.Running)
-			if root and root.Parent then
-				root.CFrame = CFrame.new(root.Position + Vector3.new(0,2,0))
-				root.AssemblyLinearVelocity = Vector3.zero
-			end
-			return
-		end
-		if tick() < _adInvincibleUntil and hum.Health < hum.MaxHealth then
-			hum.Health = hum.MaxHealth
-		end
-		if _adConfig.fallDamageProtection and root and root.Parent then
-			local vy = root.AssemblyLinearVelocity.Y
-			if vy < -25 then
-				root.AssemblyLinearVelocity = Vector3.new(root.AssemblyLinearVelocity.X, -3, root.AssemblyLinearVelocity.Z)
-				_adSuperHeal(hum)
-			end
-		end
-		if _adConfig.ragdollProtection then
-			local st = hum:GetState()
-			if st==Enum.HumanoidStateType.Physics or st==Enum.HumanoidStateType.Ragdoll or st==Enum.HumanoidStateType.FallingDown then
-				hum:ChangeState(Enum.HumanoidStateType.Running)
-				_adSuperHeal(hum)
-				if root and root.Parent then
-					root.AssemblyLinearVelocity  = Vector3.zero
-					root.AssemblyAngularVelocity = Vector3.zero
-				end
-			end
-		end
-		if hum.Health > 0 and hum.Health <= _adConfig.healthThreshold then _adSuperHeal(hum) end
-	end)
-end
-
-local function startAntiDie()
-	if _adCharConn then pcall(function() _adCharConn:Disconnect() end); _adCharConn = nil end
-	_adSetup(LP.Character)
-	_adCharConn = LP.CharacterAdded:Connect(function(char) task.wait(0.1); _adSetup(char) end)
-end
-
-local function stopAntiDie()
-	if _adLoop     then pcall(function() _adLoop:Disconnect() end);     _adLoop     = nil end
-	if _adCharConn then pcall(function() _adCharConn:Disconnect() end); _adCharConn = nil end
 end
 
 -- ===================================================================
@@ -1753,102 +1638,6 @@ local function stopAntiKick()
 	_akActive = false
 end
 task.spawn(function() pcall(startAntiKick) end)
-
--- ===================================================================
--- BRAINROT TOOL SAFETY
--- Coupe automatiquement les features kick-able quand une tool
--- brainrot/skibidi/toilet est équipée. Event-driven, zéro polling.
--- ===================================================================
-local _brtEnabled     = false
-local _brtDetected    = false
-local _brtGlobalConns = {}  -- conn CharacterAdded (vie du script)
-local _brtCharConns   = {}  -- conns ChildAdded/Removed (par character)
-
-local _BRT_KEYWORDS = { "brainrot", "skibidi", "toilet" }
-
-local function _brtIsKickTool(name)
-	local low = name:lower()
-	for _, kw in ipairs(_BRT_KEYWORDS) do
-		if low:find(kw, 1, true) then return true end
-	end
-	return false
-end
-
-local function _brtCountKickTools(char)
-	local n = 0
-	for _, obj in ipairs(char:GetChildren()) do
-		if obj:IsA("Tool") and _brtIsKickTool(obj.Name) then n = n + 1 end
-	end
-	return n
-end
-
-local function _brtOnDetect()
-	if _brtDetected then return end  -- idempotent
-	_brtDetected = true
-	-- Speed booster
-	if _speedBoosterActive then _speedBoosterActive = false end
-	-- Auto left / right
-	if State.autoLeftEnabled  then stopAutoLeft()  end
-	if State.autoRightEnabled then stopAutoRight() end
-	-- Aimbot V1 + V3
-	if AB.active    then AB.stop()    end
-	if AimV3.active then AimV3.stop() end
-	-- Hook UI optionnel (connecté depuis _MH_buildUI si besoin)
-	if _GH.onBrainrotDetect then pcall(_GH.onBrainrotDetect) end
-end
-
-local function _brtOnClear()
-	_brtDetected = false
-	if _GH.onBrainrotClear then pcall(_GH.onBrainrotClear) end
-end
-
-local function _brtUnhookChar()
-	for _, c in ipairs(_brtCharConns) do pcall(function() c:Disconnect() end) end
-	_brtCharConns = {}
-end
-
-local function _brtHookChar(char)
-	_brtUnhookChar()
-	if not char then return end
-
-	-- Scan immédiat des tools déjà équipées
-	if _brtCountKickTools(char) > 0 then _brtOnDetect() else _brtOnClear() end
-
-	-- Tool équipée
-	local c1 = char.ChildAdded:Connect(function(obj)
-		if not _brtEnabled then return end
-		if obj:IsA("Tool") and _brtIsKickTool(obj.Name) then _brtOnDetect() end
-	end)
-	table.insert(_brtCharConns, c1)
-
-	-- Tool déséquipée : reset seulement si aucun brainrot tool restant
-	local c2 = char.ChildRemoved:Connect(function(obj)
-		if not _brtEnabled then return end
-		if obj:IsA("Tool") and _brtIsKickTool(obj.Name) then
-			if _brtCountKickTools(char) == 0 then _brtOnClear() end
-		end
-	end)
-	table.insert(_brtCharConns, c2)
-end
-
-local function enableBrainrotSafety()
-	if _brtEnabled then return end
-	_brtEnabled = true
-	_brtHookChar(LP.Character)
-	local c = LP.CharacterAdded:Connect(function(newChar)
-		if not _brtEnabled then return end
-		task.defer(function() _brtHookChar(newChar) end)
-	end)
-	table.insert(_brtGlobalConns, c)
-end
-
-local function disableBrainrotSafety()
-	_brtEnabled  = false
-	_brtDetected = false
-	_brtUnhookChar()
-	for _, c in ipairs(_brtGlobalConns) do pcall(function() c:Disconnect() end) end
-	_brtGlobalConns = {}
-end
 
 local _MH_buildUI
 _MH_buildUI = function()
@@ -2417,7 +2206,7 @@ bgImg.Name = "BgFill"; bgImg.Size = UDim2.new(1,0,1,0)
 bgImg.BackgroundColor3 = C_BG; bgImg.BorderSizePixel = 0; bgImg.ZIndex = 0
 addCorner(bgImg, 24)
 
-local mainStroke = addLivingStroke(mainOuter, 2)
+addLivingStroke(mainOuter, 2)
 
 -- ===================================================================
 -- TITLE BAR
@@ -2794,13 +2583,13 @@ end
 -- ===================================================================
 buildPage("Combat", function()
 	UIB.makeSectionLabel("Combat")
-	setBatCounterRowVisual = UIB.makeToggleRow("Bat Counter",false,function(on)
+	UIB.makeToggleRow("Bat Counter",false,function(on)
 		BatCounter.active=on; if on then BatCounter.start() else BatCounter.stop() end
 	end)
-	setAimbotRowVisual = UIB.makeToggleRow("Bat Aimbot",false,function(on)
+	UIB.makeToggleRow("Bat Aimbot",false,function(on)
 		if on then if ABP.active then ABP.stop() end; AB.start() else AB.stop() end
 	end)
-	setAimbotV2RowVisual = UIB.makeToggleRow("Bat Aimbot V2",false,function(on)
+	UIB.makeToggleRow("Bat Aimbot V2",false,function(on)
 		if on then if AB.active then AB.stop() end; ABP.start() else ABP.stop() end
 	end)
 
@@ -2808,7 +2597,7 @@ buildPage("Combat", function()
 	UIB.makeInputRow("Aim Speed",AB.SPEED,function(n) if n>0 and n<=200 then AB.SPEED=n end end)
 	UIB.makeInputRow("Aim Height",AB.HEIGHT,function(n) if n>=0 and n<=30 then AB.HEIGHT=n end end)
 	UIB.makeGap(4); UIB.makeSectionLabel("Defense")
-	setAntiRagdollRowVisual=UIB.makeToggleRow("Anti Ragdoll",true,function(on)
+	UIB.makeToggleRow("Anti Ragdoll",true,function(on)
 		State.antiRagdollEnabled=on; if on then startAntiRagdoll() else stopAntiRagdoll() end
 	end)
 	UIB.makeToggleRow("Medusa Counter",false,function(on)
@@ -2821,7 +2610,7 @@ buildPage("Combat", function()
 		if on then _armStart(LP.Character) else _armStop() end
 	end)
 
-	setInfJumpRowVisual = UIB.makeToggleRow("Infinite Jump",false,function(on)
+	UIB.makeToggleRow("Infinite Jump",false,function(on)
 		IJ.active=on; if on then IJ.start() else IJ.stop() end
 	end)
 	do
@@ -2844,7 +2633,7 @@ buildPage("Combat", function()
 		holB.MouseButton1Click:Connect(function() IJ.mode="hold"; updM(); if _GH.autoSave then _GH.autoSave() end end)
 		makeDivider()
 	end
-	setAutoStealRowVisual=UIB.makeToggleRow("Auto Steal",true,function(on)
+	UIB.makeToggleRow("Auto Steal",true,function(on)
 		AutoSteal.Enabled=on; if on then startAutoSteal() else stopAutoSteal() end
 	end)
 	UIB.makeInputRow("Steal Radius",AutoSteal.Radius,function(n) if n and n>=1 and n<=500 then AutoSteal.Radius=n end end)
@@ -3370,12 +3159,12 @@ buildPage("Keybind", function()
 		elseif match(KB.DropBR)    then runDropBrainrot()
 		elseif match(KB.AutoLeft)  then
 			State.autoLeftEnabled = not State.autoLeftEnabled
-			if State.autoLeftEnabled then startAutoLeft() else stopPatrol() end
+			if State.autoLeftEnabled then startAutoLeft() else stopAutoLeft() end
 		elseif match(KB.AimBot)    then
 			local on = not AB.active; if on then AB.start() else AB.stop() end
 		elseif match(KB.AutoRight) then
 			State.autoRightEnabled = not State.autoRightEnabled
-			if State.autoRightEnabled then startAutoRight() else stopPatrol() end
+			if State.autoRightEnabled then startAutoRight() else stopAutoRight() end
 		elseif match(KB.TPDown)    then tpToGround()
 		elseif match(KB.LagNorm)   then
 			State.laggerActive = not State.laggerActive
@@ -3582,7 +3371,6 @@ applyAntiBatState=function(on)
 	if on then
 		if not IJ.active then IJ.active=true; IJ.start() end
 	end
-	if setAntiBatQuickBtnVisual then setAntiBatQuickBtnVisual(on) end
 	if _GH.autoSave then _GH.autoSave() end
 end
 
@@ -4430,7 +4218,6 @@ local function MH_save()
 				theme             = _currentTheme,
 				autoPlayMode      = State.autoPlayMode,
 				uiScaleVal        = _GH.getUIScale and _GH.getUIScale() or nil,
-				floatScaleVal     = _GH.getFloatScale and _GH.getFloatScale() or nil,
 				positions = (function()
 					local t = {}
 					for id, frame in pairs(_GH.positions or {}) do
@@ -4527,7 +4314,6 @@ local function MH_load()
 			else State.autoPlayMode = data.autoPlayMode end
 		end
 		if data.uiScaleVal and _GH.applyUIScale then _GH.applyUIScale(data.uiScaleVal) end
-		if data.floatScaleVal and _GH.applyFloatScale then _GH.applyFloatScale(data.floatScaleVal) end
 
 		-- Window/widget positions: restored before anything else so frames
 		-- never flash at their default position on load.
@@ -5074,8 +4860,6 @@ buildPage("Settings", function()
 end);  -- required semicolon (otherwise ambiguous merge with the (function() below)
 
 -- ===================================================================
--- ===================================================================
--- ===================================================================
 -- SPEED BYPASS (Moon Hub style — blue, +/- power, exact Cz lag logic)
 -- ===================================================================
 (function()
@@ -5165,7 +4949,6 @@ local function toggle()
 		toggleBtn.BackgroundColor3 = C_OFF_BG; toggleBtn.BackgroundTransparency = 0.2
 		toggleBtn.TextColor3 = C_DIM
 	end
-	if _GH.setSpeedBypassQpVisual then _GH.setSpeedBypassQpVisual(activated) end
 end
 toggleBtn.MouseButton1Click:Connect(toggle)
 _GH.speedBypassToggle = toggle
@@ -5278,8 +5061,6 @@ local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local CoreGui = game:GetService("CoreGui")
 local HttpService = game:GetService("HttpService")
-local RunService = game:GetService("RunService")
-
 local player = Players.LocalPlayer
 local ConfigFile = "MoonLaggerConfig.json"
 
