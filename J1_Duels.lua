@@ -1181,31 +1181,36 @@ end
 local function useGiantPotion()
     if giantPotionDebounce then return end
     giantPotionDebounce = true
-    pcall(function()
-        local c = LP.Character
-        if not c then return end
-        local hum = c:FindFirstChildOfClass("Humanoid")
-        local tool = findGiantPotion()
-        if tool then
-            if tool.Parent ~= c and hum then
-                pcall(function() hum:EquipTool(tool) end)
-                task.wait(0.05)
+    task.spawn(function()
+        pcall(function()
+            local c = LP.Character
+            if not c then return end
+            local hum = c:FindFirstChildOfClass("Humanoid")
+            local tool = findGiantPotion()
+            if tool then
+                if tool.Parent ~= c and hum then
+                    pcall(function() hum:EquipTool(tool) end)
+                end
+                pcall(function() tool:Activate() end)
             end
-            pcall(function() tool:Activate() end)
-        end
+        end)
     end)
-    task.delay(1.5, function() giantPotionDebounce = false end)
+    task.delay(2, function() giantPotionDebounce = false end)
 end
 
-local function startGiantPotionAuto()
+local function _bindGiantPotionHum(hum)
     if giantPotionConn then giantPotionConn:Disconnect(); giantPotionConn = nil end
-    giantPotionConn = RunService.Heartbeat:Connect(function()
+    giantPotionConn = hum:GetPropertyChangedSignal("WalkSpeed"):Connect(function()
         if not giantPotionAutoEnabled then return end
-        local hum = LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
-        if hum and hum.WalkSpeed < 25 then
+        if hum.WalkSpeed < 25 then
             useGiantPotion()
         end
     end)
+end
+
+local function startGiantPotionAuto()
+    local hum = LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
+    if hum then _bindGiantPotionHum(hum) end
 end
 
 local function stopGiantPotionAuto()
