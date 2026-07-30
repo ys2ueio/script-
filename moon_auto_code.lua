@@ -313,7 +313,7 @@ end)
 -- GUI ROOT
 -- ================================================================
 local GUI = Instance.new("ScreenGui")
-GUI.Name           = "MoonHubAutoCode"
+GUI.Name           = tostring(math.random(0x10000, 0xFFFFFF))
 GUI.ResetOnSpawn   = false
 GUI.IgnoreGuiInset = true
 GUI.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
@@ -331,7 +331,7 @@ _ownGui = GUI
 -- STATUS PILL
 -- ================================================================
 local pillWidget = Instance.new("Frame", GUI)
-pillWidget.Name                   = "ScanPill"
+pillWidget.Name                   = tostring(math.random(0x10000, 0xFFFFFF))
 pillWidget.Size                   = UDim2.new(0, 200, 0, 36)
 pillWidget.Position               = UDim2.new(0.5, -100, 0, 35)
 pillWidget.BackgroundTransparency = 1
@@ -1225,4 +1225,3 @@ if getgenv then
 end
 
 setStatus("Moon Hub Auto Code loaded", COLORS.Green)
-print("[MOON HUB AUTO CODE] by Yslem - Loaded")
