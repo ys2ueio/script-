@@ -1,7 +1,7 @@
--- Opaque per-user namespace: looks like a Roblox internal key, consistent per user
-local _NS = "Rbx" .. tostring(game:GetService("Players").LocalPlayer.UserId % 99991)
-if _G[_NS] then return end   -- already running, silent exit
+local _NS = tostring(math.random(0x100000, 0xFFFFFF)) .. tostring(tick()):gsub("%.", "")
+if _G[_NS] then return end
 _G[_NS] = true
+local _GH  = {}   -- replaces all _GH.* / _GH.MH_* to leave zero _G footprint
 
 if not game:IsLoaded() then game.Loaded:Wait() end
 
@@ -128,9 +128,9 @@ local function applyTheme(newName)
 		end)
 	end
 	-- steal fill gradient: swap between blue shimmer (default) and grey shimmer (noir)
-	if _G._MH_stealFillGradRef and _G._MH_stealFillGradRef.Parent then
+	if _GH.stealFillGradRef and _GH.stealFillGradRef.Parent then
 		if newName == "noir" then
-			_G._MH_stealFillGradRef.Color = ColorSequence.new({
+			_GH.stealFillGradRef.Color = ColorSequence.new({
 				ColorSequenceKeypoint.new(0,    Color3.fromRGB(20,  20,  20)),
 				ColorSequenceKeypoint.new(0.25, Color3.fromRGB(90,  90,  90)),
 				ColorSequenceKeypoint.new(0.5,  Color3.fromRGB(200, 200, 200)),
@@ -138,7 +138,7 @@ local function applyTheme(newName)
 				ColorSequenceKeypoint.new(1,    Color3.fromRGB(20,  20,  20)),
 			})
 		else
-			_G._MH_stealFillGradRef.Color = ColorSequence.new({
+			_GH.stealFillGradRef.Color = ColorSequence.new({
 				ColorSequenceKeypoint.new(0,    Color3.fromRGB(10,  30,  90)),
 				ColorSequenceKeypoint.new(0.25, Color3.fromRGB(40,  110, 230)),
 				ColorSequenceKeypoint.new(0.5,  Color3.fromRGB(150, 210, 255)),
@@ -148,12 +148,12 @@ local function applyTheme(newName)
 		end
 	end
 	-- steal status label gradient: swap ready color on theme change
-	if _G._MH_stealReadyColorFn then pcall(_G._MH_stealReadyColorFn) end
+	if _GH.stealReadyColorFn then pcall(_GH.stealReadyColorFn) end
 	if _G_updateThemeUI then _G_updateThemeUI(newName) end
 	-- re-color existing float buttons so active-state uses the new C_ON_BG
-	if _G._MH_refreshFloatActiveColors then pcall(_G._MH_refreshFloatActiveColors) end
+	if _GH.refreshFloatActiveColors then pcall(_GH.refreshFloatActiveColors) end
 	-- player speed billboards live in Workspace (not in _themeAllGuis), update manually
-	local psb = _G._MH_playerSpeedBBs
+	local psb = _GH.playerSpeedBBs
 	if type(psb) == "table" then
 		for _, data in pairs(psb) do
 			if data.lbl and data.lbl.Parent then
@@ -172,7 +172,7 @@ local function applyTheme(newName)
 		end
 	end
 	-- stun timer billboard (local player) lives in Workspace, update manually
-	for _, lbl in ipairs({_G._MH_speedLblRef, _G._MH_timerLblRef}) do
+	for _, lbl in ipairs({_GH.speedLblRef, _GH.timerLblRef}) do
 		if lbl and lbl.Parent then
 			local g = lbl:FindFirstChildOfClass("UIGradient")
 			if g then
@@ -1133,8 +1133,8 @@ local function _armFireOnce(part)
 	_armState.triggered = true
 	_armState.lastFire = tick()
 	task.delay(2.3, function()
-		if _armState.enabled and _G.MH_instareset then
-			_G.MH_instareset()
+		if _armState.enabled and _GH.MH_instareset then
+			_GH.MH_instareset()
 		end
 	end)
 end
@@ -1794,12 +1794,12 @@ local function _brtOnDetect()
 	if AB.active    then AB.stop()    end
 	if AimV3.active then AimV3.stop() end
 	-- Hook UI optionnel (connecté depuis _MH_buildUI si besoin)
-	if _G._MH_onBrainrotDetect then pcall(_G._MH_onBrainrotDetect) end
+	if _GH.onBrainrotDetect then pcall(_GH.onBrainrotDetect) end
 end
 
 local function _brtOnClear()
 	_brtDetected = false
-	if _G._MH_onBrainrotClear then pcall(_G._MH_onBrainrotClear) end
+	if _GH.onBrainrotClear then pcall(_GH.onBrainrotClear) end
 end
 
 local function _brtUnhookChar()
@@ -1869,7 +1869,7 @@ end
 -- ===================================================================
 do
 	local introGui = Instance.new("Frame", gui)
-	introGui.Name = "MoonIntro"
+	introGui.Name = tostring(math.random(0x10000, 0xFFFFFF))
 	introGui.Size = UDim2.new(1,0,1,0)
 	introGui.BackgroundColor3 = Color3.fromRGB(2,3,7)
 	introGui.BackgroundTransparency = 0
@@ -2343,7 +2343,7 @@ local _uiLocked = false          -- LOCK : quand true, aucun drag ne fonctionne
 local _dragStates = {}           -- registry of all created drag states
 local _activeDrag = nil
 local _MH_positions = {}         -- registry of draggable frames keyed by posId
-_G._MH_positions = _MH_positions
+_GH.positions = _MH_positions
 
 UIS.InputChanged:Connect(function(inp)
 	if not _activeDrag then return end
@@ -2372,7 +2372,7 @@ local function makeDraggable(frame, handle, posId)
 				if inp.UserInputState == Enum.UserInputState.End then
 					state.dragging = false
 					if _activeDrag == state then _activeDrag = nil end
-					if posId and _G._MH_autoSave then _G._MH_autoSave() end
+					if posId and _GH.autoSave then _GH.autoSave() end
 				end
 			end)
 		end
@@ -2394,7 +2394,7 @@ local function setDragLock(on)
 		for _, st in ipairs(_dragStates) do st.dragging = false end
 		_activeDrag = nil
 	end
-	if _G._MH_setFloatLocked then _G._MH_setFloatLocked(on) end
+	if _GH.setFloatLocked then _GH.setFloatLocked(on) end
 end
 
 -- ===================================================================
@@ -2529,8 +2529,8 @@ end
 
 local _MH_allToggles = {}
 local _MH_allInputs  = {}
-_G._MH_allToggles = _MH_allToggles
-_G._MH_allInputs  = _MH_allInputs
+_GH.allToggles = _MH_allToggles
+_GH.allInputs  = _MH_allInputs
 
 function UIB.makeInputRow(label, default, onChange)
 	local row = Instance.new("Frame", currentPage)
@@ -2557,7 +2557,7 @@ function UIB.makeInputRow(label, default, onChange)
 		local n = tonumber(box.Text)
 		if n then
 			onChange(n)
-			if _G._MH_autoSave then _G._MH_autoSave() end
+			if _GH.autoSave then _GH.autoSave() end
 		else
 			box.Text = tostring(default)
 		end
@@ -2609,7 +2609,7 @@ function UIB.makeToggleRow(label, defaultOn, onToggle)
 	clk.MouseButton1Click:Connect(function()
 		isOn = not isOn; setV(isOn)
 		if onToggle then onToggle(isOn) end
-		if _G._MH_autoSave then _G._MH_autoSave() end
+		if _GH.autoSave then _GH.autoSave() end
 	end)
 	makeDivider()
 	local key = (currentPage and currentPage.Name or "?") .. "::" .. label
@@ -2727,8 +2727,8 @@ local function startMbAnim()
 	end)
 end
 startMbAnim()
-_G._MH_mbHalo = mbHalo; _G._MH_miniStk = miniStk; _G._MH_startMbAnim = startMbAnim
-_G._MH_stopMbAnim = function() _mbAnimRunning = false end
+_GH.mbHalo = mbHalo; _GH.miniStk = miniStk; _GH.startMbAnim = startMbAnim
+_GH.stopMbAnim = function() _mbAnimRunning = false end
 makeDraggable(miniBtn, nil, "mini")
 
 local function showGui() mainOuter.Visible = true; miniBtn.Visible = false end
@@ -2840,8 +2840,8 @@ buildPage("Combat", function()
 			if IJ.active then IJ.stop(); IJ.start() end
 		end
 		updM() -- apply initial state
-		manB.MouseButton1Click:Connect(function() IJ.mode="manual"; updM(); if _G._MH_autoSave then _G._MH_autoSave() end end)
-		holB.MouseButton1Click:Connect(function() IJ.mode="hold"; updM(); if _G._MH_autoSave then _G._MH_autoSave() end end)
+		manB.MouseButton1Click:Connect(function() IJ.mode="manual"; updM(); if _GH.autoSave then _GH.autoSave() end end)
+		holB.MouseButton1Click:Connect(function() IJ.mode="hold"; updM(); if _GH.autoSave then _GH.autoSave() end end)
 		makeDivider()
 	end
 	setAutoStealRowVisual=UIB.makeToggleRow("Auto Steal",true,function(on)
@@ -3055,8 +3055,8 @@ buildPage("Visual", function()
 			mainOuter.Position = UDim2.new(0.5, -scaledW/2, 0.5, -137)
 		end
 	end
-	_G._MH_applyUIScale = applyUIScale
-	_G._MH_getUIScale   = function() return _uiScaleVal end
+	_GH.applyUIScale = applyUIScale
+	_GH.getUIScale   = function() return _uiScaleVal end
 
 	uiThumb.InputBegan:Connect(function(inp)
 		if inp.UserInputType == Enum.UserInputType.MouseButton1
@@ -3163,8 +3163,8 @@ buildPage("Visual", function()
 			_spExpandedSize.h = math.floor(SP_H*f)
 			-- Only resize visually if the widget isn't collapsed
 			-- ("-"), otherwise the edited size is just remembered for later.
-			if _G._MH_spW and not _spCollapsed then
-				_G._MH_spW.Size=UDim2.new(0,_spExpandedSize.w,0,_spExpandedSize.h)
+			if _GH.spW and not _spCollapsed then
+				_GH.spW.Size=UDim2.new(0,_spExpandedSize.w,0,_spExpandedSize.h)
 			end
 		end
 		spScThumb.InputBegan:Connect(function(inp)
@@ -3191,7 +3191,7 @@ buildPage("Keybind", function()
 	-- ================================================================
 
 	-- Central bindings table (exposed for saving)
-	local KB = _G.MH_KB or {
+	local KB = _GH.MH_KB or {
 		AntiBatAimbot = {key=nil, gp=nil},
 		DropBR        = {key=nil, gp=nil},
 		AutoLeft      = {key=nil, gp=nil},
@@ -3205,7 +3205,7 @@ buildPage("Keybind", function()
 		InstantReset  = {key=nil, gp=nil},
 		HideUI        = {key=nil, gp=nil},
 	}
-	_G.MH_KB = KB
+	_GH.MH_KB = KB
 
 	local GAMEPAD_KEYS = {
 		[Enum.KeyCode.ButtonA]=true,[Enum.KeyCode.ButtonB]=true,
@@ -3299,7 +3299,7 @@ buildPage("Keybind", function()
 					entry.key = inp.KeyCode; entry.gp = nil
 				end
 				stopListening(keyName(inp.KeyCode))
-				if _G._MH_autoSave then _G._MH_autoSave() end
+				if _GH.autoSave then _GH.autoSave() end
 			end)
 
 			-- 6s timeout if no key is pressed
@@ -3318,7 +3318,7 @@ buildPage("Keybind", function()
 		clrBtn.MouseButton1Click:Connect(function()
 			entry.key = nil; entry.gp = nil
 			kbBtn.Text = "—"; kbBtn.TextColor3 = C_DIM
-			if _G._MH_autoSave then _G._MH_autoSave() end
+			if _GH.autoSave then _GH.autoSave() end
 		end)
 
 		local div = Instance.new("Frame", currentPage)
@@ -3389,7 +3389,7 @@ buildPage("Keybind", function()
 			-- [FIX #2] AimV3Kb doit déclencher AimV3 (Bat TP), pas AB (Aimbot V1)
 			if AimV3.active then AimV3.stop() else AimV3.start() end
 		elseif match(KB.InstantReset) then
-			if _G.MH_instareset then _G.MH_instareset() end
+			if _GH.MH_instareset then _GH.MH_instareset() end
 		elseif match(KB.HideUI) then
 			if mainOuter.Visible then hideGui() else showGui() end
 		end
@@ -3583,7 +3583,7 @@ applyAntiBatState=function(on)
 		if not IJ.active then IJ.active=true; IJ.start() end
 	end
 	if setAntiBatQuickBtnVisual then setAntiBatQuickBtnVisual(on) end
-	if _G._MH_autoSave then _G._MH_autoSave() end
+	if _GH.autoSave then _GH.autoSave() end
 end
 
 -- ===================================================================
@@ -3591,7 +3591,7 @@ end
 -- ===================================================================
 local function _buildSpeedWidget()
 local spW=Instance.new("Frame",gui)
-spW.Name="SpeedWidget"; spW.Size=UDim2.new(0,150,0,160); _G._MH_spW=spW
+spW.Name="SpeedWidget"; spW.Size=UDim2.new(0,150,0,160); _GH.spW=spW
 spW.Position=UDim2.new(1,-256,0,210); spW.BackgroundColor3=C_BG
 spW.BorderSizePixel=0; spW.ClipsDescendants=true; spW.Active=true; spW.Visible=false
 addCorner(spW,12); addLivingStroke(spW,1.5)
@@ -3680,7 +3680,7 @@ local function mkInput(parent,yPos,lbl,val,cb,stateKey)
 		local n=tonumber(box.Text)
 		if n and n>0 and n<=500 then
 			cb(n)
-			if _G._MH_autoSave then _G._MH_autoSave() end
+			if _GH.autoSave then _GH.autoSave() end
 		else box.Text=tostring(val) end
 	end)
 	if stateKey then _mhInputBoxes[stateKey] = box end
@@ -3721,11 +3721,11 @@ local function toggleSp()
 	stPillLbl.Text=_spActive and "ON" or "OFF"
 	stPillLbl.TextColor3=_spActive and Color3.fromRGB(0,10,20) or C_DIM
 	if _spActive then startSp() else stopSp() end
-	if _G._MH_setSpeedBoosterFloatVisual then _G._MH_setSpeedBoosterFloatVisual(_spActive) end
+	if _GH.setSpeedBoosterFloatVisual then _GH.setSpeedBoosterFloatVisual(_spActive) end
 end
 stClk.MouseButton1Click:Connect(toggleSp)
-_G._MH_speedBoosterToggle = toggleSp
-_G._MH_speedBoosterIsActive = function() return _spActive end
+_GH.speedBoosterToggle = toggleSp
+_GH.speedBoosterIsActive = function() return _spActive end
 local function switchTab(lag)
 	_spLagger=lag
 	if _spActive then startSp() end
@@ -3824,7 +3824,7 @@ stealFillGrad.Color=ColorSequence.new({
 	ColorSequenceKeypoint.new(1,    Color3.fromRGB(10,  30,  90)),
 })
 table.insert(_livingGradients, stealFillGrad)
-_G._MH_stealFillGradRef = stealFillGrad
+_GH.stealFillGradRef = stealFillGrad
 local stealEdge=Instance.new("Frame",stealFill)
 stealEdge.AnchorPoint=Vector2.new(1,0.5); stealEdge.Size=UDim2.new(0,4,1,-6); stealEdge.Position=UDim2.new(1,0,0.5,0)
 stealEdge.BackgroundColor3=C_WHITE; stealEdge.BorderSizePixel=0; stealEdge.ZIndex=2; addCorner(stealEdge,2)
@@ -3866,7 +3866,7 @@ local function _setReadyColor(state)
 	end
 end
 AutoSteal.SetReadyColor = _setReadyColor
-_G._MH_stealReadyColorFn = function() _setReadyColor(nil) end
+_GH.stealReadyColorFn = function() _setReadyColor(nil) end
 local Stats=game:GetService("Stats")
 local frameCount,lastFpsTime,lastFps,lastPing=0,tick(),60,nil
 local function refreshInfoLabel()
@@ -3974,7 +3974,7 @@ local function makeFloatButton(id)
 					drag = false
 					local p2 = btn.Position
 					_floatPositions[id] = {p2.X.Scale, p2.X.Offset, p2.Y.Scale, p2.Y.Offset}
-					if _G._MH_autoSave then _G._MH_autoSave() end
+					if _GH.autoSave then _GH.autoSave() end
 				end
 			end)
 		end
@@ -4034,7 +4034,7 @@ end)
 -- Force-refresh all float button background colors against current C_ON_BG.
 -- Called by applyTheme and at end of MH_load so theme switches / load order
 -- can never leave buttons in the wrong color.
-_G._MH_refreshFloatActiveColors = function()
+_GH.refreshFloatActiveColors = function()
 	for id, entry in pairs(_floatBtns) do
 		local def = _floatDefs[id]
 		if def and entry.frame and entry.frame.Parent then
@@ -4167,7 +4167,7 @@ do
 		end)
 	end
 
-	_G.MH_instareset = instareset
+	_GH.MH_instareset = instareset
 
 	_floatDefs.instareset = {
 		label    = "INSTANT\nRESET",
@@ -4185,11 +4185,11 @@ _floatDefs.aimv2 = {
 	isActive = function() return ABP.active end,
 }
 
-_G._MH_makeFloatButton   = makeFloatButton
-_G._MH_removeFloatButton = removeFloatButton
-_G._MH_setFloatLocked    = setFloatLocked
-_G._MH_floatDefs         = _floatDefs
-_G._MH_floatPositions    = _floatPositions
+_GH.makeFloatButton   = makeFloatButton
+_GH.removeFloatButton = removeFloatButton
+_GH.setFloatLocked    = setFloatLocked
+_GH.floatDefs         = _floatDefs
+_GH.floatPositions    = _floatPositions
 
 -- ===================================================================
 -- STUN TIMER BILLBOARD (au-dessus du personnage)
@@ -4240,8 +4240,8 @@ do
 		timerLbl.Font = Enum.Font.GothamBlack
 		timerLbl.TextStrokeTransparency = 1
 		addGreyShimmer(timerLbl)
-		_G._MH_speedLblRef = speedLbl
-		_G._MH_timerLblRef = timerLbl
+		_GH.speedLblRef = speedLbl
+		_GH.timerLblRef = timerLbl
 	end
 
 	local function updateDisplay()
@@ -4313,7 +4313,7 @@ do
 	-- Other players' speed (billboard above their head)
 	-- Other players' speed — a single global Heartbeat
 	local _playerSpeedBBs = {}  -- plr → {bb, lbl, char}
-	_G._MH_playerSpeedBBs = _playerSpeedBBs
+	_GH.playerSpeedBBs = _playerSpeedBBs
 
 	local function setupPlayerSpeedBB(plr)
 		if plr == LP then return end
@@ -4397,7 +4397,7 @@ local function MH_save()
 	task.spawn(function()
 		task.wait(0.5)
 		local ok = pcall(function()
-			local kb = _G.MH_KB or {}
+			local kb = _GH.MH_KB or {}
 			local data = {
 				normalSpeed      = State.normalSpeed,
 				carrySpeed       = State.carrySpeed,
@@ -4429,11 +4429,11 @@ local function MH_save()
 				uiLocked = _uiLocked,
 				theme             = _currentTheme,
 				autoPlayMode      = State.autoPlayMode,
-				uiScaleVal        = _G._MH_getUIScale and _G._MH_getUIScale() or nil,
-				floatScaleVal     = _G._MH_getFloatScale and _G._MH_getFloatScale() or nil,
+				uiScaleVal        = _GH.getUIScale and _GH.getUIScale() or nil,
+				floatScaleVal     = _GH.getFloatScale and _GH.getFloatScale() or nil,
 				positions = (function()
 					local t = {}
-					for id, frame in pairs(_G._MH_positions or {}) do
+					for id, frame in pairs(_GH.positions or {}) do
 						if frame and frame.Parent then
 							local p = frame.Position
 							t[id] = {p.X.Scale, p.X.Offset, p.Y.Scale, p.Y.Offset}
@@ -4443,14 +4443,14 @@ local function MH_save()
 				end)(),
 				toggles = (function()
 					local t = {}
-					for key, entry in pairs(_G._MH_allToggles or {}) do
+					for key, entry in pairs(_GH.allToggles or {}) do
 						t[key] = entry.get()
 					end
 					return t
 				end)(),
 				inputs = (function()
 					local t = {}
-					for key, entry in pairs(_G._MH_allInputs or {}) do
+					for key, entry in pairs(_GH.allInputs or {}) do
 						local n = tonumber(entry.box.Text)
 						if n then t[key] = n end
 					end
@@ -4482,7 +4482,7 @@ local function MH_save()
 		_saveDebounce = false
 	end)
 end
-_G._MH_autoSave = MH_save
+_GH.autoSave = MH_save
 
 -- Loading: pushes values straight into State, the widgets, AND restarts active modules
 local function MH_load()
@@ -4526,14 +4526,14 @@ local function MH_load()
 			if setAutoPlayModeUI then setAutoPlayModeUI(data.autoPlayMode)
 			else State.autoPlayMode = data.autoPlayMode end
 		end
-		if data.uiScaleVal and _G._MH_applyUIScale then _G._MH_applyUIScale(data.uiScaleVal) end
-		if data.floatScaleVal and _G._MH_applyFloatScale then _G._MH_applyFloatScale(data.floatScaleVal) end
+		if data.uiScaleVal and _GH.applyUIScale then _GH.applyUIScale(data.uiScaleVal) end
+		if data.floatScaleVal and _GH.applyFloatScale then _GH.applyFloatScale(data.floatScaleVal) end
 
 		-- Window/widget positions: restored before anything else so frames
 		-- never flash at their default position on load.
 		if type(data.positions) == "table" then
 			for id, pos in pairs(data.positions) do
-				local frame = _G._MH_positions and _G._MH_positions[id]
+				local frame = _GH.positions and _GH.positions[id]
 				if frame and type(pos) == "table" and pos[1] then
 					frame.Position = UDim2.new(pos[1], pos[2], pos[3], pos[4])
 				end
@@ -4543,7 +4543,7 @@ local function MH_load()
 		-- Numeric input rows: restore value + re-apply effect (FOV, radius…)
 		if type(data.inputs) == "table" then
 			for key, value in pairs(data.inputs) do
-				local entry = _G._MH_allInputs and _G._MH_allInputs[key]
+				local entry = _GH.allInputs and _GH.allInputs[key]
 				if entry and type(value) == "number" then
 					entry.box.Text = tostring(value)
 					pcall(entry.onChange, value)
@@ -4571,7 +4571,7 @@ local function MH_load()
 		-- Toggle rows: restore saved state (ON and OFF) including defaults-ON features.
 		if type(data.toggles) == "table" then
 			for key, on in pairs(data.toggles) do
-				local entry = _G._MH_allToggles and _G._MH_allToggles[key]
+				local entry = _GH.allToggles and _GH.allToggles[key]
 				if entry then
 					if on then
 						if entry.onToggle then pcall(entry.onToggle, true) end
@@ -4585,7 +4585,7 @@ local function MH_load()
 		end
 
 		if data.kb then
-			local kb = _G.MH_KB
+			local kb = _GH.MH_KB
 			if kb then
 				for name, entry in pairs(data.kb) do
 					if kb[name] then
@@ -4606,7 +4606,7 @@ local function MH_load()
 	-- Defer one frame so any float buttons spawned by toggle restore are fully
 	-- registered before we re-apply their active color against the loaded theme.
 	task.defer(function()
-		if _G._MH_refreshFloatActiveColors then _G._MH_refreshFloatActiveColors() end
+		if _GH.refreshFloatActiveColors then _GH.refreshFloatActiveColors() end
 	end)
 
 	return true
@@ -4653,14 +4653,14 @@ buildPage("Buttons", function()
 				if _floatRowSetters[entry.id] then _floatRowSetters[entry.id](true) end
 				makeFloatButton(entry.id)
 			end
-			if _G._MH_autoSave then _G._MH_autoSave() end
+			if _GH.autoSave then _GH.autoSave() end
 		end)
 		uslBtn.MouseButton1Click:Connect(function()
 			for _, entry in ipairs(FLOAT_LABELS) do
 				if _floatRowSetters[entry.id] then _floatRowSetters[entry.id](false) end
 				removeFloatButton(entry.id)
 			end
-			if _G._MH_autoSave then _G._MH_autoSave() end
+			if _GH.autoSave then _GH.autoSave() end
 		end)
 	end
 
@@ -4668,9 +4668,9 @@ buildPage("Buttons", function()
 	-- Right at the top: direct toggle that spawns the Speed Booster widget
 	UIB.makeSectionLabel("Speed Booster")
 	UIB.makeToggleRow("Speed Booster", false, function(on)
-		if _G._MH_spW then
-			_G._MH_spW.Visible = on
-			if on then _G._MH_spW.ZIndex = 1000 end
+		if _GH.spW then
+			_GH.spW.Visible = on
+			if on then _GH.spW.ZIndex = 1000 end
 		end
 	end)
 	UIB.makeGap(4)
@@ -4681,7 +4681,7 @@ buildPage("Buttons", function()
 	for _, entry in ipairs(FLOAT_LABELS) do
 		_floatRowSetters[entry.id] = UIB.makeToggleRow(entry.name, false, function(on)
 			if on then makeFloatButton(entry.id) else removeFloatButton(entry.id) end
-			if _G._MH_autoSave then _G._MH_autoSave() end
+			if _GH.autoSave then _GH.autoSave() end
 		end)
 	end
 end)
@@ -4715,13 +4715,13 @@ local function MH_resetAll()
 		if r.laggerSpeed     then r.laggerSpeed.Text="15"   end
 		if r.laggerCarrySpeed then r.laggerCarrySpeed.Text="24.5" end
 	end)
-	for _, entry in pairs(_G._MH_allToggles or {}) do
+	for _, entry in pairs(_GH.allToggles or {}) do
 		pcall(function()
 			entry.set(false)
 			if entry.onToggle then entry.onToggle(false) end
 		end)
 	end
-	if _G._MH_autoSave then _G._MH_autoSave() end
+	if _GH.autoSave then _GH.autoSave() end
 end
 
 local function MH_resetBtnPos()
@@ -4753,10 +4753,10 @@ local function MH_resetBtnPos()
 		steal       = UDim2.new(0.5,-100,0,35),
 		speedbypass = UDim2.new(1,-256,0,210),
 	}
-	for id, frame in pairs(_G._MH_positions or {}) do
+	for id, frame in pairs(_GH.positions or {}) do
 		if winDefaults[id] then pcall(function() frame.Position = winDefaults[id] end) end
 	end
-	if _G._MH_autoSave then _G._MH_autoSave() end
+	if _GH.autoSave then _GH.autoSave() end
 end
 
 buildPage("Settings", function()
@@ -4810,7 +4810,7 @@ buildPage("Settings", function()
 			btn2.AutoButtonColor = false
 			addCorner(btn2,8); addLivingStroke(btn2,1)
 			btn2.MouseButton1Click:Connect(function()
-				if _G._MH_applyUIScale then _G._MH_applyUIScale(val) end
+				if _GH.applyUIScale then _GH.applyUIScale(val) end
 				for _, b2 in ipairs(scRow:GetChildren()) do
 					if b2:IsA("TextButton") then
 						b2.BackgroundTransparency = 0.3; b2.TextColor3 = C_MOON
@@ -4826,9 +4826,9 @@ buildPage("Settings", function()
 	UIB.makeToggleRow("Speed Bypass", false, function(on)
 		if _sbBypassWidget then _sbBypassWidget.Visible = on end
 		-- Actually triggers the bypass (not just showing the panel)
-		if _G._MH_speedBypassToggle then
-			local isActive = _G._MH_speedBypassIsActive and _G._MH_speedBypassIsActive() or false
-			if isActive ~= on then _G._MH_speedBypassToggle() end
+		if _GH.speedBypassToggle then
+			local isActive = _GH.speedBypassIsActive and _GH.speedBypassIsActive() or false
+			if isActive ~= on then _GH.speedBypassToggle() end
 		end
 	end)
 	UIB.makeToggleRow("Lagger", false, function(on)
@@ -5027,10 +5027,10 @@ buildPage("Settings", function()
 			noirBtn.TextColor3 = name=="noir" and Color3.fromRGB(10,10,10) or C_DIM
 		end
 		defBtn.MouseButton1Click:Connect(function()
-			applyTheme("default"); if _G._MH_autoSave then _G._MH_autoSave() end
+			applyTheme("default"); if _GH.autoSave then _GH.autoSave() end
 		end)
 		noirBtn.MouseButton1Click:Connect(function()
-			applyTheme("noir"); if _G._MH_autoSave then _G._MH_autoSave() end
+			applyTheme("noir"); if _GH.autoSave then _GH.autoSave() end
 		end)
 	end
 	UIB.makeGap(4)
@@ -5165,11 +5165,11 @@ local function toggle()
 		toggleBtn.BackgroundColor3 = C_OFF_BG; toggleBtn.BackgroundTransparency = 0.2
 		toggleBtn.TextColor3 = C_DIM
 	end
-	if _G._MH_setSpeedBypassQpVisual then _G._MH_setSpeedBypassQpVisual(activated) end
+	if _GH.setSpeedBypassQpVisual then _GH.setSpeedBypassQpVisual(activated) end
 end
 toggleBtn.MouseButton1Click:Connect(toggle)
-_G._MH_speedBypassToggle = toggle
-_G._MH_speedBypassIsActive = function() return activated end
+_GH.speedBypassToggle = toggle
+_GH.speedBypassIsActive = function() return activated end
 
 local bindRow = Instance.new("Frame", sbW)
 bindRow.Size = UDim2.new(1,-16,0,26); bindRow.Position = UDim2.new(0,8,0,64)
