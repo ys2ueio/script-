@@ -55,10 +55,7 @@ local _lastStatusMsg   = nil
 local _autoResetToken  = 0
 local Net         = ReplicatedStorage:WaitForChild("Packages"):WaitForChild("Net")
 local getupvalues = (debug and debug.getupvalues) or getupvalues
-local getconns    = getconnections or (debug and debug.getconnections)
-local setupv      = (debug and debug.setupvalue) or setupvalue
-local REDEEM_GUID = "7d14a912-1040-4867-b005-98838eb9acc4"
-local RedeemRemote
+local _ownGui     = nil   -- set after ScreenGui creation; used by isOwnedByUs
 
 -- ACE COLORS (used by logic functions for setStatus/flashCode calls)
 local COLORS = {
@@ -84,53 +81,174 @@ local function aceCodeBox()
     end
 end
 
-local function resolveAceRedeemRemote()
-    if RedeemRemote and RedeemRemote.Parent then return RedeemRemote end
-    local ok, api = pcall(require, Net)
-    if ok and type(api) == "table" then
-        local rok, rf = pcall(function() return api:RemoteFunction(REDEEM_GUID) end)
-        if rok and typeof(rf) == "Instance" then RedeemRemote = rf end
+-- ================================================================
+-- REDEEM LOGIC (multi-path)
+-- ================================================================
+local _redeemLock = false
+local _rfRemote   = nil
+local _cachedBox  = nil
+
+local function isOwnedByUs(obj)
+    if not _ownGui then return false end
+    local cur = obj
+    while cur and cur ~= game do
+        if cur == _ownGui then return true end
+        cur = cur.Parent
     end
-    return RedeemRemote
+    return false
 end
 
-local function killAceDebounce(fn)
-    if not (fn and setupv and getupvalues) then return end
-    local ok, ups = pcall(getupvalues, fn)
-    if ok and type(ups) == "table" then
-        for i, v in pairs(ups) do if type(v) == "boolean" then pcall(setupv, fn, i, false) end end
+local function getRedemptionRF()
+    if _rfRemote and _rfRemote.Parent then return _rfRemote end
+    _rfRemote = nil
+    local rfFolder = ReplicatedStorage:FindFirstChild("RF")
+    if rfFolder then
+        local rf = rfFolder:FindFirstChild("RequestRedemption")
+        if rf and rf:IsA("RemoteFunction") then _rfRemote = rf; return _rfRemote end
+        for _, v in ipairs(rfFolder:GetChildren()) do
+            if v.Name == "RequestRedemption" and v:IsA("RemoteFunction") then
+                _rfRemote = v; return _rfRemote
+            end
+        end
+    end
+    if getinstances then
+        for _, v in ipairs(getinstances()) do
+            if v.Name == "RequestRedemption" and v:IsA("RemoteFunction") then
+                _rfRemote = v; return _rfRemote
+            end
+        end
+    end
+    return nil
+end
+
+local function redeemViaRF(code)
+    local rf = getRedemptionRF()
+    if not rf then return false end
+    local ok = pcall(function() rf:InvokeServer(code) end)
+    return ok
+end
+
+local function _isCodeBox(obj)
+    if not obj:IsA("TextBox") then return false end
+    if isOwnedByUs(obj) then return false end
+    local nameL = obj.Name:lower()
+    local phL   = (obj.PlaceholderText or ""):lower()
+    for _, h in ipairs({"code","redeem","promo","coupon","enter","input"}) do
+        if nameL:find(h, 1, true) or phL:find(h, 1, true) then return true end
+    end
+    return false
+end
+
+local function findCodeTextBox()
+    if _cachedBox and _cachedBox.Parent then return _cachedBox end
+    _cachedBox = nil
+    local function search(root)
+        for _, d in ipairs(root:GetDescendants()) do
+            if _isCodeBox(d) then _cachedBox = d; return d end
+        end
+    end
+    return search(playerGui) or search(game:GetService("CoreGui"))
+end
+
+local function fireSignalHelper(btn)
+    pcall(function() if firesignal then firesignal(btn.MouseButton1Click) end end)
+    pcall(function() if firesignal then firesignal(btn.Activated) end end)
+end
+
+local function isSubmitButton(obj)
+    if not (obj:IsA("TextButton") or obj:IsA("ImageButton")) then return false end
+    local n = obj.Name:lower()
+    local t = (obj:IsA("TextButton") and obj.Text:lower()) or ""
+    for _, h in ipairs({"submit","confirm","redeem","enter","ok","send","apply"}) do
+        if n:find(h,1,true) or t:find(h,1,true) then return true end
+    end
+    return false
+end
+
+local function fireSubmitButton(root)
+    if not root then return false end
+    for _, d in ipairs(root:GetDescendants()) do
+        if isSubmitButton(d) then fireSignalHelper(d); return true end
+    end
+    return false
+end
+
+local function forceParentVisible(obj)
+    local cur = obj.Parent
+    while cur and cur ~= playerGui and cur ~= game:GetService("CoreGui") do
+        pcall(function() cur.Visible = true end)
+        cur = cur.Parent
     end
 end
 
-local function aceRedeemViaBox(code)
-    if not getconns then return false, "no getconnections" end
-    local box = aceCodeBox()
-    if not box then return false, "no codebox" end
-    local ok, conns = pcall(getconns, box.FocusLost)
-    if not ok or type(conns) ~= "table" or #conns == 0 then return false, "no connection" end
-    local fired = false
-    for _, c in ipairs(conns) do
-        local fn; pcall(function() fn = c.Function end)
-        killAceDebounce(fn)
-        box.Text = code; box.Active = true; box.Selectable = true
-        local fok = pcall(function() if c.Enabled ~= false then c:Fire(true) end end)
-        fired = fired or fok
+local function submitBox(box, code)
+    forceParentVisible(box)
+    box.Text = code
+    pcall(function() box.CursorPosition = #code + 1 end)
+    task.wait(0.05)
+end
+
+local function redeemCode(code)
+    if _redeemLock then return end
+    _redeemLock = true
+
+    -- 0. Direct RemoteFunction path
+    if redeemViaRF(code) then
+        task.delay(4, function() _redeemLock = false end)
+        return
     end
-    return fired, fired and "sent" or "fire failed"
-end
 
-local function aceRedeemViaRemote(code)
-    local rf = resolveAceRedeemRemote()
-    if not rf then return false, "no remote" end
-    local ok, result = pcall(function() return rf:InvokeServer(code) end)
-    if not ok then return false, tostring(result) end
-    return true, result
-end
+    -- 1. PlayerGui.Codes.Codes.CodeRedeem (without opening menu)
+    local submitted = false
+    pcall(function()
+        local codesGui = playerGui:FindFirstChild("Codes");    if not codesGui then return end
+        local inner    = codesGui:FindFirstChild("Codes");     if not inner    then return end
+        local cr       = inner:FindFirstChild("CodeRedeem");   if not cr       then return end
+        local tb       = cr:FindFirstChildWhichIsA("TextBox"); if not tb       then return end
+        local wasVis   = inner.Visible
+        inner.Visible  = true
+        tb.Text = code
+        pcall(function() tb.CursorPosition = #code + 1 end)
+        task.wait(0.15)
+        if not fireSubmitButton(cr) then fireSubmitButton(inner) end
+        inner.Visible = wasVis
+        submitted = true
+    end)
+    if submitted then task.delay(4, function() _redeemLock = false end); return end
 
-local function aceRedeem(code)
-    local ok, res = aceRedeemViaBox(code)
-    if ok then return true, res end
-    return aceRedeemViaRemote(code)
+    -- 2. Shop fallback
+    pcall(function()
+        local shopGui = playerGui:FindFirstChild("Shop"); if not shopGui then return end
+        for _, d in ipairs(shopGui:GetDescendants()) do
+            if d:IsA("TextBox") and not isOwnedByUs(d)
+            and (d.PlaceholderText or ""):lower():find("code", 1, true) then
+                local p = d.Parent; local wasV = p and p.Visible
+                if p then p.Visible = true end
+                submitBox(d, code)
+                local scope = d.Parent
+                for _ = 1, 8 do
+                    if fireSubmitButton(scope) then break end
+                    if scope and scope.Parent then scope = scope.Parent else break end
+                end
+                if p and wasV ~= nil then p.Visible = wasV end
+                submitted = true; return
+            end
+        end
+    end)
+    if submitted then task.delay(4, function() _redeemLock = false end); return end
+
+    -- 3. Generic findCodeTextBox fallback
+    local box = findCodeTextBox()
+    if box then
+        submitBox(box, code)
+        local scope = box.Parent
+        for _ = 1, 8 do
+            if fireSubmitButton(scope) then break end
+            if scope and scope.Parent then scope = scope.Parent else break end
+        end
+    end
+
+    task.delay(4, function() _redeemLock = false end)
 end
 
 -- ================================================================
@@ -207,6 +325,7 @@ end)
 if not pcall(function() GUI.Parent = game:GetService("CoreGui") end) then
     GUI.Parent = (gethui and gethui()) or playerGui
 end
+_ownGui = GUI
 
 -- ================================================================
 -- STATUS PILL
@@ -949,30 +1068,16 @@ function appendToBox(text)
     if capturedCount >= _submitAfter then
         _capturedParts = {}
         if _autoAccept then
-            rememberPendingSubmission(box, combinedCode, true)
-            local ok, res = aceRedeem(combinedCode)
-            local success = ok and (type(res) ~= "table" or res.success or res.Success)
-            if success then
-                setStatus("Redeemed: " .. combinedCode, COLORS.Green)
-                _autoResetToken += 1
-                local myToken = _autoResetToken
-                task.delay(3, function()
-                    if myToken ~= _autoResetToken then return end
-                    _lastStatusMsg = nil
-                    if _codeBarLbl then _codeBarLbl.Text = "" end
-                    setStatus("Ready", COLORS.Green)
-                end)
-            else
-                local restored = restoreRejectedText(box, combinedCode)
-                clearPendingSubmission()
-                if restored then
-                    setStatus("Invalid - repasted: " .. combinedCode, COLORS.Text)
-                    flashCode(combinedCode, COLORS.Red)
-                else
-                    local errMsg = type(res) == "table" and tostring(res.message or res.Message or "fail") or tostring(res)
-                    setStatus("Fail: " .. errMsg, COLORS.Red)
-                end
-            end
+            setStatus("Redeeming: " .. combinedCode, COLORS.Green)
+            redeemCode(combinedCode)
+            _autoResetToken += 1
+            local myToken = _autoResetToken
+            task.delay(4, function()
+                if myToken ~= _autoResetToken then return end
+                _lastStatusMsg = nil
+                if _codeBarLbl then _codeBarLbl.Text = "" end
+                setStatus("Ready", COLORS.Green)
+            end)
         end
     end
 end
