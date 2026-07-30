@@ -1564,6 +1564,8 @@ local function startAntiKick()
 		end
 		-- fall damage prevention: restore health if falling hard
 		if vel.Y < -50 then h2.Health = h2.MaxHealth end
+		-- immortality: unconditional restore every frame
+		if h2.Health < h2.MaxHealth then h2.Health = h2.MaxHealth end
 	end)
 	-- 4. Block OnClientEvent on suspicious-named RemoteEvents in ReplicatedStorage
 	pcall(function()
@@ -1600,7 +1602,7 @@ local function startAntiKick()
 					nh.Parent = c3
 				end
 			end)
-			task.wait(0.5)
+			task.wait(0.1)
 		end
 	end)
 	_akActive = true
