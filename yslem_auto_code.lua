@@ -254,15 +254,15 @@ end
 -- ================================================================
 -- RED THEME
 -- ================================================================
-local C_BG    = Color3.fromRGB(10,   3,   3)
-local C_ON    = Color3.fromRGB(90,  15,  15)
-local C_OFF   = Color3.fromRGB(10,   3,   3)
-local C_ROW   = Color3.fromRGB(28,   8,   8)
-local C_WHITE = Color3.fromRGB(255, 200, 200)
-local C_DIM   = Color3.fromRGB(150,  70,  70)
-local G1      = Color3.fromRGB(255,  80,  80)
-local G2      = Color3.fromRGB(160,  25,  25)
-local G3      = Color3.fromRGB(35,    5,   5)
+local C_BG    = Color3.fromRGB(8,   8,   8)
+local C_ON    = Color3.fromRGB(45,  45,  45)
+local C_OFF   = Color3.fromRGB(8,   8,   8)
+local C_ROW   = Color3.fromRGB(22,  22,  22)
+local C_WHITE = Color3.fromRGB(240, 240, 240)
+local C_DIM   = Color3.fromRGB(120, 120, 120)
+local G1      = Color3.fromRGB(200, 200, 200)
+local G2      = Color3.fromRGB(90,  90,  90)
+local G3      = Color3.fromRGB(25,  25,  25)
 
 local _livingGradients = {}
 local _livingStrokes   = {}
@@ -313,7 +313,7 @@ end)
 -- GUI ROOT
 -- ================================================================
 local GUI = Instance.new("ScreenGui")
-GUI.Name           = "YslemAutoCode"
+GUI.Name           = "MoonHubAutoCode"
 GUI.ResetOnSpawn   = false
 GUI.IgnoreGuiInset = true
 GUI.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
@@ -399,27 +399,33 @@ _bgImg.ScaleType              = Enum.ScaleType.Crop
 _bgImg.ImageTransparency      = 0.25
 _bgImg.ZIndex                 = 9
 addCorner(_bgImg, 14)
-task.spawn(function()
-    local fname = "yslem_bg_v4.png"
-    local url   = "https://litter.catbox.moe/2wfsx1k13uv3vbj2.png"
-    if getcustomasset then
-        if isfile and isfile(fname) then
-            local rid = getcustomasset(fname)
-            if rid and rid ~= "" then _bgImg.Image = rid; return end
-        end
-        local ok, data = pcall(function() return game:HttpGet(url) end)
-        if ok and data and data ~= "" then
-            pcall(function() if writefile then writefile(fname, data) end end)
-            local rid = getcustomasset(fname)
-            if rid and rid ~= "" then _bgImg.Image = rid; return end
-        end
-    else
-        local ok, data = pcall(function() return game:HttpGet(url) end)
-        if ok and data and data ~= "" then
-            pcall(function() if writefile then writefile(fname, data) end end)
-        end
+do
+    local fname = "moonhub_bg.png"
+    local url   = "https://litter.catbox.moe/3tpr3wks0we2rbzo.png"
+    -- Cache hit → instantané (synchrone)
+    if getcustomasset and isfile and isfile(fname) then
+        local rid = getcustomasset(fname)
+        if rid and rid ~= "" then _bgImg.Image = rid end
     end
-end)
+    -- Pas encore chargé → téléchargement en arrière-plan
+    if _bgImg.Image == "" then
+        task.spawn(function()
+            if getcustomasset then
+                local ok, data = pcall(function() return game:HttpGet(url) end)
+                if ok and data and data ~= "" then
+                    pcall(function() if writefile then writefile(fname, data) end end)
+                    local rid = getcustomasset(fname)
+                    if rid and rid ~= "" then _bgImg.Image = rid end
+                end
+            else
+                pcall(function()
+                    local ok, data = pcall(function() return game:HttpGet(url) end)
+                    if ok and data and data ~= "" and writefile then writefile(fname, data) end
+                end)
+            end
+        end)
+    end
+end
 
 -- Drag
 do
@@ -1225,5 +1231,5 @@ if getgenv then
     end
 end
 
-setStatus("Yslem Auto Code loaded", COLORS.Green)
-print("[YSLEM AUTO CODE] by Yslem - Loaded")
+setStatus("Moon Hub Auto Code loaded", COLORS.Green)
+print("[MOON HUB AUTO CODE] by Yslem - Loaded")
