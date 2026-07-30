@@ -13,6 +13,7 @@ local Lighting      = game:GetService("Lighting")
 local LP            = Players.LocalPlayer
 if not LP.Character then LP.CharacterAdded:Wait() end
 
+
 -- ===================================================================
 -- COLOR PALETTE
 -- ===================================================================
@@ -313,6 +314,10 @@ RunService.RenderStepped:Connect(function()
 end)
 
 -- ===================================================================
+-- MOONSCAPE
+-- ===================================================================
+
+-- ===================================================================
 -- DESTROY EXISTING
 -- ===================================================================
 local function destroyAllMoonHub()
@@ -395,6 +400,7 @@ local h, hrp
 local function setupChar(char)
 	h = char:WaitForChild("Humanoid", 5)
 	hrp = char:WaitForChild("HumanoidRootPart", 5)
+	if h then h.WalkSpeed = getCurrentSpeed() end
 	ensureProxy()
 end
 LP.CharacterAdded:Connect(setupChar)
@@ -408,6 +414,14 @@ RunService.Stepped:Connect(function()
 	local md = h.MoveDirection
 	if md.Magnitude > 0 then proxyMove(md, getCurrentSpeed()) end
 end)
+
+-- ===================================================================
+-- PLOT DETECTION
+-- ===================================================================
+
+-- ===================================================================
+-- PROMPT DETECTION
+-- ===================================================================
 
 -- ===================================================================
 -- AUTO STEAL (Auto Grab — logique Irish Hub / test_speed.lua)
@@ -704,7 +718,6 @@ local function tpToGround()
 	root.CFrame = CFrame.new(root.Position.X, -7.00, root.Position.Z)
 		* CFrame.Angles(0, select(2, root.CFrame:ToEulerAnglesYXZ()), 0)
 	root.AssemblyLinearVelocity = Vector3.zero
-	pcall(function() if sethiddenproperty then sethiddenproperty(root,"PhysicsRepRootPart",root) end end)
 end
 
 -- ===================================================================
@@ -736,7 +749,6 @@ local function runDropBrainrot()
 				local off  = (hum2 and hum2.HipHeight or 2) + (r.Size.Y / 2)
 				r.CFrame = CFrame.new(r.Position.X, rr.Position.Y + off, r.Position.Z)
 				r.AssemblyLinearVelocity = Vector3.zero
-				pcall(function() if sethiddenproperty then sethiddenproperty(r,"PhysicsRepRootPart",r) end end)
 			end
 			_dropActive = false
 			return
@@ -792,7 +804,6 @@ local function startAutoLeft()
 				if alConn then alConn:Disconnect(); alConn = nil end
 				alPhase = 1
 				hrp.CFrame = CFrame.new(hrp.Position, Vector3.new(AP_L_FACE.X, hrp.Position.Y, AP_L_FACE.Z))
-				pcall(function() if sethiddenproperty then sethiddenproperty(hrp,"PhysicsRepRootPart",hrp) end end)
 				return
 			end
 			local d = AP_L2 - hrp.Position
@@ -824,7 +835,6 @@ local function startAutoRight()
 				if arConn then arConn:Disconnect(); arConn = nil end
 				arPhase = 1
 				hrp.CFrame = CFrame.new(hrp.Position, Vector3.new(AP_R_FACE.X, hrp.Position.Y, AP_R_FACE.Z))
-				pcall(function() if sethiddenproperty then sethiddenproperty(hrp,"PhysicsRepRootPart",hrp) end end)
 				return
 			end
 			local d = AP_R2 - hrp.Position
@@ -845,6 +855,8 @@ local function _arResetCharacter(char)
 	pcall(function()
 		hum:ChangeState(Enum.HumanoidStateType.GettingUp)
 		hum:ChangeState(Enum.HumanoidStateType.Running)
+		root.Velocity = Vector3.zero
+		root.RotVelocity = Vector3.zero
 		root.AssemblyLinearVelocity = Vector3.zero
 		root.AssemblyAngularVelocity = Vector3.zero
 		hum.PlatformStand = false
@@ -1038,6 +1050,8 @@ local function antiLagAdvStop()
 end
 
 -- ===================================================================
+-- ===================================================================
+-- MEDUSA COUNTER (logique raw__59_)
 -- MEDUSA COUNTER (raw__59_ logic)
 local _medLastUsed = 0
 local _medDebounce = false
@@ -1092,58 +1106,56 @@ end
 
 LP.CharacterAdded:Connect(function(char) if State.medusaCounterEnabled then task.wait(0.5); setupMedusaCounter(char) end end)
 
--- AUTO RESET ON MEDUSA — détecte le stun (Anchored + Transparency==1) et fire l'insta reset
-local _armState = {enabled=false, conns={}, triggered=false, lastFire=0, cooldown=2.25}
+-- ===================================================================
+-- AUTO RESET MEDUSA (Taser Hub — PlatformStand + Anchored detect)
+-- ===================================================================
+local _armEnabled = false
+local _armDebounce = false
+local _armConns = {}
 
-local function _armShouldFire(part)
-	if not _armState.enabled then return false end
-	if _armState.triggered then return false end
-	if tick() - _armState.lastFire < _armState.cooldown then return false end
-	if not part or not part.Parent then return false end
-	if part:FindFirstAncestorOfClass("Tool") or part:FindFirstAncestorOfClass("Accessory") then return false end
-	return part.Anchored and part.Transparency == 1
-end
-
-local function _armFireOnce(part)
-	if not _armShouldFire(part) then return end
-	_armState.triggered = true
-	_armState.lastFire = tick()
-	task.delay(2.3, function()
-		if _armState.enabled and _GH.MH_instareset then
-			_GH.MH_instareset()
-		end
+local function _armDoReset()
+	if _armDebounce then return end
+	_armDebounce = true
+	task.spawn(function()
+		if _GH.MH_instareset then pcall(_GH.MH_instareset) end
+		task.wait(3); _armDebounce = false
 	end)
 end
 
-local function _armStop()
-	for _, c in ipairs(_armState.conns) do pcall(function() c:Disconnect() end) end
-	_armState.conns = {}
-	_armState.triggered = false
+local function _armWatchPart(part)
+	return part:GetPropertyChangedSignal("Anchored"):Connect(function()
+		if not _armEnabled then return end
+		if part.Anchored and part.Transparency == 1 then _armDoReset() end
+	end)
 end
 
-local function _armStart(char)
-	_armStop()
-	char = char or LP.Character; if not char then return end
-	local function watchPart(p)
-		table.insert(_armState.conns, p:GetPropertyChangedSignal("Anchored"):Connect(function()
-			_armFireOnce(p)
+local function setupAutoResetMedusa(char)
+	for _,c in pairs(_armConns) do pcall(function() c:Disconnect() end) end; _armConns={}
+	if not char then return end
+	local hum=char:FindFirstChildOfClass("Humanoid")
+	if hum then
+		table.insert(_armConns, hum:GetPropertyChangedSignal("PlatformStand"):Connect(function()
+			if not _armEnabled then return end
+			if hum.PlatformStand then _armDoReset() end
 		end))
-		_armFireOnce(p)
 	end
-	for _, p in ipairs(char:GetDescendants()) do if p:IsA("BasePart") then watchPart(p) end end
-	table.insert(_armState.conns, char.DescendantAdded:Connect(function(p)
-		if p:IsA("BasePart") then watchPart(p) end
+	for _,part in ipairs(char:GetDescendants()) do
+		if part:IsA("BasePart") then table.insert(_armConns, _armWatchPart(part)) end
+	end
+	table.insert(_armConns, char.DescendantAdded:Connect(function(part)
+		if part:IsA("BasePart") then table.insert(_armConns, _armWatchPart(part)) end
 	end))
-	table.insert(_armState.conns, char.AncestryChanged:Connect(function(_, parent)
-		if not parent then _armState.triggered = false end
-	end))
+end
+
+local function stopAutoResetMedusa()
+	for _,c in pairs(_armConns) do pcall(function() c:Disconnect() end) end; _armConns={}
 end
 
 LP.CharacterAdded:Connect(function(char)
-	if State.autoResetOnMedEnabled then task.wait(0.5); _armStart(char) end
+	task.wait(0.5); if _armEnabled then setupAutoResetMedusa(char) end
 end)
 
-
+-- ANTI BAT (logique Envy — spike 1000 + restore XZ)
 -- ANTI BAT (Envy logic — 1000 spike + XZ restore)
 local BC = {active=false, conn=nil}
 
@@ -1168,6 +1180,7 @@ function BC.stop()
 end
 
 -- ===================================================================
+-- BAT AIMBOT + AIM BYPASS (logique raw__59_)
 -- BAT AIMBOT + AIM BYPASS (raw__59_ logic)
 local VYSE_HIT_DIST = 5
 local AB_SPEED      = 58
@@ -1191,8 +1204,7 @@ local function tryHitBat()
 		if bat.Parent~=c and hum2 then pcall(function() hum2:EquipTool(bat) end) end
 		pcall(function() bat:Activate() end)
 	end)
-	-- randomized CD: 280-480ms — realistic human swing variance
-	task.delay(math.random(280,480)/1000, function() AB_HIT_CD=false end)
+	task.delay(0.2, function() AB_HIT_CD=false end)
 end
 
 local function getClosestPlayerAim()
@@ -1209,9 +1221,8 @@ local function getClosestPlayerAim()
 	return closest,minDist
 end
 
-	-- Aimbot (velocity lerp toward target)
+	-- Aimbot (prediction + 0.8 lerp)
 local AB = {active=false, conn=nil, SPEED=AB_SPEED, HEIGHT=3.7}
-local _abEquipLast = 0
 function AB.start()
 	AB.active=true
 	if AB.conn then AB.conn:Disconnect() end
@@ -1222,32 +1233,27 @@ function AB.start()
 		local char=LP.Character; if not char then return end
 		local root=char:FindFirstChild("HumanoidRootPart"); if not root then return end
 		local hum=char:FindFirstChildOfClass("Humanoid"); if not hum then return end
-		local now=tick()
-		if not char:FindFirstChildOfClass("Tool") and now-_abEquipLast>2 then
-			local bat=getBat(); if bat then pcall(function() hum:EquipTool(bat) end) end
-			_abEquipLast=now
-		end
+		if not char:FindFirstChildOfClass("Tool") then local bat=getBat(); if bat then pcall(function() hum:EquipTool(bat) end) end end
 		local target,dist=getClosestPlayerAim()
 		if not target or not target.Character then return end
 		local tr=target.Character:FindFirstChild("HumanoidRootPart"); if not tr then return end
-		pcall(function() if sethiddenproperty then sethiddenproperty(root,"PhysicsRepRootPart",tr) end end)
 		local targetVel=tr.AssemblyLinearVelocity
 		local myPos=root.Position; local targetPos=tr.Position
 		local predictPos=targetPos+targetVel*0.14+tr.CFrame.LookVector*0.3
 		local direction=predictPos-myPos; local flatDir=Vector3.new(direction.X,0,direction.Z).Unit
 		local desiredHeight=targetPos.Y+AB.HEIGHT
-		local yVel=(desiredHeight-myPos.Y)*14+targetVel.Y*0.6
-		if hum.FloorMaterial~=Enum.Material.Air then yVel=math.max(yVel,12) end
-		yVel=math.clamp(yVel,-50,62)
+		local yVel=(desiredHeight-myPos.Y)*19.5+targetVel.Y*0.8
+		if hum.FloorMaterial~=Enum.Material.Air then yVel=math.max(yVel,13) end
+		yVel=math.clamp(yVel,-70,110)
 		local desiredVel=Vector3.new(flatDir.X*AB.SPEED,yVel,flatDir.Z*AB.SPEED)
-		root.AssemblyLinearVelocity=root.AssemblyLinearVelocity:Lerp(desiredVel,0.28)
+		root.AssemblyLinearVelocity=root.AssemblyLinearVelocity:Lerp(desiredVel,0.8)
 		local speed3=targetVel.Magnitude; local predictTime=math.clamp(speed3/150,0.05,0.2)
 		local predictedPos=targetPos+targetVel*predictTime; local toPredict=predictedPos-myPos
 		if toPredict.Magnitude>0.1 then
 			local goalCF=CFrame.lookAt(myPos,predictedPos); local diffCF=root.CFrame:Inverse()*goalCF
 			local rx,ry,rz=diffCF:ToEulerAnglesXYZ()
 			rx=math.clamp(rx,-2.5,2.5); ry=math.clamp(ry,-2.5,2.5); rz=math.clamp(rz,-2.5,2.5)
-			root.AssemblyAngularVelocity=root.CFrame:VectorToWorldSpace(Vector3.new(rx*18,ry*18,rz*18))
+			root.AssemblyAngularVelocity=root.CFrame:VectorToWorldSpace(Vector3.new(rx*42,ry*42,rz*42))
 		end
 		if dist<=VYSE_HIT_DIST then tryHitBat() end
 	end)
@@ -1260,12 +1266,12 @@ function AB.stop()
 	if hum then hum.AutoRotate=true end
 end
 
+-- Aim Bypass (face tracking)
 -- ===================================================================
+-- AIM V3 (anti-desync + TP ennemi + frappe)
 -- AIM V3 (anti-desync + enemy TP + strike)
 local AimV3 = {active=false, conn=nil}
-local _av3HitCD  = false
-local _av3LastTP = 0
-local _av3TP_CD  = 0.12 -- max ~8 TPs/s instead of 60
+local _av3HitCD = false
 
 local function _av3GetBat()
 	local char=LP.Character; if not char then return nil end
@@ -1287,9 +1293,10 @@ local function _av3Hit()
 	pcall(function()
 		local bat=_av3GetBat(); if not bat then return end
 		pcall(function() bat:Activate() end)
+		local ev=bat:FindFirstChildWhichIsA("RemoteEvent")
+		if ev then pcall(function() ev:FireServer() end) end
 	end)
-	-- randomized cooldown (200-350ms) — realistic human swing rate
-	task.delay(math.random(200, 350) / 1000, function() _av3HitCD=false end)
+	task.delay(0.08,function() _av3HitCD=false end)
 end
 
 local function _av3Nearest(root)
@@ -1312,19 +1319,10 @@ function AimV3.start()
 		local tr=target.Character:FindFirstChild("HumanoidRootPart"); if not tr then return end
 		pcall(function()
 			if sethiddenproperty then sethiddenproperty(root,"PhysicsRepRootPart",tr) end
-			-- small random offset so TP destination is never machine-perfect
-			local jx=math.random(-12,12)/10
-			local jz=math.random(-12,12)/10
-			local targetPos=tr.Position+Vector3.new(jx,0.9,jz)
-			local now=tick()
-			if (root.Position-targetPos).Magnitude>8 and now-_av3LastTP>=_av3TP_CD then
-				root.CFrame=CFrame.new(targetPos)
-				_av3LastTP=now
-			end
+			local targetPos=tr.Position+Vector3.new(0,0.9,0)
+			if (root.Position-targetPos).Magnitude>8 then root.CFrame=CFrame.new(targetPos) end
 			local cam=workspace.CurrentCamera
-			-- slight aim jitter so camera movement looks human
-			local aimJitter=Vector3.new(math.random(-3,3)/10,math.random(-2,2)/10,0)
-			cam.CFrame=CFrame.new(cam.CFrame.Position,tr.Position+aimJitter)
+			cam.CFrame=CFrame.new(cam.CFrame.Position,tr.Position)
 			_av3Hit()
 		end)
 	end)
@@ -1333,32 +1331,143 @@ function AimV3.stop()
 	if AimV3.conn then AimV3.conn:Disconnect(); AimV3.conn=nil end; AimV3.active=false
 end
 
--- Aim V2 (v1-3 — velocity directe vers la face de la cible, marche contre anti-bat)
-local FACE_OFFSET = 2
+-- Aim V2 (Taser Hub — prédiction + rotation angulaire + AutoRotate false)
 local ABP = {active=false, conn=nil}
+local ABP_CFG = {
+	CHASE_SPEED   = 58,
+	VERT_SPEED    = 52,
+	FOLLOW_DIST   = -2,
+	HEIGHT_OFFSET = 1.6,
+	VERT_OFFSET   = 1,
+	TURN_SPEED    = 285,
+	MAX_TURN_RATE = 40,
+	SWING_RANGE   = 6,
+}
+local _abpUnwalkSaved = nil
+local _abpScanCache, _abpScanTime = nil, 0
+
+local function ABP_findBat()
+	local char=LP.Character; if not char then return nil end
+	local tool=char:FindFirstChild("Bat"); if tool then return tool end
+	local bp=LP:FindFirstChildOfClass("Backpack")
+	if bp then tool=bp:FindFirstChild("Bat"); if tool then tool.Parent=char; return tool end end
+	for _,n in ipairs(BAT_NAMES) do
+		local t=char:FindFirstChild(n) or (bp and bp:FindFirstChild(n))
+		if t and t:IsA("Tool") then return t end
+	end
+	return nil
+end
+
+local function ABP_equip()
+	local char=LP.Character; local hum=char and char:FindFirstChildOfClass("Humanoid")
+	if not char or not hum then return end
+	if not char:FindFirstChildOfClass("Tool") then
+		local bat=ABP_findBat(); if bat then pcall(function() hum:EquipTool(bat) end) end
+	end
+end
+
+local function ABP_swing()
+	pcall(function()
+		local bat=ABP_findBat(); if not bat then return end
+		pcall(function() bat:Activate() end)
+		local ev=bat:FindFirstChildWhichIsA("RemoteEvent")
+		if ev then pcall(function() ev:FireServer() end) end
+	end)
+end
+
+local function ABP_startUnwalk()
+	local char=LP.Character; if not char then return end
+	local hum=char:FindFirstChildOfClass("Humanoid")
+	if hum then for _,tr in pairs(hum:GetPlayingAnimationTracks()) do tr:Stop() end end
+	local anim=char:FindFirstChild("Animate")
+	if anim then _abpUnwalkSaved=anim:Clone(); anim:Destroy() end
+end
+
+local function ABP_stopUnwalk()
+	local char=LP.Character
+	if char and _abpUnwalkSaved then _abpUnwalkSaved.Parent=char; _abpUnwalkSaved=nil end
+end
+
+local function ABP_resetMotion()
+	local char=LP.Character
+	local root=char and char:FindFirstChild("HumanoidRootPart")
+	local hum=char and char:FindFirstChildOfClass("Humanoid")
+	if root then root.AssemblyLinearVelocity=root.AssemblyLinearVelocity*0.3; root.AssemblyAngularVelocity=Vector3.zero end
+	if hum then hum.AutoRotate=true end
+end
+
+local function ABP_nearest(root)
+	local now=tick()
+	if now-_abpScanTime<=0.1 and _abpScanCache and _abpScanCache.Parent then
+		local h=_abpScanCache.Parent and _abpScanCache.Parent:FindFirstChildOfClass("Humanoid")
+		if h and h.Health>0 then return _abpScanCache end
+	end
+	_abpScanTime=now; _abpScanCache=nil
+	local best,bestD=nil,math.huge
+	for _,p in ipairs(Players:GetPlayers()) do
+		if p~=LP and p.Character then
+			local tr=p.Character:FindFirstChild("HumanoidRootPart")
+			local h=p.Character:FindFirstChildOfClass("Humanoid")
+			if tr and h and h.Health>0 then
+				local d=(tr.Position-root.Position).Magnitude
+				if d<bestD then bestD=d; best=tr end
+			end
+		end
+	end
+	_abpScanCache=best; return best
+end
+
 function ABP.start()
 	if ABP.conn then ABP.conn:Disconnect() end; ABP.active=true
+	ABP_startUnwalk()
 	ABP.conn=RunService.Heartbeat:Connect(function()
 		if not ABP.active then return end
 		local char=LP.Character; if not char then return end
 		local root=char:FindFirstChild("HumanoidRootPart"); if not root then return end
-		local target,dist=getClosestPlayerAim()
-		if target and target.Character then
-			local tr=target.Character:FindFirstChild("HumanoidRootPart"); if not tr then return end
-			pcall(function() if sethiddenproperty then sethiddenproperty(root,"PhysicsRepRootPart",tr) end end)
-			local head=target.Character:FindFirstChild("Head")
-			local basePos=head and head.Position or tr.Position
-			local aimPoint=basePos+tr.CFrame.LookVector*FACE_OFFSET
-			local direction=(aimPoint-root.Position).Unit
-			root.AssemblyLinearVelocity=direction*AB.SPEED
-			if dist<=VYSE_HIT_DIST then tryHitBat() end
-		else root.AssemblyLinearVelocity=Vector3.new(0,root.AssemblyLinearVelocity.Y,0) end
+		local hum=char:FindFirstChildOfClass("Humanoid"); if not hum then return end
+		ABP_equip()
+		local target=ABP_nearest(root)
+		if target then
+			local vel=target.AssemblyLinearVelocity
+			local aimPos=target.Position+(vel*math.clamp(vel.Magnitude/130,0.05,0.15))+Vector3.new(0,ABP_CFG.VERT_OFFSET,0)
+			hum.AutoRotate=false
+			local look=aimPos-root.Position
+			local flat=Vector3.new(look.X,0,look.Z)
+			if look.Magnitude>0.01 and flat.Magnitude>0.01 then
+				local tYaw=math.deg(math.atan2(-flat.X,-flat.Z))
+				local yawD=(tYaw-root.Orientation.Y+180)%360-180
+				local tPitch=math.deg(math.atan2(look.Y,flat.Magnitude))
+				local pitD=(tPitch-root.Orientation.X+180)%360-180
+				local yawR=math.clamp(math.rad(yawD)*ABP_CFG.TURN_SPEED,-ABP_CFG.MAX_TURN_RATE,ABP_CFG.MAX_TURN_RATE)
+				local pitR=math.clamp(math.rad(pitD)*ABP_CFG.TURN_SPEED,-ABP_CFG.MAX_TURN_RATE,ABP_CFG.MAX_TURN_RATE)
+				local yr=math.rad(root.Orientation.Y)
+				local right=Vector3.new(math.cos(yr),0,-math.sin(yr))
+				root.AssemblyAngularVelocity=Vector3.new(0,yawR,0)+(right*pitR)
+			else
+				root.AssemblyAngularVelocity=Vector3.zero
+			end
+			local fd=math.max(math.abs(ABP_CFG.FOLLOW_DIST),1)
+			local dir=look.Magnitude>0.01 and look.Unit or Vector3.new(1,0,0)
+			local standPos=aimPos-(dir*fd)+Vector3.new(0,ABP_CFG.HEIGHT_OFFSET,0)
+			local mv=standPos-root.Position
+			local hDir=Vector3.new(mv.X,0,mv.Z)
+			local hVel=hDir.Magnitude>0.1 and hDir.Unit*ABP_CFG.CHASE_SPEED or Vector3.zero
+			local vVel=math.abs(mv.Y)>0.1 and Vector3.new(0,math.sign(mv.Y)*ABP_CFG.VERT_SPEED,0) or Vector3.new(0,-2,0)
+			root.AssemblyLinearVelocity=hVel+vVel
+			if hDir.Magnitude>0.5 then hum:Move(hDir.Unit,false) end
+			if (root.Position-target.Position).Magnitude<ABP_CFG.SWING_RANGE then
+				ABP_swing()
+			end
+		else
+			hum.AutoRotate=true
+			root.AssemblyAngularVelocity=Vector3.zero
+			root.AssemblyLinearVelocity=Vector3.zero
+		end
 	end)
 end
 function ABP.stop()
-	if ABP.conn then ABP.conn:Disconnect(); ABP.conn=nil end; ABP.active=false; AB_HIT_CD=false
-	local char=LP.Character; local root=char and char:FindFirstChild("HumanoidRootPart")
-	if root then root.AssemblyLinearVelocity=Vector3.new(0,root.AssemblyLinearVelocity.Y,0) end
+	if ABP.conn then ABP.conn:Disconnect(); ABP.conn=nil end; ABP.active=false
+	ABP_resetMotion(); ABP_stopUnwalk(); _abpScanCache=nil
 end
 
 -- ===================================================================
@@ -1396,6 +1505,13 @@ end
 -- BUILD PAGES
 -- ===================================================================
 local applyAntiBatState
+local setAutoStealRowVisual
+local setAntiRagdollRowVisual
+local setAntiBatQuickBtnVisual
+local setBatCounterRowVisual
+local setAimbotRowVisual
+local setAimbotV2RowVisual
+local setInfJumpRowVisual
 
 	-- Bat Counter — source bat_counter.txt (RemoteEvent support + "bat" keyword fallback)
 local BatCounter = {active=false, conn=nil}
@@ -1415,7 +1531,10 @@ end
 local function swingBatForCounter(bat,char)
 	local hum2=char:FindFirstChildOfClass("Humanoid")
 	if bat.Parent~=char then if hum2 then pcall(function() hum2:EquipTool(bat) end) end; task.wait(0.05) end
-	pcall(function() bat:Activate() end)
+	local remote=bat:FindFirstChildOfClass("RemoteEvent") or bat:FindFirstChildOfClass("RemoteFunction")
+	if remote and remote:IsA("RemoteEvent") then
+		pcall(function() remote:FireServer() end); task.wait(0.15); pcall(function() remote:FireServer() end)
+	else pcall(function() bat:Activate() end); task.wait(0.15); pcall(function() bat:Activate() end) end
 end
 function BatCounter.start()
 	if BatCounter.conn then BatCounter.conn:Disconnect() end
@@ -1429,7 +1548,7 @@ function BatCounter.start()
 			task.spawn(function()
 				local bat=findBatForCounter()
 				if bat then swingBatForCounter(bat,char) end
-				task.wait(0.35 + math.random()*0.30); _bcDebounce=false
+				task.wait(0.5); _bcDebounce=false
 			end)
 		end
 	end)
@@ -1437,6 +1556,85 @@ end
 function BatCounter.stop()
 	if BatCounter.conn then BatCounter.conn:Disconnect(); BatCounter.conn=nil end
 	_bcDebounce=false
+end
+
+-- ===================================================================
+-- ANTI-DIE (source: anti_die_made_by_mehneymarish_11.txt)
+-- ===================================================================
+local _adLoop    = nil
+local _adCharConn = nil
+local _adInvincibleUntil = 0
+local _adConfig  = { healthThreshold=25, fallDamageProtection=true, ragdollProtection=true, invincibilityFrames=0.5 }
+
+local function _adSuperHeal(hum)
+	if not hum or not hum.Parent then return end
+	local max = hum.MaxHealth or 100
+	if hum.Health >= max and hum.Health > 0 then return end
+	hum.Health = max
+	_adInvincibleUntil = tick() + _adConfig.invincibilityFrames
+	pcall(function()
+		local char = hum.Parent
+		for _, child in ipairs(char:GetChildren()) do
+			if child:IsA("NumberValue") then
+				local n = child.Name:lower()
+				if n:find("health") or n:find("hp") or n:find("life") then child.Value = 100 end
+			elseif child:IsA("BoolValue") and child.Name:lower():find("dead") then
+				child.Value = false
+			end
+		end
+	end)
+end
+
+local function _adSetup(char)
+	if not char then return end
+	local hum  = char:FindFirstChildOfClass("Humanoid"); if not hum then return end
+	local root = char:FindFirstChild("HumanoidRootPart")
+	if _adLoop then pcall(function() _adLoop:Disconnect() end); _adLoop = nil end
+	_adLoop = RunService.Heartbeat:Connect(function()
+		if not hum or not hum.Parent then return end
+		if hum.Health <= 0 then
+			_adSuperHeal(hum)
+			hum:ChangeState(Enum.HumanoidStateType.Running)
+			if root and root.Parent then
+				root.CFrame = CFrame.new(root.Position + Vector3.new(0,2,0))
+				root.AssemblyLinearVelocity = Vector3.zero
+			end
+			return
+		end
+		if tick() < _adInvincibleUntil and hum.Health < hum.MaxHealth then
+			hum.Health = hum.MaxHealth
+		end
+		if _adConfig.fallDamageProtection and root and root.Parent then
+			local vy = root.AssemblyLinearVelocity.Y
+			if vy < -25 then
+				root.AssemblyLinearVelocity = Vector3.new(root.AssemblyLinearVelocity.X, -3, root.AssemblyLinearVelocity.Z)
+				_adSuperHeal(hum)
+			end
+		end
+		if _adConfig.ragdollProtection then
+			local st = hum:GetState()
+			if st==Enum.HumanoidStateType.Physics or st==Enum.HumanoidStateType.Ragdoll or st==Enum.HumanoidStateType.FallingDown then
+				hum:ChangeState(Enum.HumanoidStateType.Running)
+				_adSuperHeal(hum)
+				if root and root.Parent then
+					root.AssemblyLinearVelocity  = Vector3.zero
+					root.AssemblyAngularVelocity = Vector3.zero
+				end
+			end
+		end
+		if hum.Health > 0 and hum.Health <= _adConfig.healthThreshold then _adSuperHeal(hum) end
+	end)
+end
+
+local function startAntiDie()
+	if _adCharConn then pcall(function() _adCharConn:Disconnect() end); _adCharConn = nil end
+	_adSetup(LP.Character)
+	_adCharConn = LP.CharacterAdded:Connect(function(char) task.wait(0.1); _adSetup(char) end)
+end
+
+local function stopAntiDie()
+	if _adLoop     then pcall(function() _adLoop:Disconnect() end);     _adLoop     = nil end
+	if _adCharConn then pcall(function() _adCharConn:Disconnect() end); _adCharConn = nil end
 end
 
 -- ===================================================================
@@ -1656,35 +1854,6 @@ local function stopAntiKick()
 	_akActive = false
 end
 task.spawn(function() pcall(startAntiKick) end)
-
--- ===================================================================
--- SHINY GRAPHICS (client-side lighting only — no UI toggle)
--- ===================================================================
-pcall(function()
-	for _, obj in ipairs(Lighting:GetChildren()) do
-		if obj:IsA("Sky") then obj:Destroy() end
-		if obj:IsA("BloomEffect") or obj:IsA("ColorCorrectionEffect") then obj:Destroy() end
-	end
-	local sky = Instance.new("Sky")
-	sky.SkyboxBk = "rbxassetid://1534951537"; sky.SkyboxDn = "rbxassetid://1534951537"
-	sky.SkyboxFt = "rbxassetid://1534951537"; sky.SkyboxLf = "rbxassetid://1534951537"
-	sky.SkyboxRt = "rbxassetid://1534951537"; sky.SkyboxUp = "rbxassetid://1534951537"
-	sky.StarCount = 10000; sky.CelestialBodiesShown = false; sky.Parent = Lighting
-	local bloom = Instance.new("BloomEffect")
-	bloom.Intensity = 1.5; bloom.Size = 40; bloom.Threshold = 0.8; bloom.Parent = Lighting
-	local cc = Instance.new("ColorCorrectionEffect")
-	cc.Saturation = 0.8; cc.Contrast = 0.3; cc.TintColor = Color3.fromRGB(200,200,200); cc.Parent = Lighting
-	Lighting.Brightness = 3; Lighting.ClockTime = 0
-	RunService.Heartbeat:Connect(function()
-		local t = tick() * 0.5
-		Lighting.Ambient = Color3.fromRGB(
-			100 + math.floor(math.sin(t) * 30),
-			100 + math.floor(math.sin(t * 0.8) * 30),
-			110 + math.floor(math.sin(t * 1.2) * 30)
-		)
-		bloom.Intensity = 1.2 + math.sin(t * 2) * 0.4
-	end)
-end)
 
 local _MH_buildUI
 _MH_buildUI = function()
@@ -2193,7 +2362,9 @@ do
 		_sfx(131070686, 0.25, 1.0)             -- transition sci-fi — fade out cinématique
 		task.wait(0.55)
 
-		doSkip()
+		TweenService:Create(introGui, TweenInfo.new(0.5), {BackgroundTransparency = 1}):Play()
+		task.wait(0.5)
+		introGui:Destroy()
 	end)
 end
 
@@ -2280,7 +2451,7 @@ bgImg.Name = "BgFill"; bgImg.Size = UDim2.new(1,0,1,0)
 bgImg.BackgroundColor3 = C_BG; bgImg.BorderSizePixel = 0; bgImg.ZIndex = 0
 addCorner(bgImg, 24)
 
-addLivingStroke(mainOuter, 2)
+local mainStroke = addLivingStroke(mainOuter, 2)
 
 -- ===================================================================
 -- TITLE BAR
@@ -2463,12 +2634,6 @@ function UIB.makeToggleRow(label, defaultOn, onToggle)
 	end
 	local clk = Instance.new("TextButton", row)
 	clk.Size = UDim2.new(1,0,1,0); clk.BackgroundTransparency = 1; clk.Text = ""
-	clk.MouseButton1Down:Connect(function()
-		TweenService:Create(row, TweenInfo.new(0.07, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundTransparency = 0}):Play()
-	end)
-	clk.MouseButton1Up:Connect(function()
-		TweenService:Create(row, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundTransparency = 0.35}):Play()
-	end)
 	clk.MouseButton1Click:Connect(function()
 		isOn = not isOn; setV(isOn)
 		if onToggle then onToggle(isOn) end
@@ -2524,12 +2689,6 @@ for i, name in ipairs(TABS) do
 	lbl.Size = UDim2.new(1,0,1,0); lbl.BackgroundTransparency = 1; lbl.Text = name
 	lbl.TextColor3 = C_TABIDLE; lbl.Font = Enum.Font.GothamBold; lbl.TextSize = 10; lbl.ZIndex = 6
 	tabButtons[name] = {frame=btn, lbl=lbl}
-	btn.MouseButton1Down:Connect(function()
-		TweenService:Create(btn, TweenInfo.new(0.07, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundTransparency = 0.1}):Play()
-	end)
-	btn.MouseButton1Up:Connect(function()
-		TweenService:Create(btn, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundTransparency = 0.5}):Play()
-	end)
 	btn.MouseButton1Click:Connect(function() selectTab(name) end)
 end
 
@@ -2604,87 +2763,35 @@ miniBtn.MouseButton1Click:Connect(showGui)
 -- No additional widget.
 
 -- ===================================================================
--- AUTO TP DOWN — Raycast (déclaré ici pour être visible dans Combat)
--- ===================================================================
-local _sTPDownEnabled = false
-local _sTPDownConn    = nil
-local _sTPDownHeight  = 20
-local _sTPDownBusy    = false
-local function _sRunTPDown()
-	if _sTPDownBusy then return end
-	_sTPDownBusy = true
-	pcall(function()
-		local char = LP.Character; if not char then _sTPDownBusy=false; return end
-		local root = char:FindFirstChild("HumanoidRootPart")
-		local hum2 = char:FindFirstChildOfClass("Humanoid")
-		if not root or not hum2 then _sTPDownBusy=false; return end
-		local hipH = hum2.HipHeight or 2
-		local rp = RaycastParams.new()
-		rp.FilterDescendantsInstances = {char}
-		rp.FilterType = Enum.RaycastFilterType.Exclude
-		local ray = workspace:Raycast(root.Position, Vector3.new(0,-500,0), rp)
-		if ray then
-			root.CFrame = CFrame.new(root.Position.X, ray.Position.Y + hipH + 0.1, root.Position.Z)
-			root.AssemblyLinearVelocity = Vector3.new(root.AssemblyLinearVelocity.X, 0, root.AssemblyLinearVelocity.Z)
-		end
-	end)
-	_sTPDownBusy = false
-end
-local function _sStartAutoTPDown()
-	if _sTPDownConn then task.cancel(_sTPDownConn); _sTPDownConn=nil end
-	_sTPDownEnabled = true
-	_sTPDownConn = task.spawn(function()
-		while _sTPDownEnabled do
-			task.wait(0.1)
-			pcall(function()
-				local char = LP.Character; if not char then return end
-				local root = char:FindFirstChild("HumanoidRootPart"); if not root then return end
-				local hum2 = char:FindFirstChildOfClass("Humanoid"); if not hum2 then return end
-				if hum2.FloorMaterial ~= Enum.Material.Air then return end
-				if root.Position.Y < _sTPDownHeight then return end
-				_sRunTPDown()
-			end)
-		end
-	end)
-end
-local function _sStopAutoTPDown()
-	_sTPDownEnabled = false
-	if _sTPDownConn then task.cancel(_sTPDownConn); _sTPDownConn=nil end
-end
-
--- ===================================================================
 -- MOVEMENT LOGIC
 -- ===================================================================
 buildPage("Combat", function()
 	UIB.makeSectionLabel("Combat")
-	UIB.makeToggleRow("Bat Counter",false,function(on)
+	setBatCounterRowVisual = UIB.makeToggleRow("Bat Counter",false,function(on)
 		BatCounter.active=on; if on then BatCounter.start() else BatCounter.stop() end
 	end)
-	UIB.makeToggleRow("Bat Aimbot",false,function(on)
+	setAimbotRowVisual = UIB.makeToggleRow("Bat Aimbot",false,function(on)
 		if on then if ABP.active then ABP.stop() end; AB.start() else AB.stop() end
 	end)
-	UIB.makeToggleRow("Bat Aimbot V2",false,function(on)
+	setAimbotV2RowVisual = UIB.makeToggleRow("Bat Aimbot V2",false,function(on)
 		if on then if AB.active then AB.stop() end; ABP.start() else ABP.stop() end
 	end)
-
 	UIB.makeGap(4); UIB.makeSectionLabel("Aimbot Tuning")
 	UIB.makeInputRow("Aim Speed",AB.SPEED,function(n) if n>0 and n<=200 then AB.SPEED=n end end)
 	UIB.makeInputRow("Aim Height",AB.HEIGHT,function(n) if n>=0 and n<=30 then AB.HEIGHT=n end end)
 	UIB.makeGap(4); UIB.makeSectionLabel("Defense")
-	UIB.makeToggleRow("Anti Ragdoll",true,function(on)
+	setAntiRagdollRowVisual=UIB.makeToggleRow("Anti Ragdoll",false,function(on)
 		State.antiRagdollEnabled=on; if on then startAntiRagdoll() else stopAntiRagdoll() end
 	end)
 	UIB.makeToggleRow("Medusa Counter",false,function(on)
 		State.medusaCounterEnabled=on
 		if on then setupMedusaCounter(LP.Character) else stopMedusaCounter() end
 	end)
-	UIB.makeToggleRow("Auto Reset on Med",false,function(on)
-		State.autoResetOnMedEnabled=on
-		_armState.enabled=on
-		if on then _armStart(LP.Character) else _armStop() end
+	UIB.makeToggleRow("Auto Reset Medusa",false,function(on)
+		_armEnabled=on
+		if on then setupAutoResetMedusa(LP.Character) else stopAutoResetMedusa() end
 	end)
-
-	UIB.makeToggleRow("Infinite Jump",false,function(on)
+	setInfJumpRowVisual = UIB.makeToggleRow("Infinite Jump",false,function(on)
 		IJ.active=on; if on then IJ.start() else IJ.stop() end
 	end)
 	do
@@ -2707,15 +2814,38 @@ buildPage("Combat", function()
 		holB.MouseButton1Click:Connect(function() IJ.mode="hold"; updM(); if _GH.autoSave then _GH.autoSave() end end)
 		makeDivider()
 	end
-	UIB.makeToggleRow("Auto Steal",true,function(on)
+	setAutoStealRowVisual=UIB.makeToggleRow("Auto Steal",true,function(on)
 		AutoSteal.Enabled=on; if on then startAutoSteal() else stopAutoSteal() end
 	end)
 	UIB.makeInputRow("Steal Radius",AutoSteal.Radius,function(n) if n and n>=1 and n<=500 then AutoSteal.Radius=n end end)
+	local _autoTPEnabled = false
+	local _autoTPConn    = nil
+	local _autoTPHeight  = 20
 	UIB.makeToggleRow("Auto TP Down", false, function(on)
-		if on then _sStartAutoTPDown() else _sStopAutoTPDown() end
+		_autoTPEnabled = on
+		if on then
+			if _autoTPConn then pcall(function() task.cancel(_autoTPConn) end) end
+			_autoTPConn = task.spawn(function()
+				while _autoTPEnabled do
+					task.wait(0.1)
+					pcall(function()
+						local char = LP.Character; if not char then return end
+						local root = char:FindFirstChild("HumanoidRootPart"); if not root then return end
+						local hum2 = char:FindFirstChildOfClass("Humanoid"); if not hum2 then return end
+						if hum2.FloorMaterial ~= Enum.Material.Air then return end
+						if root.Position.Y < _autoTPHeight then return end
+						root.CFrame = CFrame.new(root.Position.X, -7.00, root.Position.Z)
+							* CFrame.Angles(0, select(2, root.CFrame:ToEulerAnglesYXZ()), 0)
+						root.AssemblyLinearVelocity = Vector3.zero
+					end)
+				end
+			end)
+		else
+			if _autoTPConn then pcall(function() task.cancel(_autoTPConn) end); _autoTPConn = nil end
+		end
 	end)
-	UIB.makeInputRow("Height (Y)", _sTPDownHeight, function(n)
-		if n >= 0 and n <= 9999 then _sTPDownHeight = n end
+	UIB.makeInputRow("TP Height (Y)", _autoTPHeight, function(n)
+		if n >= 0 and n <= 500 then _autoTPHeight = n end
 	end)
 	local tpDownRow=Instance.new("Frame",currentPage)
 	tpDownRow.Size=UDim2.new(1,0,0,32); tpDownRow.BackgroundColor3=C_ROW; tpDownRow.BackgroundTransparency=0.35
@@ -2745,9 +2875,9 @@ local _floatPositions = {}   -- id -> {xs,xo,ys,yo}
 -- older version get discarded on load instead of restoring stale/overlapping
 -- coordinates, so everyone gets the current clean column layout by default.
 local _FLOAT_POS_VERSION = 14
+local FLOAT_WIDE_H = 30
 local _floatLocked    = false
-local FLOAT_SZ = 44
-local FLOAT_WIDE_H = 30  -- height of wide button (antibat) — slimmer than grid buttons
+local FLOAT_SZ = 46
 
 -- Declared here (before buildPage Settings) so the Speed
 -- Bypass / Lagger toggles can reference the widgets built further
@@ -2965,12 +3095,12 @@ buildPage("Visual", function()
 	local _dBri,_dClock,_dAmb,_dOut,_dFogE,_dFogC = Lighting.Brightness,Lighting.ClockTime,Lighting.Ambient,Lighting.OutdoorAmbient,Lighting.FogEnd,Lighting.FogColor
 	UIB.makeToggleRow("Dark Mode",false,function(on)
 		if on then
-			local s=Lighting:FindFirstChild(_NS.."d") or Instance.new("Sky"); s.Name=_NS.."d"
+			local s=Lighting:FindFirstChild("MoonDS") or Instance.new("Sky"); s.Name="MoonDS"
 			s.SkyboxBk="rbxassetid://159454299";s.SkyboxDn="rbxassetid://159454296";s.SkyboxFt="rbxassetid://159454293"
 			s.SkyboxLf="rbxassetid://159454286";s.SkyboxRt="rbxassetid://159454289";s.SkyboxUp="rbxassetid://159454291";s.Parent=Lighting
 			Lighting.Brightness=0;Lighting.ClockTime=0;Lighting.OutdoorAmbient=Color3.fromRGB(0,0,0)
 		else
-			local s=Lighting:FindFirstChild(_NS.."d");if s then s:Destroy() end
+			local s=Lighting:FindFirstChild("MoonDS");if s then s:Destroy() end
 			Lighting.Brightness=_dBri;Lighting.ClockTime=_dClock;Lighting.OutdoorAmbient=_dOut
 		end
 	end)
@@ -2984,39 +3114,6 @@ buildPage("Visual", function()
 			Lighting.ClockTime=_dClock;Lighting.Brightness=_dBri;Lighting.FogEnd=_dFogE;Lighting.FogColor=_dFogC
 			Lighting.Ambient=_dAmb;Lighting.OutdoorAmbient=_dOut
 			local cc=Lighting:FindFirstChildOfClass("ColorCorrectionEffect");if cc then cc:Destroy() end
-		end
-	end)
-	local _shinyConn=nil
-	UIB.makeToggleRow("Shiny Graphics",false,function(on)
-		if on then
-			for _,obj in ipairs(Lighting:GetChildren()) do
-				if obj:IsA("Sky") or obj.Name=="MoonShinyBloom" or obj.Name=="MoonShinyCC" then obj:Destroy() end
-			end
-			local sky=Instance.new("Sky"); sky.Name=_NS.."e"
-			sky.SkyboxBk="rbxassetid://1534951537";sky.SkyboxDn="rbxassetid://1534951537"
-			sky.SkyboxFt="rbxassetid://1534951537";sky.SkyboxLf="rbxassetid://1534951537"
-			sky.SkyboxRt="rbxassetid://1534951537";sky.SkyboxUp="rbxassetid://1534951537"
-			sky.StarCount=10000;sky.CelestialBodiesShown=false;sky.Parent=Lighting
-			local bloom=Instance.new("BloomEffect"); bloom.Name=_NS.."f"
-			bloom.Intensity=1.5;bloom.Size=40;bloom.Threshold=0.8;bloom.Parent=Lighting
-			local cc=Instance.new("ColorCorrectionEffect"); cc.Name=_NS.."g"
-			cc.Saturation=0.8;cc.Contrast=0.3;cc.TintColor=Color3.fromRGB(200,200,200);cc.Parent=Lighting
-			Lighting.Brightness=3;Lighting.ClockTime=0
-			_shinyConn=RunService.Heartbeat:Connect(function()
-				local t=tick()*0.5
-				Lighting.Ambient=Color3.fromRGB(
-					100+math.floor(math.sin(t)*30),
-					100+math.floor(math.sin(t*0.8)*30),
-					110+math.floor(math.sin(t*1.2)*30))
-				local b=Lighting:FindFirstChild(_NS.."f")
-				if b then b.Intensity=1.2+math.sin(t*2)*0.4 end
-			end)
-		else
-			if _shinyConn then _shinyConn:Disconnect();_shinyConn=nil end
-			local s=Lighting:FindFirstChild(_NS.."e");if s then s:Destroy() end
-			local b=Lighting:FindFirstChild(_NS.."f");if b then b:Destroy() end
-			local c=Lighting:FindFirstChild(_NS.."g");if c then c:Destroy() end
-			Lighting.Brightness=_dBri;Lighting.ClockTime=_dClock;Lighting.Ambient=_dAmb
 		end
 	end)
 
@@ -3478,6 +3575,7 @@ applyAntiBatState=function(on)
 	if on then
 		if not IJ.active then IJ.active=true; IJ.start() end
 	end
+	if setAntiBatQuickBtnVisual then setAntiBatQuickBtnVisual(on) end
 	if _GH.autoSave then _GH.autoSave() end
 end
 
@@ -3486,7 +3584,7 @@ end
 -- ===================================================================
 local function _buildSpeedWidget()
 local spW=Instance.new("Frame",gui)
-spW.Name=_NS.."a"; spW.Size=UDim2.new(0,150,0,160); _GH.spW=spW
+spW.Name="SpeedWidget"; spW.Size=UDim2.new(0,150,0,160); _GH.spW=spW
 spW.Position=UDim2.new(1,-256,0,210); spW.BackgroundColor3=C_BG
 spW.BorderSizePixel=0; spW.ClipsDescendants=true; spW.Active=true; spW.Visible=false
 addCorner(spW,12); addLivingStroke(spW,1.5)
@@ -3665,7 +3763,7 @@ _buildSpeedWidget()
 -- ===================================================================
 do
 local stealWidget=Instance.new("Frame",gui)
-stealWidget.Name=_NS.."b"; stealWidget.Size=UDim2.new(0,200,0,32)
+stealWidget.Name="StealBarWidget"; stealWidget.Size=UDim2.new(0,200,0,32)
 stealWidget.Position=UDim2.new(0.5,-100,0,35); stealWidget.BackgroundTransparency=1; stealWidget.Active=true
 makeDraggable(stealWidget, nil, "steal")
 local stealPill=Instance.new("Frame",stealWidget)
@@ -3712,14 +3810,10 @@ stealFill.BackgroundTransparency=0.72; stealFill.BorderSizePixel=0; stealFill.ZI
 addCorner(stealFill,18)
 local stealFillGrad=Instance.new("UIGradient",stealFill)
 stealFillGrad.Color=ColorSequence.new({
-	ColorSequenceKeypoint.new(0,    Color3.fromRGB(10,  30,  90)),
-	ColorSequenceKeypoint.new(0.25, Color3.fromRGB(40,  110, 230)),
-	ColorSequenceKeypoint.new(0.5,  Color3.fromRGB(150, 210, 255)),
-	ColorSequenceKeypoint.new(0.75, Color3.fromRGB(40,  110, 230)),
-	ColorSequenceKeypoint.new(1,    Color3.fromRGB(10,  30,  90)),
+	ColorSequenceKeypoint.new(0,Color3.fromRGB(10,50,68)),
+	ColorSequenceKeypoint.new(0.85,C_MOON),
+	ColorSequenceKeypoint.new(1,C_SILVER),
 })
-table.insert(_livingGradients, stealFillGrad)
-_GH.stealFillGradRef = stealFillGrad
 local stealEdge=Instance.new("Frame",stealFill)
 stealEdge.AnchorPoint=Vector2.new(1,0.5); stealEdge.Size=UDim2.new(0,4,1,-6); stealEdge.Position=UDim2.new(1,0,0.5,0)
 stealEdge.BackgroundColor3=C_WHITE; stealEdge.BorderSizePixel=0; stealEdge.ZIndex=2; addCorner(stealEdge,2)
@@ -3730,27 +3824,16 @@ stealPctLbl.TextColor3=C_MOON2; stealPctLbl.Font=Enum.Font.GothamBlack; stealPct
 stealPctLbl.TextXAlignment=Enum.TextXAlignment.Right; stealPctLbl.ZIndex=6
 AutoSteal.ProgressFill=stealFill; AutoSteal.ProgressText=stealPctLbl; AutoSteal.Widget=stealWidget; AutoSteal.StatusLabel=stealLabel
 task.spawn(function() task.wait(0.6); if AutoSteal.SetReadyColor then AutoSteal.SetReadyColor("READY") end end)
-local _lastReadyState = "READY"
 local function _setReadyColor(state)
-	_lastReadyState = state or _lastReadyState
 	local lbl = AutoSteal.StatusLabel; if not lbl then return end
-	local isReady = (_lastReadyState == "READY")
-	local isNoir = (_currentTheme == "noir")
+	local isReady = (state == "READY")
 	local col = isReady and C_MOON or C_RED
 	lbl.TextColor3 = col
+	-- Change the label's animated gradient
 	local g = lbl:FindFirstChildOfClass("UIGradient")
 	if g then
-		local c1, c2
-		if isReady and isNoir then
-			c1 = Color3.fromRGB(80,  80,  80)
-			c2 = Color3.fromRGB(210, 210, 210)
-		elseif isReady then
-			c1 = Color3.fromRGB(20,  70,  140)
-			c2 = Color3.fromRGB(120, 180, 255)
-		else
-			c1 = Color3.fromRGB(120, 20,  20)
-			c2 = Color3.fromRGB(255, 100, 100)
-		end
+		local c1 = isReady and Color3.fromRGB(20,70,140)  or Color3.fromRGB(120,20,20)
+		local c2 = isReady and Color3.fromRGB(120,180,255) or Color3.fromRGB(255,100,100)
 		g.Color = ColorSequence.new({
 			ColorSequenceKeypoint.new(0,    c2),
 			ColorSequenceKeypoint.new(0.25, c1),
@@ -3761,7 +3844,6 @@ local function _setReadyColor(state)
 	end
 end
 AutoSteal.SetReadyColor = _setReadyColor
-_GH.stealReadyColorFn = function() _setReadyColor(nil) end
 local Stats=game:GetService("Stats")
 local frameCount,lastFpsTime,lastFps,lastPing=0,tick(),60,nil
 local function refreshInfoLabel()
@@ -3822,14 +3904,15 @@ local function makeFloatButton(id)
 	btn.Name = "Float_"..id
 	local saved = _floatPositions[id]
 	local GAP = 3
+	local blockX = 1  -- block anchored near the right edge of the screen
 	local blockW = FLOAT_SZ * 2 + GAP
 	if id == "antibat" then
 		-- Wide standalone button, top of the block.
-		btn.Size = UDim2.new(0, blockW, 0, FLOAT_WIDE_H)
+		btn.Size = UDim2.new(0, blockW, 0, FLOAT_SZ)
 		if saved then
 			btn.Position = UDim2.new(saved[1], saved[2], saved[3], saved[4])
 		else
-			btn.Position = UDim2.new(0, 12, 0, 55)
+			btn.Position = UDim2.new(blockX, -(blockW + 12), 0, 40)
 		end
 	else
 		btn.Size = UDim2.new(0, FLOAT_SZ, 0, FLOAT_SZ)
@@ -3840,8 +3923,8 @@ local function makeFloatButton(id)
 			local idx = _floatGridIndex(id) - 1
 			local col = idx % 2
 			local row = math.floor(idx / 2)
-			local topOffset = 55 + FLOAT_WIDE_H + GAP
-			btn.Position = UDim2.new(1, -(blockW + 12) + col * (FLOAT_SZ + GAP), 0, topOffset + row * (FLOAT_SZ + GAP))
+			local topOffset = 40 + FLOAT_SZ + GAP
+			btn.Position = UDim2.new(blockX, -(blockW + 12) + col * (FLOAT_SZ + GAP), 0, topOffset + row * (FLOAT_SZ + GAP))
 		end
 	end
 	btn.BackgroundColor3 = C_ROW; btn.BackgroundTransparency = 0; btn.BorderSizePixel = 0
@@ -3882,12 +3965,6 @@ local function makeFloatButton(id)
 		end
 	end)
 
-	btn.MouseButton1Down:Connect(function()
-		TweenService:Create(btn, TweenInfo.new(0.07, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundTransparency = 0.5}):Play()
-	end)
-	btn.MouseButton1Up:Connect(function()
-		TweenService:Create(btn, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundTransparency = 0}):Play()
-	end)
 	btn.MouseButton1Click:Connect(function()
 		if def.onClick then def.onClick() end
 		if def.momentary then
@@ -3925,22 +4002,6 @@ task.spawn(function()
 		task.wait(0.3)
 	end
 end)
-
--- Force-refresh all float button background colors against current C_ON_BG.
--- Called by applyTheme and at end of MH_load so theme switches / load order
--- can never leave buttons in the wrong color.
-_GH.refreshFloatActiveColors = function()
-	for id, entry in pairs(_floatBtns) do
-		local def = _floatDefs[id]
-		if def and entry.frame and entry.frame.Parent then
-			if def.isActive and not def.momentary then
-				entry.setActive(def.isActive())
-			else
-				entry.setActive(false)
-			end
-		end
-	end
-end
 
 -- ── Action registration ──────────────────────────────────────
 _floatDefs.antibat = {
@@ -4124,7 +4185,6 @@ _floatDefs.aimv2 = {
 	end,
 	isActive = function() return ABP.active end,
 }
-
 _GH.makeFloatButton   = makeFloatButton
 _GH.removeFloatButton = removeFloatButton
 _GH.setFloatLocked    = setFloatLocked
@@ -4188,7 +4248,7 @@ do
 		if not timerLbl then createBB(); if not timerLbl then return end end
 		if not stunActive then
 			timerLbl.Text = "READY!!"
-			timerLbl.TextColor3 = Color3.new(1,1,1)
+			timerLbl.TextColor3 = C_MOON
 			return
 		end
 		local rem = math.max(0, STUN_DURATION-(tick()-stunStartTime))
@@ -4196,7 +4256,7 @@ do
 			stunActive = false
 			if stunConn then stunConn:Disconnect(); stunConn = nil end
 			timerLbl.Text = "READY!!"
-			timerLbl.TextColor3 = Color3.new(1,1,1)
+			timerLbl.TextColor3 = C_MOON
 			return
 		end
 		local sec = math.ceil(rem)
@@ -4235,19 +4295,23 @@ do
 	end)
 	if LP.Character then task.wait(0.1); createBB(); setupDetection(LP.Character) end
 
-	-- Speed update — acemobile approach (AssemblyLinearVelocity fallback, smart rounding)
+	-- Speed update — delta position/time calculation (real measured speed, not the property)
+	local _lastPos, _lastT = nil, tick()
 	RunService.RenderStepped:Connect(function()
 		if not speedLbl or not speedLbl.Parent then return end
 		local char = LP.Character; if not char then return end
-		local hrp3 = char:FindFirstChild("HumanoidRootPart"); if not hrp3 then return end
-		local v = hrp3.AssemblyLinearVelocity or hrp3.Velocity
-		local speedMag = Vector3.new(v.X, 0, v.Z).Magnitude
-		local rounded = math.floor(speedMag * 10 + 0.5) / 10
-		if math.abs(rounded - math.floor(rounded)) < 0.05 then
-			speedLbl.Text = string.format("Speed: %d", math.floor(rounded + 0.5))
-		else
-			speedLbl.Text = string.format("Speed: %.1f", rounded)
+		local root = char:FindFirstChild("HumanoidRootPart"); if not root then return end
+		local now = tick()
+		local pos = Vector3.new(root.Position.X, 0, root.Position.Z)
+		if _lastPos then
+			local dt = now - _lastT
+			if dt > 0 then
+				local dist = (pos - _lastPos).Magnitude
+				local spd = dist / dt
+				speedLbl.Text = string.format("Speed: %.1f", spd)
+			end
 		end
+		_lastPos, _lastT = pos, now
 	end)
 
 	-- Other players' speed (billboard above their head)
@@ -4263,7 +4327,7 @@ do
 			end
 			local head = char:WaitForChild("Head", 5); if not head then return end
 			local bb = Instance.new("BillboardGui", head)
-			bb.Name = _NS .. "_v"; bb.Size = UDim2.new(0,110,0,22)
+			bb.Name = "MoonSpeedBB"; bb.Size = UDim2.new(0,110,0,22)
 			bb.StudsOffset = Vector3.new(0,2.2,0); bb.AlwaysOnTop = true
 			local lbl = Instance.new("TextLabel", bb)
 			lbl.Size = UDim2.new(1,0,1,0); lbl.BackgroundTransparency = 1
@@ -4320,7 +4384,6 @@ end
 local HS      = game:GetService("HttpService")
 local MH_FILE = "rbxdata_mhv3x_" .. tostring(LP.UserId) .. ".json"
 local _saveDebounce = false
-
 local function ks(e)
 	return {
 		key = e and e.key and tostring(e.key):gsub("Enum.KeyCode.","") or nil,
@@ -4424,22 +4487,21 @@ _GH.autoSave = MH_save
 -- Loading: pushes values straight into State, the widgets, AND restarts active modules
 local function MH_load()
 	local ok, data = pcall(function()
-		if type(readfile) ~= "function" then warn("[H] readfile missing on this executor"); return nil end
-		if type(isfile) ~= "function" then warn("[H] isfile missing on this executor"); return nil end
+		if type(readfile) ~= "function" then warn("[MoonHub] readfile missing on this executor"); return nil end
+		if type(isfile) ~= "function" then warn("[MoonHub] isfile missing on this executor"); return nil end
 		local fileExists = false
 		local fOk, fErr = pcall(function() fileExists = isfile(MH_FILE) end)
-		if not fOk then warn("[H] isfile raised an error: "..tostring(fErr)); return nil end
+		if not fOk then warn("[MoonHub] isfile raised an error: "..tostring(fErr)); return nil end
 		if not fileExists then return nil end
 		local rOk, rContent = pcall(function() return readfile(MH_FILE) end)
-		if not rOk then warn("[H] readfile raised an error: "..tostring(rContent)); return nil end
+		if not rOk then warn("[MoonHub] readfile raised an error: "..tostring(rContent)); return nil end
 		local dOk, decoded = pcall(function() return HS:JSONDecode(rContent) end)
-		if not dOk then warn("[H] JSONDecode failed: "..tostring(decoded)); return nil end
+		if not dOk then warn("[MoonHub] JSONDecode failed: "..tostring(decoded)); return nil end
 		return decoded
 	end)
 	if not ok or not data then
 		return false
 	end
-
 	local loadOk = pcall(function()
 		if data.normalSpeed then State.normalSpeed=data.normalSpeed
 			if _G._mhInputBoxesRef.normalSpeed then _G._mhInputBoxesRef.normalSpeed.Text=tostring(data.normalSpeed) end end
@@ -4451,6 +4513,10 @@ local function MH_load()
 			if _G._mhInputBoxesRef.laggerCarrySpeed then _G._mhInputBoxesRef.laggerCarrySpeed.Text=tostring(data.laggerCarrySpeed) end end
 		if data.speedType=="normal" or data.speedType=="carry" then State.speedType=data.speedType end
 
+		-- Only config VALUES are restored here (speeds, keybinds, radius,
+		-- mode...) — ON/OFF feature states are never auto-restarted, to
+		-- match the "everything OFF at execution" policy. The user
+		-- re-enables whichever features they want each session.
 		if data.aimSpeed then AB.SPEED=data.aimSpeed end
 		if data.infJumpMode=="manual" or data.infJumpMode=="hold" then
 				IJ.mode=data.infJumpMode
@@ -4462,7 +4528,6 @@ local function MH_load()
 			else State.autoPlayMode = data.autoPlayMode end
 		end
 		if data.uiScaleVal and _GH.applyUIScale then _GH.applyUIScale(data.uiScaleVal) end
-
 		-- Window/widget positions: restored before anything else so frames
 		-- never flash at their default position on load.
 		if type(data.positions) == "table" then
@@ -4482,16 +4547,6 @@ local function MH_load()
 					entry.box.Text = tostring(value)
 					pcall(entry.onChange, value)
 				end
-			end
-		end
-
-		-- Float button positions must be loaded BEFORE toggle restore so that
-		-- when a toggle re-spawns a floating button it reads the saved position
-		-- at creation time instead of landing at the default grid slot.
-		-- Positions from an older layout version are discarded.
-		if type(data.floatPositions) == "table" and data.floatPosV == _FLOAT_POS_VERSION then
-			for id, pos in pairs(data.floatPositions) do
-				_floatPositions[id] = pos
 			end
 		end
 
@@ -4530,6 +4585,18 @@ local function MH_load()
 			end
 		end
 
+		-- Floating buttons: positions first, then spawn, then lock.
+		-- Positions saved under an older layout version are discarded so
+		-- buttons don't restore to stale/overlapping coordinates.
+		if type(data.floatPositions) == "table" and data.floatPosV == _FLOAT_POS_VERSION then
+			for id, pos in pairs(data.floatPositions) do
+				_floatPositions[id] = pos
+			end
+		end
+		-- Floating buttons never auto-spawn from a saved session — matches
+		-- the "everything OFF at execution" policy. The user re-toggles
+		-- whichever ones they want each time (positions are still remembered
+		-- once they do, via floatPositions above).
 		if type(data.uiLocked) == "boolean" and data.uiLocked then
 			setDragLock(true)
 			lockTitleBtn.Text = "🔒"; lockTitleBtn.TextColor3 = C_RED
@@ -4548,58 +4615,8 @@ end
 
 local _floatRowSetters = {}
 buildPage("Buttons", function()
-	local FLOAT_LABELS = {
-		{id="antibat",     name="Anti Bat Aimbot"},
-		{id="aimbot",      name="Aim Bot"},
-		{id="aimv2",       name="Aim V2"},
-
-		{id="dropbr",      name="Drop Brainrot"},
-		{id="autoleft",    name="Auto Left"},
-		{id="autoright",   name="Auto Right"},
-		{id="tpdown",      name="TP Down"},
-		{id="battp",       name="Bat TP"},
-		{id="instareset",  name="Instant Reset"},
-	}
-
-	-- Select All / Unselect All — tout en haut
-	do
-		local saRow = Instance.new("Frame", currentPage)
-		saRow.Size = UDim2.new(1,0,0,34); saRow.BackgroundTransparency = 1
-		saRow.BorderSizePixel = 0; saRow.LayoutOrder = LO()
-		local bW = 128; local gap = 8
-		local startX = (276 - (bW*2+gap)) / 2
-		local function makeSelBtn(label, xOff, col)
-			local b = Instance.new("TextButton", saRow)
-			b.Size = UDim2.new(0,bW,1,0); b.Position = UDim2.new(0,xOff,0,0)
-			b.BackgroundColor3 = col; b.BackgroundTransparency = 0.15
-			b.BorderSizePixel = 0; b.Text = label
-			b.TextColor3 = C_WHITE; b.Font = Enum.Font.GothamBold; b.TextSize = 11
-			b.AutoButtonColor = false; addCorner(b,10); addLivingStroke(b,1)
-			addLivingTextGradient(b)
-			b.MouseEnter:Connect(function() TweenService:Create(b,TweenInfo.new(0.1),{BackgroundTransparency=0}):Play() end)
-			b.MouseLeave:Connect(function() TweenService:Create(b,TweenInfo.new(0.1),{BackgroundTransparency=0.15}):Play() end)
-			return b
-		end
-		local selBtn = makeSelBtn("✦ Select All",   startX,        Color3.fromRGB(30,60,30))
-		local uslBtn = makeSelBtn("✦ Unselect All", startX+bW+gap, Color3.fromRGB(60,20,20))
-		selBtn.MouseButton1Click:Connect(function()
-			for _, entry in ipairs(FLOAT_LABELS) do
-				if _floatRowSetters[entry.id] then _floatRowSetters[entry.id](true) end
-				makeFloatButton(entry.id)
-			end
-			if _GH.autoSave then _GH.autoSave() end
-		end)
-		uslBtn.MouseButton1Click:Connect(function()
-			for _, entry in ipairs(FLOAT_LABELS) do
-				if _floatRowSetters[entry.id] then _floatRowSetters[entry.id](false) end
-				removeFloatButton(entry.id)
-			end
-			if _GH.autoSave then _GH.autoSave() end
-		end)
-	end
-
-	UIB.makeGap(4)
 	-- Right at the top: direct toggle that spawns the Speed Booster widget
+	-- itself (not an intermediary floating button), shown in front.
 	UIB.makeSectionLabel("Speed Booster")
 	UIB.makeToggleRow("Speed Booster", false, function(on)
 		if _GH.spW then
@@ -4612,6 +4629,17 @@ buildPage("Buttons", function()
 	UIB.makeSectionLabel("Floating Buttons")
 	UIB.makeGap(2)
 
+	local FLOAT_LABELS = {
+		{id="antibat",     name="Anti Bat Aimbot"},
+		{id="aimbot",      name="Aim Bot"},
+		{id="aimv2",       name="Aim V2"},
+		{id="dropbr",      name="Drop Brainrot"},
+		{id="autoleft",    name="Auto Left"},
+		{id="autoright",   name="Auto Right"},
+		{id="tpdown",      name="TP Down"},
+		{id="battp",       name="Bat TP"},
+		{id="instareset",  name="Instant Reset"},
+	}
 	for _, entry in ipairs(FLOAT_LABELS) do
 		_floatRowSetters[entry.id] = UIB.makeToggleRow(entry.name, false, function(on)
 			if on then makeFloatButton(entry.id) else removeFloatButton(entry.id) end
@@ -4696,7 +4724,7 @@ buildPage("Settings", function()
 		if _lgrBypassWidget then _lgrBypassWidget.Visible = on end
 	end)
 
-	-- ── ANIMATION CHANGER (25 packs, ◀ ▶ navigation) ──────────────
+	-- ── ANIMATION CHANGER (22 packs, ◀ ▶ navigation) ──────────────
 	UIB.makeGap(4)
 	UIB.makeSectionLabel("Animation Changer")
 	do
@@ -4745,34 +4773,10 @@ buildPage("Settings", function()
 			local animator = hum:FindFirstChildOfClass("Animator")
 			if not animator then animator = Instance.new("Animator", hum) end
 			local pack = ANIM_PACKS[packName]; if not pack then return end
-
-			-- 1. Update Animate script IDs first (walk/run/jump/fall/climb/swim)
-			local animate = c:FindFirstChild("Animate")
-			if animate then
-				local function setAnim(folder,slot,id)
-					if not id then return end
-					local f=animate:FindFirstChild(folder); if not f then return end
-					local a=f:FindFirstChild(slot)
-					if a and a:IsA("Animation") then a.AnimationId="rbxassetid://"..tostring(id) end
-				end
-				setAnim("walk","WalkAnim",pack.WalkAnim)
-				setAnim("run","RunAnim",pack.RunAnim)
-				setAnim("jump","JumpAnim",pack.JumpAnim)
-				setAnim("fall","FallAnim",pack.FallAnim)
-				setAnim("idle","Animation1",pack.Animation1)
-				setAnim("idle","Animation2",pack.Animation2)
-				setAnim("climb","ClimbAnim",pack.ClimbAnim)
-				setAnim("swimidle","SwimIdle",pack.SwimIdle)
-				setAnim("swim","Swim",pack.Swim)
-			end
-
-			-- 2. Stop all currently playing tracks so Animate restarts with new IDs
 			for _, tr in ipairs(hum:GetPlayingAnimationTracks()) do pcall(function() tr:Stop(0) end) end
-
-			-- 3. Force-play idle immediately for visual feedback (Animate handles rest)
 			local slots = {
-				{id=pack.Animation1, prio=Enum.AnimationPriority.Idle,     loop=true},
-				{id=pack.WalkAnim,   prio=Enum.AnimationPriority.Movement, loop=true},
+				{id=pack.WalkAnim, prio=Enum.AnimationPriority.Movement, loop=true},
+				{id=pack.Animation1, prio=Enum.AnimationPriority.Idle, loop=true},
 			}
 			for _, s in ipairs(slots) do
 				if s.id then
@@ -4786,6 +4790,23 @@ buildPage("Settings", function()
 						table.insert(_animTracks, track)
 					end
 				end
+			end
+			-- Also apply via Animate script (fallback for real walk/run/jump)
+			local animate = c:FindFirstChild("Animate")
+			if animate then
+				local function setAnim(folder,slot,id)
+					if not id then return end
+					local f=animate:FindFirstChild(folder); if not f then return end
+					local a=f:FindFirstChild(slot)
+					if a and a:IsA("StringValue") then a.Value="rbxassetid://"..tostring(id) end
+				end
+				setAnim("walk","WalkAnim",pack.WalkAnim)
+				setAnim("run","RunAnim",pack.RunAnim)
+				setAnim("jump","JumpAnim",pack.JumpAnim)
+				setAnim("fall","FallAnim",pack.FallAnim)
+				setAnim("idle","Animation1",pack.Animation1)
+				setAnim("idle","Animation2",pack.Animation2)
+				setAnim("climb","ClimbAnim",pack.ClimbAnim)
 			end
 		end
 
@@ -4906,6 +4927,8 @@ buildPage("Settings", function()
 end);  -- required semicolon (otherwise ambiguous merge with the (function() below)
 
 -- ===================================================================
+-- ===================================================================
+-- ===================================================================
 -- SPEED BYPASS (Moon Hub style — blue, +/- power, exact Cz lag logic)
 -- ===================================================================
 (function()
@@ -4995,6 +5018,7 @@ local function toggle()
 		toggleBtn.BackgroundColor3 = C_OFF_BG; toggleBtn.BackgroundTransparency = 0.2
 		toggleBtn.TextColor3 = C_DIM
 	end
+	if _GH.setSpeedBypassQpVisual then _GH.setSpeedBypassQpVisual(activated) end
 end
 toggleBtn.MouseButton1Click:Connect(toggle)
 _GH.speedBypassToggle = toggle
@@ -5107,6 +5131,8 @@ local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local CoreGui = game:GetService("CoreGui")
 local HttpService = game:GetService("HttpService")
+local RunService = game:GetService("RunService")
+
 local player = Players.LocalPlayer
 local ConfigFile = "MoonLaggerConfig.json"
 
@@ -5162,7 +5188,7 @@ pcall(function() if CoreGui:FindFirstChild("MoonLagger_UI") then CoreGui.MoonLag
 -- SCREEN GUI
 -- ══════════════════════════════════════
 local screenGui = Instance.new("ScreenGui")
-screenGui.Name = _NS
+screenGui.Name = "MoonLagger_UI"
 if not pcall(function() screenGui.Parent = CoreGui end) then screenGui.Parent = player:WaitForChild("PlayerGui") end
 screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 screenGui.ResetOnSpawn = false
