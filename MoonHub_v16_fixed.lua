@@ -1662,7 +1662,7 @@ do
 	introGui.Size = UDim2.new(1,0,1,0)
 	introGui.BackgroundColor3 = Color3.fromRGB(2,3,7)
 	introGui.BackgroundTransparency = 0
-	introGui.ZIndex = 1000
+	introGui.ZIndex = 1200
 	introGui.BorderSizePixel = 0
 	introGui.ClipsDescendants = true
 	-- Subtle depth gradient instead of flat black
@@ -1708,28 +1708,18 @@ do
 		skipBtn.AnchorPoint  = Vector2.new(1, 0)
 		skipBtn.Position     = UDim2.new(1, -14, 0, 14)
 		skipBtn.Size         = UDim2.new(0, 72, 0, 26)
-		skipBtn.ZIndex       = 1100
+		skipBtn.ZIndex       = 1300
 		skipBtn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 		skipBtn.BackgroundTransparency = 0.45
 		skipBtn.BorderSizePixel = 0
 		skipBtn.Text         = "Skip  ›"
-		skipBtn.TextColor3   = C_MOON
-		skipBtn.Font         = Enum.Font.GothamBold
+		skipBtn.TextColor3   = C_WHITE
+		skipBtn.Font         = Enum.Font.GothamBlack
 		skipBtn.TextSize     = 13
 		skipBtn.AutoButtonColor = false
 		Instance.new("UICorner", skipBtn).CornerRadius = UDim.new(0, 6)
-		local skipStroke = Instance.new("UIStroke", skipBtn)
-		skipStroke.Color     = C_MOON
-		skipStroke.Thickness = 1
-		skipStroke.Transparency = 0.5
-		skipBtn.MouseEnter:Connect(function()
-			skipBtn.TextColor3 = C_WHITE
-			skipStroke.Transparency = 0
-		end)
-		skipBtn.MouseLeave:Connect(function()
-			skipBtn.TextColor3 = C_MOON
-			skipStroke.Transparency = 0.5
-		end)
+		addLivingTextGradient(skipBtn)
+		addLivingStroke(skipBtn, 1)
 		skipBtn.MouseButton1Click:Connect(doSkip)
 	end
 
