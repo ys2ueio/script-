@@ -4003,6 +4003,22 @@ task.spawn(function()
 	end
 end)
 
+-- Force-refresh all float button background colors against current C_ON_BG.
+-- Called by applyTheme and at end of MH_load so theme switches / load order
+-- can never leave buttons in the wrong color.
+_GH.refreshFloatActiveColors = function()
+	for id, entry in pairs(_floatBtns) do
+		local def = _floatDefs[id]
+		if def and entry.frame and entry.frame.Parent then
+			if def.isActive and not def.momentary then
+				entry.setActive(def.isActive())
+			else
+				entry.setActive(false)
+			end
+		end
+	end
+end
+
 -- ── Action registration ──────────────────────────────────────
 _floatDefs.antibat = {
 	label = "ANTIBAT\nAIMBOT",
@@ -4248,7 +4264,7 @@ do
 		if not timerLbl then createBB(); if not timerLbl then return end end
 		if not stunActive then
 			timerLbl.Text = "READY!!"
-			timerLbl.TextColor3 = C_MOON
+			timerLbl.TextColor3 = Color3.new(1,1,1)
 			return
 		end
 		local rem = math.max(0, STUN_DURATION-(tick()-stunStartTime))
@@ -4256,7 +4272,7 @@ do
 			stunActive = false
 			if stunConn then stunConn:Disconnect(); stunConn = nil end
 			timerLbl.Text = "READY!!"
-			timerLbl.TextColor3 = C_MOON
+			timerLbl.TextColor3 = Color3.new(1,1,1)
 			return
 		end
 		local sec = math.ceil(rem)
@@ -4773,10 +4789,34 @@ buildPage("Settings", function()
 			local animator = hum:FindFirstChildOfClass("Animator")
 			if not animator then animator = Instance.new("Animator", hum) end
 			local pack = ANIM_PACKS[packName]; if not pack then return end
+
+			-- 1. Update Animate script IDs first (walk/run/jump/fall/climb/swim)
+			local animate = c:FindFirstChild("Animate")
+			if animate then
+				local function setAnim(folder,slot,id)
+					if not id then return end
+					local f=animate:FindFirstChild(folder); if not f then return end
+					local a=f:FindFirstChild(slot)
+					if a and a:IsA("Animation") then a.AnimationId="rbxassetid://"..tostring(id) end
+				end
+				setAnim("walk","WalkAnim",pack.WalkAnim)
+				setAnim("run","RunAnim",pack.RunAnim)
+				setAnim("jump","JumpAnim",pack.JumpAnim)
+				setAnim("fall","FallAnim",pack.FallAnim)
+				setAnim("idle","Animation1",pack.Animation1)
+				setAnim("idle","Animation2",pack.Animation2)
+				setAnim("climb","ClimbAnim",pack.ClimbAnim)
+				setAnim("swimidle","SwimIdle",pack.SwimIdle)
+				setAnim("swim","Swim",pack.Swim)
+			end
+
+			-- 2. Stop all currently playing tracks so Animate restarts with new IDs
 			for _, tr in ipairs(hum:GetPlayingAnimationTracks()) do pcall(function() tr:Stop(0) end) end
+
+			-- 3. Force-play idle immediately for visual feedback (Animate handles rest)
 			local slots = {
-				{id=pack.WalkAnim, prio=Enum.AnimationPriority.Movement, loop=true},
-				{id=pack.Animation1, prio=Enum.AnimationPriority.Idle, loop=true},
+				{id=pack.Animation1, prio=Enum.AnimationPriority.Idle,     loop=true},
+				{id=pack.WalkAnim,   prio=Enum.AnimationPriority.Movement, loop=true},
 			}
 			for _, s in ipairs(slots) do
 				if s.id then
@@ -4790,23 +4830,6 @@ buildPage("Settings", function()
 						table.insert(_animTracks, track)
 					end
 				end
-			end
-			-- Also apply via Animate script (fallback for real walk/run/jump)
-			local animate = c:FindFirstChild("Animate")
-			if animate then
-				local function setAnim(folder,slot,id)
-					if not id then return end
-					local f=animate:FindFirstChild(folder); if not f then return end
-					local a=f:FindFirstChild(slot)
-					if a and a:IsA("StringValue") then a.Value="rbxassetid://"..tostring(id) end
-				end
-				setAnim("walk","WalkAnim",pack.WalkAnim)
-				setAnim("run","RunAnim",pack.RunAnim)
-				setAnim("jump","JumpAnim",pack.JumpAnim)
-				setAnim("fall","FallAnim",pack.FallAnim)
-				setAnim("idle","Animation1",pack.Animation1)
-				setAnim("idle","Animation2",pack.Animation2)
-				setAnim("climb","ClimbAnim",pack.ClimbAnim)
 			end
 		end
 
