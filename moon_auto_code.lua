@@ -363,7 +363,7 @@ pillByLbl.Size                   = UDim2.new(1, 0, 0, 10)
 pillByLbl.Position               = UDim2.new(0, 0, 1, 3)
 pillByLbl.BackgroundTransparency = 1
 pillByLbl.Text                   = "by Yslem"
-pillByLbl.TextColor3             = C_DIM
+pillByLbl.TextColor3             = Color3.fromRGB(185, 185, 185)
 pillByLbl.Font                   = Enum.Font.Gotham
 pillByLbl.TextSize               = 8
 pillByLbl.TextXAlignment         = Enum.TextXAlignment.Center
@@ -402,26 +402,19 @@ addCorner(_bgImg, 14)
 do
     local fname = "moonhub_bg.png"
     local url   = "https://litter.catbox.moe/3tpr3wks0we2rbzo.png"
-    -- Cache hit → instantané (synchrone)
-    if getcustomasset and isfile and isfile(fname) then
+    local function tryLoad()
+        if not (getcustomasset and isfile and isfile(fname)) then return false end
         local rid = getcustomasset(fname)
-        if rid and rid ~= "" then _bgImg.Image = rid end
+        if rid and rid ~= "" then _bgImg.Image = rid; return true end
+        return false
     end
-    -- Pas encore chargé → téléchargement en arrière-plan
-    if _bgImg.Image == "" then
-        task.spawn(function()
-            if getcustomasset then
-                local ok, data = pcall(function() return game:HttpGet(url) end)
-                if ok and data and data ~= "" then
-                    pcall(function() if writefile then writefile(fname, data) end end)
-                    local rid = getcustomasset(fname)
-                    if rid and rid ~= "" then _bgImg.Image = rid end
-                end
-            else
-                pcall(function()
-                    local ok, data = pcall(function() return game:HttpGet(url) end)
-                    if ok and data and data ~= "" and writefile then writefile(fname, data) end
-                end)
+    -- Cache → immédiat ; pas de cache → téléchargement synchrone puis chargement
+    if not tryLoad() then
+        pcall(function()
+            local ok, data = pcall(function() return game:HttpGet(url) end)
+            if ok and data and data ~= "" then
+                if writefile then writefile(fname, data) end
+                tryLoad()
             end
         end)
     end
@@ -482,7 +475,7 @@ byLbl.Size                   = UDim2.new(0, 64, 0, TITLE_H)
 byLbl.Position               = UDim2.new(1, -88, 0, 0)
 byLbl.BackgroundTransparency = 1
 byLbl.Text                   = "by Yslem"
-byLbl.TextColor3             = C_DIM
+byLbl.TextColor3             = Color3.fromRGB(185, 185, 185)
 byLbl.Font                   = Enum.Font.Gotham
 byLbl.TextSize               = 9
 byLbl.TextXAlignment         = Enum.TextXAlignment.Right
