@@ -843,22 +843,10 @@ local function _arResetCharacter(char)
 	local root = char:FindFirstChild("HumanoidRootPart")
 	if not hum or not root or hum.Health <= 0 then return end
 	pcall(function()
-		-- destroy ragdoll rigs before changing state
-		for _, obj in ipairs(char:GetDescendants()) do
-			if obj:IsA("BallSocketConstraint") or
-			   (obj:IsA("Attachment") and obj.Name:find("RagdollAttachment")) then
-				pcall(function() obj:Destroy() end)
-			end
-		end
-		-- signal server that ragdoll ended
-		pcall(function() LP:SetAttribute("RagdollEndTime", workspace:GetServerTimeNow()) end)
 		hum:ChangeState(Enum.HumanoidStateType.GettingUp)
 		hum:ChangeState(Enum.HumanoidStateType.Running)
 		root.AssemblyLinearVelocity = Vector3.zero
 		root.AssemblyAngularVelocity = Vector3.zero
-		-- upright CFrame — keep Y heading, remove tilt
-		root.CFrame = CFrame.new(root.Position) * CFrame.Angles(0, math.rad(root.Orientation.Y), 0)
-		root.Anchored = false
 		hum.PlatformStand = false
 		hum.Sit = false
 		hum.AutoRotate = true
@@ -867,7 +855,7 @@ local function _arResetCharacter(char)
 		for _, obj in ipairs(char:GetDescendants()) do
 			if obj:IsA("Motor6D") then
 				obj.Enabled = true
-			elseif obj:IsA("Constraint") or obj:IsA("HingeConstraint") then
+			elseif obj:IsA("Constraint") or obj:IsA("BallSocketConstraint") or obj:IsA("HingeConstraint") then
 				obj.Enabled = true
 			elseif obj:IsA("BasePart") then
 				obj.CanCollide = true
@@ -875,9 +863,7 @@ local function _arResetCharacter(char)
 				obj.AssemblyAngularVelocity = Vector3.zero
 			end
 		end
-		-- reset camera subject if the game moved it
-		local cam = workspace.CurrentCamera
-		if cam and cam.CameraSubject ~= hum then cam.CameraSubject = hum end
+		workspace.CurrentCamera.CameraSubject = hum
 		local PM = LP.PlayerScripts:FindFirstChild("PlayerModule")
 		if PM then
 			local CM = PM:FindFirstChild("ControlModule")
@@ -915,26 +901,6 @@ LP.CharacterAdded:Connect(function()
 	task.wait(0.5)
 	if State.antiRagdollEnabled then startAntiRagdoll() end
 end)
-
--- CZ Anti-Bat defense: velocity spike for one frame on each Heartbeat to deflect bat hits
--- Runs independently of aimbot, only when player is moving
-local _czABConn = nil
-local function startCZAntiBat()
-	if _czABConn then _czABConn:Disconnect() end
-	_czABConn=RunService.Heartbeat:Connect(function()
-		local char=LP.Character; if not char then return end
-		local hum=char:FindFirstChildOfClass("Humanoid"); if not hum then return end
-		local root=char:FindFirstChild("HumanoidRootPart"); if not root or not root.Parent then return end
-		if hum.MoveDirection.Magnitude<=0 then return end
-		local vel=root.AssemblyLinearVelocity
-		root.AssemblyLinearVelocity=Vector3.new(vel.X*50,50,vel.Z*50)
-		RunService.RenderStepped:Wait()
-		if not root or not root.Parent then return end
-		root.AssemblyLinearVelocity=vel+Vector3.new(0,0.05,0)
-	end)
-end
-task.spawn(startCZAntiBat)
-LP.CharacterAdded:Connect(function() task.wait(0.3); startCZAntiBat() end)
 
 -- ===================================================================
 -- UNWALK
@@ -4609,79 +4575,6 @@ buildPage("Buttons", function()
 	end
 end)
 
--- ===================================================================
--- RESET HELPERS
--- ===================================================================
-local function MH_resetAll()
-	pcall(function() if AB.active     then AB.stop()              end end)
-	pcall(function() if ABP.active    then ABP.stop()             end end)
-	pcall(function() if BatCounter and BatCounter.active then BatCounter.stop() end end)
-	pcall(function() if BC  and BC.active  then BC.stop()         end end)
-	pcall(function() if IJ  and IJ.active  then IJ.stop()         end end)
-	pcall(function() stopAutoSteal()   end)
-	pcall(function() stopAntiRagdoll() end)
-	pcall(function() stopMedusaCounter() end)
-	pcall(function() stopAutoLeft()    end)
-	pcall(function() stopAutoRight()   end)
-
-	pcall(function() _sStopAutoTPDown() end)
-	State.normalSpeed=60; State.carrySpeed=30; State.laggerSpeed=15; State.laggerCarrySpeed=24.5
-	State.speedType="normal"; State.autoPlayMode="Full"
-	State.laggerActive=false; State.laggerCarryActive=false
-	State.autoCarryOnGrab=true; State.medusaCounterEnabled=false
-	AutoSteal.Enabled=true; AutoSteal.Radius=60
-	IJ.mode="manual"; AB.SPEED=AB_SPEED; AB.HEIGHT=3.7
-	pcall(function()
-		local r=_G._mhInputBoxesRef; if not r then return end
-		if r.normalSpeed     then r.normalSpeed.Text="60"   end
-		if r.carrySpeed      then r.carrySpeed.Text="30"    end
-		if r.laggerSpeed     then r.laggerSpeed.Text="15"   end
-		if r.laggerCarrySpeed then r.laggerCarrySpeed.Text="24.5" end
-	end)
-	for _, entry in pairs(_GH.allToggles or {}) do
-		pcall(function()
-			entry.set(false)
-			if entry.onToggle then entry.onToggle(false) end
-		end)
-	end
-	if _GH.autoSave then _GH.autoSave() end
-end
-
-local function MH_resetBtnPos()
-	-- Clear saved positions
-	for k in pairs(_floatPositions) do _floatPositions[k] = nil end
-	-- Move active float buttons to default grid positions (without destroying them)
-	local _GAP = 3
-	local _blockW = FLOAT_SZ * 2 + _GAP
-	for id, entry in pairs(_floatBtns) do
-		pcall(function()
-			local pos
-			if id == "antibat" then
-				pos = UDim2.new(0, 12, 0, 55)
-			else
-				local idx = _floatGridIndex(id) - 1
-				local col = idx % 2
-				local row = math.floor(idx / 2)
-				local topOffset = 55 + FLOAT_WIDE_H + _GAP
-				pos = UDim2.new(1, -(_blockW + 12) + col * (FLOAT_SZ + _GAP), 0, topOffset + row * (FLOAT_SZ + _GAP))
-			end
-			entry.frame.Position = pos
-		end)
-	end
-	-- Reset main windows to default positions
-	local winDefaults = {
-		main        = UDim2.new(0.5,-WIN_W/2,0.5,-137),
-		mini        = UDim2.new(0,20,0,140),
-		speed       = UDim2.new(1,-256,0,210),
-		steal       = UDim2.new(0.5,-100,0,35),
-		speedbypass = UDim2.new(1,-256,0,210),
-	}
-	for id, frame in pairs(_GH.positions or {}) do
-		if winDefaults[id] then pcall(function() frame.Position = winDefaults[id] end) end
-	end
-	if _GH.autoSave then _GH.autoSave() end
-end
-
 buildPage("Settings", function()
 	UIB.makeSectionLabel("Auto Play")
 	do
@@ -4956,35 +4849,6 @@ buildPage("Settings", function()
 			applyTheme("noir"); if _GH.autoSave then _GH.autoSave() end
 		end)
 	end
-	UIB.makeGap(4)
-	UIB.makeSectionLabel("Reset")
-	UIB.makeGap(2)
-	do
-		local rstRow = Instance.new("Frame", currentPage)
-		rstRow.Size = UDim2.new(1,0,0,34); rstRow.BackgroundColor3 = C_ROW
-		rstRow.BackgroundTransparency = 0.35; rstRow.BorderSizePixel = 0
-		rstRow.LayoutOrder = LO(); addCorner(rstRow,12); addLivingStroke(rstRow,1)
-		local bW,gap = 120,8
-		local total  = 2*bW+gap
-		local startX = (276-total)/2
-		local function makeRstBtn(label, xOff, col)
-			local b = Instance.new("TextButton", rstRow)
-			b.Size = UDim2.new(0,bW,0,24); b.Position = UDim2.new(0,xOff,0.5,-12)
-			b.BackgroundColor3 = col; b.BackgroundTransparency = 0.2
-			b.BorderSizePixel = 0; b.Text = label
-			b.TextColor3 = C_WHITE; b.Font = Enum.Font.GothamBold; b.TextSize = 10
-			b.AutoButtonColor = false; addCorner(b,6); addLivingStroke(b,1)
-			addLivingTextGradient(b)
-			b.MouseEnter:Connect(function() TweenService:Create(b,TweenInfo.new(0.1),{BackgroundTransparency=0}):Play() end)
-			b.MouseLeave:Connect(function() TweenService:Create(b,TweenInfo.new(0.1),{BackgroundTransparency=0.2}):Play() end)
-			return b
-		end
-		local raBtn  = makeRstBtn("⟳ Reset All",     startX,       C_RED)
-		local rbBtn  = makeRstBtn("⟳ Reset Btn Pos", startX+bW+gap, Color3.fromRGB(60,30,90))
-		raBtn.MouseButton1Click:Connect(function() MH_resetAll() end)
-		rbBtn.MouseButton1Click:Connect(function() MH_resetBtnPos() end)
-	end
-
 	UIB.makeGap(6)
 	UIB.makeSectionLabel("Credits")
 	local creditRow = Instance.new("Frame", currentPage)
