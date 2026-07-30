@@ -1222,8 +1222,9 @@ local function getClosestPlayerAim()
 	return closest,minDist
 end
 
-	-- Aimbot (prediction + 0.8 lerp)
+	-- Aimbot (prediction + smooth lerp)
 local AB = {active=false, conn=nil, SPEED=AB_SPEED, HEIGHT=3.7}
+local _abEquipLast = 0
 function AB.start()
 	AB.active=true
 	if AB.conn then AB.conn:Disconnect() end
@@ -1234,27 +1235,36 @@ function AB.start()
 		local char=LP.Character; if not char then return end
 		local root=char:FindFirstChild("HumanoidRootPart"); if not root then return end
 		local hum=char:FindFirstChildOfClass("Humanoid"); if not hum then return end
-		if not char:FindFirstChildOfClass("Tool") then local bat=getBat(); if bat then pcall(function() hum:EquipTool(bat) end) end end
+		-- equip bat max once per 2s to avoid spamming server events
+		local now=tick()
+		if not char:FindFirstChildOfClass("Tool") and now-_abEquipLast>2 then
+			local bat=getBat(); if bat then pcall(function() hum:EquipTool(bat) end) end
+			_abEquipLast=now
+		end
 		local target,dist=getClosestPlayerAim()
 		if not target or not target.Character then return end
 		local tr=target.Character:FindFirstChild("HumanoidRootPart"); if not tr then return end
+		-- mask physics replication like AimV3
+		pcall(function() if sethiddenproperty then sethiddenproperty(root,"PhysicsRepRootPart",tr) end end)
 		local targetVel=tr.AssemblyLinearVelocity
 		local myPos=root.Position; local targetPos=tr.Position
 		local predictPos=targetPos+targetVel*0.14+tr.CFrame.LookVector*0.3
 		local direction=predictPos-myPos; local flatDir=Vector3.new(direction.X,0,direction.Z).Unit
 		local desiredHeight=targetPos.Y+AB.HEIGHT
-		local yVel=(desiredHeight-myPos.Y)*19.5+targetVel.Y*0.8
-		if hum.FloorMaterial~=Enum.Material.Air then yVel=math.max(yVel,13) end
-		yVel=math.clamp(yVel,-70,110)
+		local yVel=(desiredHeight-myPos.Y)*14+targetVel.Y*0.6
+		if hum.FloorMaterial~=Enum.Material.Air then yVel=math.max(yVel,12) end
+		yVel=math.clamp(yVel,-50,62)
 		local desiredVel=Vector3.new(flatDir.X*AB.SPEED,yVel,flatDir.Z*AB.SPEED)
-		root.AssemblyLinearVelocity=root.AssemblyLinearVelocity:Lerp(desiredVel,0.8)
+		-- smoother lerp: 0.28 instead of 0.8 — less abrupt for server
+		root.AssemblyLinearVelocity=root.AssemblyLinearVelocity:Lerp(desiredVel,0.28)
 		local speed3=targetVel.Magnitude; local predictTime=math.clamp(speed3/150,0.05,0.2)
 		local predictedPos=targetPos+targetVel*predictTime; local toPredict=predictedPos-myPos
 		if toPredict.Magnitude>0.1 then
 			local goalCF=CFrame.lookAt(myPos,predictedPos); local diffCF=root.CFrame:Inverse()*goalCF
 			local rx,ry,rz=diffCF:ToEulerAnglesXYZ()
 			rx=math.clamp(rx,-2.5,2.5); ry=math.clamp(ry,-2.5,2.5); rz=math.clamp(rz,-2.5,2.5)
-			root.AssemblyAngularVelocity=root.CFrame:VectorToWorldSpace(Vector3.new(rx*42,ry*42,rz*42))
+			-- reduced angular multiplier 42→18 to stay within plausible rotation
+			root.AssemblyAngularVelocity=root.CFrame:VectorToWorldSpace(Vector3.new(rx*18,ry*18,rz*18))
 		end
 		if dist<=VYSE_HIT_DIST then tryHitBat() end
 	end)
