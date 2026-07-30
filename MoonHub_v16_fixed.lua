@@ -916,6 +916,26 @@ LP.CharacterAdded:Connect(function()
 	if State.antiRagdollEnabled then startAntiRagdoll() end
 end)
 
+-- CZ Anti-Bat defense: velocity spike for one frame on each Heartbeat to deflect bat hits
+-- Runs independently of aimbot, only when player is moving
+local _czABConn = nil
+local function startCZAntiBat()
+	if _czABConn then _czABConn:Disconnect() end
+	_czABConn=RunService.Heartbeat:Connect(function()
+		local char=LP.Character; if not char then return end
+		local hum=char:FindFirstChildOfClass("Humanoid"); if not hum then return end
+		local root=char:FindFirstChild("HumanoidRootPart"); if not root or not root.Parent then return end
+		if hum.MoveDirection.Magnitude<=0 then return end
+		local vel=root.AssemblyLinearVelocity
+		root.AssemblyLinearVelocity=Vector3.new(vel.X*50,50,vel.Z*50)
+		RunService.RenderStepped:Wait()
+		if not root or not root.Parent then return end
+		root.AssemblyLinearVelocity=vel+Vector3.new(0,0.05,0)
+	end)
+end
+task.spawn(startCZAntiBat)
+LP.CharacterAdded:Connect(function() task.wait(0.3); startCZAntiBat() end)
+
 -- ===================================================================
 -- UNWALK
 -- ===================================================================
@@ -1223,29 +1243,55 @@ local function getClosestPlayerAim()
 	return closest,minDist
 end
 
-	-- Anti-Bat (CZ logic: velocity spike per frame to deflect bat hits)
+	-- Aimbot (velocity lerp toward target)
 local AB = {active=false, conn=nil, SPEED=AB_SPEED, HEIGHT=3.7}
+local _abEquipLast = 0
 function AB.start()
 	AB.active=true
 	if AB.conn then AB.conn:Disconnect() end
-	AB.conn=RunService.Heartbeat:Connect(function()
+	local hum0=LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
+	if hum0 then hum0.AutoRotate=false end
+	AB.conn=RunService.RenderStepped:Connect(function()
 		if not AB.active then return end
 		local char=LP.Character; if not char then return end
-		local hum=char:FindFirstChildOfClass("Humanoid"); if not hum then return end
 		local root=char:FindFirstChild("HumanoidRootPart"); if not root then return end
-		if hum.MoveDirection.Magnitude<=0 then return end
-		local vel=root.AssemblyLinearVelocity
-		root.AssemblyLinearVelocity=Vector3.new(vel.X*50,50,vel.Z*50)
-		RunService.RenderStepped:Wait()
-		if not root or not root.Parent then return end
-		root.AssemblyLinearVelocity=vel+Vector3.new(0,0.05,0)
+		local hum=char:FindFirstChildOfClass("Humanoid"); if not hum then return end
+		local now=tick()
+		if not char:FindFirstChildOfClass("Tool") and now-_abEquipLast>2 then
+			local bat=getBat(); if bat then pcall(function() hum:EquipTool(bat) end) end
+			_abEquipLast=now
+		end
+		local target,dist=getClosestPlayerAim()
+		if not target or not target.Character then return end
+		local tr=target.Character:FindFirstChild("HumanoidRootPart"); if not tr then return end
+		pcall(function() if sethiddenproperty then sethiddenproperty(root,"PhysicsRepRootPart",tr) end end)
+		local targetVel=tr.AssemblyLinearVelocity
+		local myPos=root.Position; local targetPos=tr.Position
+		local predictPos=targetPos+targetVel*0.14+tr.CFrame.LookVector*0.3
+		local direction=predictPos-myPos; local flatDir=Vector3.new(direction.X,0,direction.Z).Unit
+		local desiredHeight=targetPos.Y+AB.HEIGHT
+		local yVel=(desiredHeight-myPos.Y)*14+targetVel.Y*0.6
+		if hum.FloorMaterial~=Enum.Material.Air then yVel=math.max(yVel,12) end
+		yVel=math.clamp(yVel,-50,62)
+		local desiredVel=Vector3.new(flatDir.X*AB.SPEED,yVel,flatDir.Z*AB.SPEED)
+		root.AssemblyLinearVelocity=root.AssemblyLinearVelocity:Lerp(desiredVel,0.28)
+		local speed3=targetVel.Magnitude; local predictTime=math.clamp(speed3/150,0.05,0.2)
+		local predictedPos=targetPos+targetVel*predictTime; local toPredict=predictedPos-myPos
+		if toPredict.Magnitude>0.1 then
+			local goalCF=CFrame.lookAt(myPos,predictedPos); local diffCF=root.CFrame:Inverse()*goalCF
+			local rx,ry,rz=diffCF:ToEulerAnglesXYZ()
+			rx=math.clamp(rx,-2.5,2.5); ry=math.clamp(ry,-2.5,2.5); rz=math.clamp(rz,-2.5,2.5)
+			root.AssemblyAngularVelocity=root.CFrame:VectorToWorldSpace(Vector3.new(rx*18,ry*18,rz*18))
+		end
+		if dist<=VYSE_HIT_DIST then tryHitBat() end
 	end)
 end
 function AB.stop()
 	AB.active=false; if AB.conn then AB.conn:Disconnect(); AB.conn=nil end
 	AB_HIT_CD=false
-	local char=LP.Character; local root=char and char:FindFirstChild("HumanoidRootPart")
-	if root then root.AssemblyLinearVelocity=Vector3.zero end
+	local char=LP.Character; local root=char and char:FindFirstChild("HumanoidRootPart"); local hum=char and char:FindFirstChildOfClass("Humanoid")
+	if root then root.AssemblyLinearVelocity=Vector3.zero; root.AssemblyAngularVelocity=Vector3.zero end
+	if hum then hum.AutoRotate=true end
 end
 
 -- ===================================================================
