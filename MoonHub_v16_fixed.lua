@@ -3992,11 +3992,12 @@ _floatDefs.battp = {
 }
 
 -- ===================================================================
--- INSTA RESET — logique ACE exacte (AceCursedInstaReset)
+-- INSTA RESET — Limited Hub logic (tool save, char=nil, heartbeat 60fps)
 -- ===================================================================
 do
 	local IR_GUID        = "f888ee6e-c86d-46e1-93d7-0639d6635d42"
 	local IR_resetRemote = nil
+	local _RS            = game:GetService("ReplicatedStorage")
 
 	-- Hook FireServer : capture le remote dès sa première utilisation (newcclosure = invisible)
 	pcall(function()
@@ -4011,53 +4012,97 @@ do
 		end))
 	end)
 
-	local function instareset()
-		-- Fallback scan ReplicatedStorage si le remote n'a pas encore été intercepté
-		if not IR_resetRemote then
-			for _, desc in ipairs(ReplicatedStorage:GetDescendants()) do
-				if desc:IsA("RemoteEvent") and desc.Name:sub(1,3) == "RE/" then
-					IR_resetRemote = desc
-					break
+	local function _findRemote()
+		if IR_resetRemote then return IR_resetRemote end
+		-- scan RE/ prefix (main game pattern)
+		for _, desc in ipairs(_RS:GetDescendants()) do
+			if desc:IsA("RemoteEvent") and desc.Name:sub(1,3) == "RE/" then
+				IR_resetRemote = desc; return IR_resetRemote
+			end
+		end
+		-- scan Tools/Cooldown sibling pattern (Limited Hub fallback)
+		local pkg = _RS:FindFirstChild("Packages", 2)
+		local net = pkg and pkg:FindFirstChild("Net", 2)
+		if net then
+			local ch = net:GetChildren()
+			for i = 1, #ch - 1 do
+				if ch[i] and ch[i+1] and string.find(ch[i].Name, "Tools/Cooldown") then
+					IR_resetRemote = ch[i+1]; return IR_resetRemote
 				end
 			end
 		end
-		if not IR_resetRemote then return end
+		return nil
+	end
 
-		local character = LP.Character
-		local humanoid  = character and character:FindFirstChildOfClass("Humanoid")
-
-		-- Si déjà mort : un seul fire et on sort
-		if humanoid and humanoid.Health <= 0 then
-			pcall(function() IR_resetRemote:FireServer(IR_GUID, LP, "balloon") end)
+	local function instareset()
+		local remote = _findRemote()
+		-- fallback : kill via humanoid si aucun remote trouvé
+		if not remote then
+			local char = LP.Character
+			local hum  = char and char:FindFirstChildOfClass("Humanoid")
+			if hum then hum.Health = 0 end
 			return
 		end
 
-		-- Watch 3 signaux pour détecter le reset dès qu'il se produit
-		local resetDetected = false
-		local resetConns    = {}
-		if humanoid then
-			table.insert(resetConns, humanoid.Died:Connect(function()
-				resetDetected = true
-			end))
-			table.insert(resetConns, humanoid:GetPropertyChangedSignal("Health"):Connect(function()
-				if humanoid.Health <= 0 then resetDetected = true end
-			end))
+		-- 1. Sauvegarder tous les outils
+		local savedTools = {}
+		local char = LP.Character
+		local bp   = LP:FindFirstChild("Backpack")
+		if char then
+			local hum = char:FindFirstChildOfClass("Humanoid")
+			if hum then pcall(function() hum:UnequipTools() end) end
+			for _, t in ipairs(char:GetChildren()) do
+				if t:IsA("Tool") then table.insert(savedTools, t); t.Parent = nil end
+			end
 		end
-		if character then
-			table.insert(resetConns, character.AncestryChanged:Connect(function(_, parent)
-				if not parent then resetDetected = true end
-			end))
+		if bp then
+			for _, t in ipairs(bp:GetChildren()) do
+				if t:IsA("Tool") then table.insert(savedTools, t); t.Parent = nil end
+			end
 		end
 
-		-- 10 essais à 0.05s — s'arrête dès que resetDetected
-		task.spawn(function()
-			for _ = 1, 10 do
-				if resetDetected then break end
-				pcall(function() IR_resetRemote:FireServer(IR_GUID, LP, "balloon") end)
-				task.wait(0.05)
+		-- 2. Boucle heartbeat : fire remote + force Character = nil à 60fps
+		LP.Character = nil
+		local sending      = true
+		local loopConn     = nil
+		local throttle     = 0
+		loopConn = RunService.Heartbeat:Connect(function(dt)
+			if not sending then
+				if loopConn then loopConn:Disconnect(); loopConn = nil end
+				return
 			end
-			for _, conn in ipairs(resetConns) do
-				pcall(function() conn:Disconnect() end)
+			throttle = throttle + dt
+			if throttle >= 0.016 then
+				throttle = 0
+				pcall(function() remote:FireServer(IR_GUID, LP, "balloon") end)
+			end
+			if sending and LP.Character then LP.Character = nil end
+		end)
+
+		-- 3. Dès que le personnage réapparaît : restaurer les outils
+		local respawnConn
+		respawnConn = LP.CharacterAdded:Connect(function()
+			sending = false
+			if loopConn  then loopConn:Disconnect();  loopConn  = nil end
+			if respawnConn then respawnConn:Disconnect(); respawnConn = nil end
+			task.spawn(function()
+				local newBp = LP:WaitForChild("Backpack", 3)
+				if newBp then
+					for _, t in ipairs(savedTools) do if t then t.Parent = newBp end end
+				end
+				savedTools = {}
+			end)
+		end)
+
+		-- 4. Timeout 4s pour éviter de bloquer indéfiniment
+		task.delay(4, function()
+			sending = false
+			if loopConn    then loopConn:Disconnect();    loopConn    = nil end
+			if respawnConn then respawnConn:Disconnect(); respawnConn = nil end
+			local curBp = LP:FindFirstChild("Backpack")
+			if curBp and #savedTools > 0 then
+				for _, t in ipairs(savedTools) do if t then t.Parent = curBp end end
+				savedTools = {}
 			end
 		end)
 	end
