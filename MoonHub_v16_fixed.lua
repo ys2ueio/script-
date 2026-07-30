@@ -1229,34 +1229,21 @@ function AB.start()
 	if AB.conn then AB.conn:Disconnect() end
 	local hum0=LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
 	if hum0 then hum0.AutoRotate=false end
-	AB.conn=RunService.RenderStepped:Connect(function()
+	AB.conn=RunService.Heartbeat:Connect(function()
 		if not AB.active then return end
 		local char=LP.Character; if not char then return end
-		local root=char:FindFirstChild("HumanoidRootPart"); if not root then return end
+		local root=char:FindFirstChild("HumanoidRootPart"); if not root or not root.Parent then return end
 		local hum=char:FindFirstChildOfClass("Humanoid"); if not hum then return end
 		if not char:FindFirstChildOfClass("Tool") then local bat=getBat(); if bat then pcall(function() hum:EquipTool(bat) end) end end
-		local target,dist=getClosestPlayerAim()
-		if not target or not target.Character then return end
-		local tr=target.Character:FindFirstChild("HumanoidRootPart"); if not tr then return end
-		local targetVel=tr.AssemblyLinearVelocity
-		local myPos=root.Position; local targetPos=tr.Position
-		local predictPos=targetPos+targetVel*0.14+tr.CFrame.LookVector*0.3
-		local direction=predictPos-myPos; local flatDir=Vector3.new(direction.X,0,direction.Z).Unit
-		local desiredHeight=targetPos.Y+AB.HEIGHT
-		local yVel=(desiredHeight-myPos.Y)*19.5+targetVel.Y*0.8
-		if hum.FloorMaterial~=Enum.Material.Air then yVel=math.max(yVel,13) end
-		yVel=math.clamp(yVel,-70,110)
-		local desiredVel=Vector3.new(flatDir.X*AB.SPEED,yVel,flatDir.Z*AB.SPEED)
-		root.AssemblyLinearVelocity=root.AssemblyLinearVelocity:Lerp(desiredVel,0.8)
-		local speed3=targetVel.Magnitude; local predictTime=math.clamp(speed3/150,0.05,0.2)
-		local predictedPos=targetPos+targetVel*predictTime; local toPredict=predictedPos-myPos
-		if toPredict.Magnitude>0.1 then
-			local goalCF=CFrame.lookAt(myPos,predictedPos); local diffCF=root.CFrame:Inverse()*goalCF
-			local rx,ry,rz=diffCF:ToEulerAnglesXYZ()
-			rx=math.clamp(rx,-2.5,2.5); ry=math.clamp(ry,-2.5,2.5); rz=math.clamp(rz,-2.5,2.5)
-			root.AssemblyAngularVelocity=root.CFrame:VectorToWorldSpace(Vector3.new(rx*42,ry*42,rz*42))
-		end
-		if dist<=VYSE_HIT_DIST then tryHitBat() end
+		-- Envy anti-bat: spike XZ velocity for one frame to deflect incoming bat hits
+		local origX=root.AssemblyLinearVelocity.X; local origZ=root.AssemblyLinearVelocity.Z
+		root.AssemblyLinearVelocity=Vector3.new(1000,root.AssemblyLinearVelocity.Y,1000)
+		RunService.RenderStepped:Wait()
+		if not root or not root.Parent then return end
+		root.AssemblyLinearVelocity=Vector3.new(origX,root.AssemblyLinearVelocity.Y,origZ)
+		-- swing bat if target in range
+		local _,dist=getClosestPlayerAim()
+		if dist and dist<=VYSE_HIT_DIST then tryHitBat() end
 	end)
 end
 function AB.stop()
@@ -1272,7 +1259,7 @@ end
 local AimV3 = {active=false, conn=nil}
 local _av3HitCD  = false
 local _av3LastTP = 0
-local _av3TP_CD  = 0.12 -- kept for reference, unused
+local _av3TP_CD  = 0.12 -- max ~8 TPs/s instead of 60
 
 local function _av3GetBat()
 	local char=LP.Character; if not char then return nil end
@@ -1319,19 +1306,20 @@ function AimV3.start()
 		local tr=target.Character:FindFirstChild("HumanoidRootPart"); if not tr then return end
 		pcall(function()
 			if sethiddenproperty then sethiddenproperty(root,"PhysicsRepRootPart",tr) end
+			-- small random offset so TP destination is never machine-perfect
 			local jx=math.random(-12,12)/10
 			local jz=math.random(-12,12)/10
 			local targetPos=tr.Position+Vector3.new(jx,0.9,jz)
-			local dist=(root.Position-targetPos).Magnitude
-			if dist>3 then
-				local dir=(targetPos-root.Position).Unit
-				local spd=math.min(dist*8,180)
-				root.AssemblyLinearVelocity=Vector3.new(dir.X*spd,root.AssemblyLinearVelocity.Y,dir.Z*spd)
+			local now=tick()
+			if (root.Position-targetPos).Magnitude>8 and now-_av3LastTP>=_av3TP_CD then
+				root.CFrame=CFrame.new(targetPos)
+				_av3LastTP=now
 			end
 			local cam=workspace.CurrentCamera
+			-- slight aim jitter so camera movement looks human
 			local aimJitter=Vector3.new(math.random(-3,3)/10,math.random(-2,2)/10,0)
 			cam.CFrame=CFrame.new(cam.CFrame.Position,tr.Position+aimJitter)
-			if dist<=6 then _av3Hit() end
+			_av3Hit()
 		end)
 	end)
 end
