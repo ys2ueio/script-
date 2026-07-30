@@ -2992,6 +2992,39 @@ buildPage("Visual", function()
 			local cc=Lighting:FindFirstChildOfClass("ColorCorrectionEffect");if cc then cc:Destroy() end
 		end
 	end)
+	local _shinyConn=nil
+	UIB.makeToggleRow("Shiny Graphics",false,function(on)
+		if on then
+			for _,obj in ipairs(Lighting:GetChildren()) do
+				if obj:IsA("Sky") or obj.Name=="MoonShinyBloom" or obj.Name=="MoonShinyCC" then obj:Destroy() end
+			end
+			local sky=Instance.new("Sky"); sky.Name="MoonShiny"
+			sky.SkyboxBk="rbxassetid://1534951537";sky.SkyboxDn="rbxassetid://1534951537"
+			sky.SkyboxFt="rbxassetid://1534951537";sky.SkyboxLf="rbxassetid://1534951537"
+			sky.SkyboxRt="rbxassetid://1534951537";sky.SkyboxUp="rbxassetid://1534951537"
+			sky.StarCount=10000;sky.CelestialBodiesShown=false;sky.Parent=Lighting
+			local bloom=Instance.new("BloomEffect"); bloom.Name="MoonShinyBloom"
+			bloom.Intensity=1.5;bloom.Size=40;bloom.Threshold=0.8;bloom.Parent=Lighting
+			local cc=Instance.new("ColorCorrectionEffect"); cc.Name="MoonShinyCC"
+			cc.Saturation=0.8;cc.Contrast=0.3;cc.TintColor=Color3.fromRGB(200,200,200);cc.Parent=Lighting
+			Lighting.Brightness=3;Lighting.ClockTime=0
+			_shinyConn=RunService.Heartbeat:Connect(function()
+				local t=tick()*0.5
+				Lighting.Ambient=Color3.fromRGB(
+					100+math.floor(math.sin(t)*30),
+					100+math.floor(math.sin(t*0.8)*30),
+					110+math.floor(math.sin(t*1.2)*30))
+				local b=Lighting:FindFirstChild("MoonShinyBloom")
+				if b then b.Intensity=1.2+math.sin(t*2)*0.4 end
+			end)
+		else
+			if _shinyConn then _shinyConn:Disconnect();_shinyConn=nil end
+			local s=Lighting:FindFirstChild("MoonShiny");if s then s:Destroy() end
+			local b=Lighting:FindFirstChild("MoonShinyBloom");if b then b:Destroy() end
+			local c=Lighting:FindFirstChild("MoonShinyCC");if c then c:Destroy() end
+			Lighting.Brightness=_dBri;Lighting.ClockTime=_dClock;Lighting.Ambient=_dAmb
+		end
+	end)
 
 	-- Speed Booster Scale
 	UIB.makeGap(4)
