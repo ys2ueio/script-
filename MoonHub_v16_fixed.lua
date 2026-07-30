@@ -843,10 +843,22 @@ local function _arResetCharacter(char)
 	local root = char:FindFirstChild("HumanoidRootPart")
 	if not hum or not root or hum.Health <= 0 then return end
 	pcall(function()
+		-- destroy ragdoll rigs before changing state
+		for _, obj in ipairs(char:GetDescendants()) do
+			if obj:IsA("BallSocketConstraint") or
+			   (obj:IsA("Attachment") and obj.Name:find("RagdollAttachment")) then
+				pcall(function() obj:Destroy() end)
+			end
+		end
+		-- signal server that ragdoll ended
+		pcall(function() LP:SetAttribute("RagdollEndTime", workspace:GetServerTimeNow()) end)
 		hum:ChangeState(Enum.HumanoidStateType.GettingUp)
 		hum:ChangeState(Enum.HumanoidStateType.Running)
 		root.AssemblyLinearVelocity = Vector3.zero
 		root.AssemblyAngularVelocity = Vector3.zero
+		-- upright CFrame — keep Y heading, remove tilt
+		root.CFrame = CFrame.new(root.Position) * CFrame.Angles(0, math.rad(root.Orientation.Y), 0)
+		root.Anchored = false
 		hum.PlatformStand = false
 		hum.Sit = false
 		hum.AutoRotate = true
@@ -855,7 +867,7 @@ local function _arResetCharacter(char)
 		for _, obj in ipairs(char:GetDescendants()) do
 			if obj:IsA("Motor6D") then
 				obj.Enabled = true
-			elseif obj:IsA("Constraint") or obj:IsA("BallSocketConstraint") or obj:IsA("HingeConstraint") then
+			elseif obj:IsA("Constraint") or obj:IsA("HingeConstraint") then
 				obj.Enabled = true
 			elseif obj:IsA("BasePart") then
 				obj.CanCollide = true
@@ -863,7 +875,9 @@ local function _arResetCharacter(char)
 				obj.AssemblyAngularVelocity = Vector3.zero
 			end
 		end
-		workspace.CurrentCamera.CameraSubject = hum
+		-- reset camera subject if the game moved it
+		local cam = workspace.CurrentCamera
+		if cam and cam.CameraSubject ~= hum then cam.CameraSubject = hum end
 		local PM = LP.PlayerScripts:FindFirstChild("PlayerModule")
 		if PM then
 			local CM = PM:FindFirstChild("ControlModule")
@@ -1648,6 +1662,35 @@ local function stopAntiKick()
 	_akActive = false
 end
 task.spawn(function() pcall(startAntiKick) end)
+
+-- ===================================================================
+-- SHINY GRAPHICS (client-side lighting only — no UI toggle)
+-- ===================================================================
+pcall(function()
+	for _, obj in ipairs(Lighting:GetChildren()) do
+		if obj:IsA("Sky") then obj:Destroy() end
+		if obj:IsA("BloomEffect") or obj:IsA("ColorCorrectionEffect") then obj:Destroy() end
+	end
+	local sky = Instance.new("Sky")
+	sky.SkyboxBk = "rbxassetid://1534951537"; sky.SkyboxDn = "rbxassetid://1534951537"
+	sky.SkyboxFt = "rbxassetid://1534951537"; sky.SkyboxLf = "rbxassetid://1534951537"
+	sky.SkyboxRt = "rbxassetid://1534951537"; sky.SkyboxUp = "rbxassetid://1534951537"
+	sky.StarCount = 10000; sky.CelestialBodiesShown = false; sky.Parent = Lighting
+	local bloom = Instance.new("BloomEffect")
+	bloom.Intensity = 1.5; bloom.Size = 40; bloom.Threshold = 0.8; bloom.Parent = Lighting
+	local cc = Instance.new("ColorCorrectionEffect")
+	cc.Saturation = 0.8; cc.Contrast = 0.3; cc.TintColor = Color3.fromRGB(200,200,200); cc.Parent = Lighting
+	Lighting.Brightness = 3; Lighting.ClockTime = 0
+	RunService.Heartbeat:Connect(function()
+		local t = tick() * 0.5
+		Lighting.Ambient = Color3.fromRGB(
+			100 + math.floor(math.sin(t) * 30),
+			100 + math.floor(math.sin(t * 0.8) * 30),
+			110 + math.floor(math.sin(t * 1.2) * 30)
+		)
+		bloom.Intensity = 1.2 + math.sin(t * 2) * 0.4
+	end)
+end)
 
 local _MH_buildUI
 _MH_buildUI = function()
