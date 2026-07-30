@@ -1694,6 +1694,45 @@ do
 	local sceneScale = Instance.new("UIScale", introGui)
 	sceneScale.Scale = 1.12
 
+	-- Skip button — top-right, theme-coloured
+	local _skipDone = false
+	local function doSkip()
+		if _skipDone then return end
+		_skipDone = true
+		TweenService:Create(introGui, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+			{BackgroundTransparency = 1}):Play()
+		task.delay(0.28, function() pcall(function() introGui:Destroy() end) end)
+	end
+	do
+		local skipBtn = Instance.new("TextButton", introGui)
+		skipBtn.AnchorPoint  = Vector2.new(1, 0)
+		skipBtn.Position     = UDim2.new(1, -14, 0, 14)
+		skipBtn.Size         = UDim2.new(0, 72, 0, 26)
+		skipBtn.ZIndex       = 1100
+		skipBtn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+		skipBtn.BackgroundTransparency = 0.45
+		skipBtn.BorderSizePixel = 0
+		skipBtn.Text         = "Skip  ›"
+		skipBtn.TextColor3   = C_MOON
+		skipBtn.Font         = Enum.Font.GothamBold
+		skipBtn.TextSize     = 13
+		skipBtn.AutoButtonColor = false
+		Instance.new("UICorner", skipBtn).CornerRadius = UDim.new(0, 6)
+		local skipStroke = Instance.new("UIStroke", skipBtn)
+		skipStroke.Color     = C_MOON
+		skipStroke.Thickness = 1
+		skipStroke.Transparency = 0.5
+		skipBtn.MouseEnter:Connect(function()
+			skipBtn.TextColor3 = C_WHITE
+			skipStroke.Transparency = 0
+		end)
+		skipBtn.MouseLeave:Connect(function()
+			skipBtn.TextColor3 = C_MOON
+			skipStroke.Transparency = 0.5
+		end)
+		skipBtn.MouseButton1Click:Connect(doSkip)
+	end
+
 	-- Rising particles
 	task.spawn(function()
 		while introGui.Parent do
@@ -2117,9 +2156,7 @@ do
 		_sfx(131070686, 0.25, 1.0)             -- transition sci-fi — fade out cinématique
 		task.wait(0.55)
 
-		TweenService:Create(introGui, TweenInfo.new(0.5), {BackgroundTransparency = 1}):Play()
-		task.wait(0.5)
-		introGui:Destroy()
+		doSkip()
 	end)
 end
 
