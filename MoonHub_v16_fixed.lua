@@ -1272,7 +1272,7 @@ end
 local AimV3 = {active=false, conn=nil}
 local _av3HitCD  = false
 local _av3LastTP = 0
-local _av3TP_CD  = 0.12 -- max ~8 TPs/s instead of 60
+local _av3TP_CD  = 0.12 -- kept for reference, unused
 
 local function _av3GetBat()
 	local char=LP.Character; if not char then return nil end
@@ -1319,20 +1319,19 @@ function AimV3.start()
 		local tr=target.Character:FindFirstChild("HumanoidRootPart"); if not tr then return end
 		pcall(function()
 			if sethiddenproperty then sethiddenproperty(root,"PhysicsRepRootPart",tr) end
-			-- small random offset so TP destination is never machine-perfect
 			local jx=math.random(-12,12)/10
 			local jz=math.random(-12,12)/10
 			local targetPos=tr.Position+Vector3.new(jx,0.9,jz)
-			local now=tick()
-			if (root.Position-targetPos).Magnitude>8 and now-_av3LastTP>=_av3TP_CD then
-				root.CFrame=CFrame.new(targetPos)
-				_av3LastTP=now
+			local dist=(root.Position-targetPos).Magnitude
+			if dist>3 then
+				local dir=(targetPos-root.Position).Unit
+				local spd=math.min(dist*8,180)
+				root.AssemblyLinearVelocity=Vector3.new(dir.X*spd,root.AssemblyLinearVelocity.Y,dir.Z*spd)
 			end
 			local cam=workspace.CurrentCamera
-			-- slight aim jitter so camera movement looks human
 			local aimJitter=Vector3.new(math.random(-3,3)/10,math.random(-2,2)/10,0)
 			cam.CFrame=CFrame.new(cam.CFrame.Position,tr.Position+aimJitter)
-			_av3Hit()
+			if dist<=6 then _av3Hit() end
 		end)
 	end)
 end
