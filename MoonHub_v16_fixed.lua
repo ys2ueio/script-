@@ -1259,7 +1259,9 @@ end
 -- ===================================================================
 -- AIM V3 (anti-desync + enemy TP + strike)
 local AimV3 = {active=false, conn=nil}
-local _av3HitCD = false
+local _av3HitCD  = false
+local _av3LastTP = 0
+local _av3TP_CD  = 0.12 -- max ~8 TPs/s instead of 60
 
 local function _av3GetBat()
 	local char=LP.Character; if not char then return nil end
@@ -1281,10 +1283,9 @@ local function _av3Hit()
 	pcall(function()
 		local bat=_av3GetBat(); if not bat then return end
 		pcall(function() bat:Activate() end)
-		local ev=bat:FindFirstChildWhichIsA("RemoteEvent")
-		if ev then pcall(function() ev:FireServer() end) end
 	end)
-	task.delay(0.08,function() _av3HitCD=false end)
+	-- randomized cooldown (200-350ms) — realistic human swing rate
+	task.delay(math.random(200, 350) / 1000, function() _av3HitCD=false end)
 end
 
 local function _av3Nearest(root)
@@ -1308,7 +1309,11 @@ function AimV3.start()
 		pcall(function()
 			if sethiddenproperty then sethiddenproperty(root,"PhysicsRepRootPart",tr) end
 			local targetPos=tr.Position+Vector3.new(0,0.9,0)
-			if (root.Position-targetPos).Magnitude>8 then root.CFrame=CFrame.new(targetPos) end
+			local now=tick()
+			if (root.Position-targetPos).Magnitude>8 and now-_av3LastTP>=_av3TP_CD then
+				root.CFrame=CFrame.new(targetPos)
+				_av3LastTP=now
+			end
 			local cam=workspace.CurrentCamera
 			cam.CFrame=CFrame.new(cam.CFrame.Position,tr.Position)
 			_av3Hit()
@@ -1335,15 +1340,15 @@ function ABP.start()
 			local basePos=head and head.Position or tr.Position
 			local aimPoint=basePos+tr.CFrame.LookVector*FACE_OFFSET
 			local direction=(aimPoint-root.Position).Unit
-			root.Velocity=direction*AB.SPEED
+			root.AssemblyLinearVelocity=direction*AB.SPEED
 			if dist<=VYSE_HIT_DIST then tryHitBat() end
-		else root.Velocity=Vector3.new(0,root.Velocity.Y,0) end
+		else root.AssemblyLinearVelocity=Vector3.new(0,root.AssemblyLinearVelocity.Y,0) end
 	end)
 end
 function ABP.stop()
 	if ABP.conn then ABP.conn:Disconnect(); ABP.conn=nil end; ABP.active=false; AB_HIT_CD=false
 	local char=LP.Character; local root=char and char:FindFirstChild("HumanoidRootPart")
-	if root then root.Velocity=Vector3.new(0,root.Velocity.Y,0) end
+	if root then root.AssemblyLinearVelocity=Vector3.new(0,root.AssemblyLinearVelocity.Y,0) end
 end
 
 -- ===================================================================
