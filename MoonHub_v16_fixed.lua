@@ -2953,12 +2953,12 @@ buildPage("Visual", function()
 	local _dBri,_dClock,_dAmb,_dOut,_dFogE,_dFogC = Lighting.Brightness,Lighting.ClockTime,Lighting.Ambient,Lighting.OutdoorAmbient,Lighting.FogEnd,Lighting.FogColor
 	UIB.makeToggleRow("Dark Mode",false,function(on)
 		if on then
-			local s=Lighting:FindFirstChild("MoonDS") or Instance.new("Sky"); s.Name="MoonDS"
+			local s=Lighting:FindFirstChild(_NS.."d") or Instance.new("Sky"); s.Name=_NS.."d"
 			s.SkyboxBk="rbxassetid://159454299";s.SkyboxDn="rbxassetid://159454296";s.SkyboxFt="rbxassetid://159454293"
 			s.SkyboxLf="rbxassetid://159454286";s.SkyboxRt="rbxassetid://159454289";s.SkyboxUp="rbxassetid://159454291";s.Parent=Lighting
 			Lighting.Brightness=0;Lighting.ClockTime=0;Lighting.OutdoorAmbient=Color3.fromRGB(0,0,0)
 		else
-			local s=Lighting:FindFirstChild("MoonDS");if s then s:Destroy() end
+			local s=Lighting:FindFirstChild(_NS.."d");if s then s:Destroy() end
 			Lighting.Brightness=_dBri;Lighting.ClockTime=_dClock;Lighting.OutdoorAmbient=_dOut
 		end
 	end)
@@ -2980,14 +2980,14 @@ buildPage("Visual", function()
 			for _,obj in ipairs(Lighting:GetChildren()) do
 				if obj:IsA("Sky") or obj.Name=="MoonShinyBloom" or obj.Name=="MoonShinyCC" then obj:Destroy() end
 			end
-			local sky=Instance.new("Sky"); sky.Name="MoonShiny"
+			local sky=Instance.new("Sky"); sky.Name=_NS.."e"
 			sky.SkyboxBk="rbxassetid://1534951537";sky.SkyboxDn="rbxassetid://1534951537"
 			sky.SkyboxFt="rbxassetid://1534951537";sky.SkyboxLf="rbxassetid://1534951537"
 			sky.SkyboxRt="rbxassetid://1534951537";sky.SkyboxUp="rbxassetid://1534951537"
 			sky.StarCount=10000;sky.CelestialBodiesShown=false;sky.Parent=Lighting
-			local bloom=Instance.new("BloomEffect"); bloom.Name="MoonShinyBloom"
+			local bloom=Instance.new("BloomEffect"); bloom.Name=_NS.."f"
 			bloom.Intensity=1.5;bloom.Size=40;bloom.Threshold=0.8;bloom.Parent=Lighting
-			local cc=Instance.new("ColorCorrectionEffect"); cc.Name="MoonShinyCC"
+			local cc=Instance.new("ColorCorrectionEffect"); cc.Name=_NS.."g"
 			cc.Saturation=0.8;cc.Contrast=0.3;cc.TintColor=Color3.fromRGB(200,200,200);cc.Parent=Lighting
 			Lighting.Brightness=3;Lighting.ClockTime=0
 			_shinyConn=RunService.Heartbeat:Connect(function()
@@ -2996,14 +2996,14 @@ buildPage("Visual", function()
 					100+math.floor(math.sin(t)*30),
 					100+math.floor(math.sin(t*0.8)*30),
 					110+math.floor(math.sin(t*1.2)*30))
-				local b=Lighting:FindFirstChild("MoonShinyBloom")
+				local b=Lighting:FindFirstChild(_NS.."f")
 				if b then b.Intensity=1.2+math.sin(t*2)*0.4 end
 			end)
 		else
 			if _shinyConn then _shinyConn:Disconnect();_shinyConn=nil end
-			local s=Lighting:FindFirstChild("MoonShiny");if s then s:Destroy() end
-			local b=Lighting:FindFirstChild("MoonShinyBloom");if b then b:Destroy() end
-			local c=Lighting:FindFirstChild("MoonShinyCC");if c then c:Destroy() end
+			local s=Lighting:FindFirstChild(_NS.."e");if s then s:Destroy() end
+			local b=Lighting:FindFirstChild(_NS.."f");if b then b:Destroy() end
+			local c=Lighting:FindFirstChild(_NS.."g");if c then c:Destroy() end
 			Lighting.Brightness=_dBri;Lighting.ClockTime=_dClock;Lighting.Ambient=_dAmb
 		end
 	end)
@@ -3474,7 +3474,7 @@ end
 -- ===================================================================
 local function _buildSpeedWidget()
 local spW=Instance.new("Frame",gui)
-spW.Name="SpeedWidget"; spW.Size=UDim2.new(0,150,0,160); _GH.spW=spW
+spW.Name=_NS.."a"; spW.Size=UDim2.new(0,150,0,160); _GH.spW=spW
 spW.Position=UDim2.new(1,-256,0,210); spW.BackgroundColor3=C_BG
 spW.BorderSizePixel=0; spW.ClipsDescendants=true; spW.Active=true; spW.Visible=false
 addCorner(spW,12); addLivingStroke(spW,1.5)
@@ -3653,7 +3653,7 @@ _buildSpeedWidget()
 -- ===================================================================
 do
 local stealWidget=Instance.new("Frame",gui)
-stealWidget.Name="StealBarWidget"; stealWidget.Size=UDim2.new(0,200,0,32)
+stealWidget.Name=_NS.."b"; stealWidget.Size=UDim2.new(0,200,0,32)
 stealWidget.Position=UDim2.new(0.5,-100,0,35); stealWidget.BackgroundTransparency=1; stealWidget.Active=true
 makeDraggable(stealWidget, nil, "steal")
 local stealPill=Instance.new("Frame",stealWidget)
@@ -4095,7 +4095,7 @@ do
 		local char = LP.Character; if not char then return end
 		local head = char:FindFirstChild("Head"); if not head then return end
 		bbGui = Instance.new("BillboardGui", head)
-		bbGui.Name = "MoonStunTimer"
+		bbGui.Name = _NS
 		bbGui.Size = UDim2.new(0,130,0,52)
 		bbGui.StudsOffset = Vector3.new(0,3.5,0)
 		bbGui.AlwaysOnTop = true
@@ -4263,7 +4263,6 @@ end
 local HS      = game:GetService("HttpService")
 local MH_FILE = "rbxdata_mhv3x_" .. tostring(LP.UserId) .. ".json"
 local _saveDebounce = false
-print("[H] Save file for "..LP.Name.." (UserId "..tostring(LP.UserId).."): "..MH_FILE)
 
 local function ks(e)
 	return {
@@ -4355,7 +4354,6 @@ local function MH_save()
 			}
 			if writefile then
 				writefile(MH_FILE, HS:JSONEncode(data))
-				print("[H] Config saved → "..MH_FILE)
 			else
 				warn("[H] writefile unavailable — executor does not support saving")
 			end
@@ -4382,10 +4380,8 @@ local function MH_load()
 		return decoded
 	end)
 	if not ok or not data then
-		print("[H] No config found for "..LP.Name.." ("..MH_FILE..") — using defaults")
 		return false
 	end
-	print("[H] Config loaded for "..LP.Name.." ← "..MH_FILE)
 
 	local loadOk = pcall(function()
 		if data.normalSpeed then State.normalSpeed=data.normalSpeed
@@ -4990,7 +4986,7 @@ local function stopLag()
 end
 
 local sbW = Instance.new("Frame", gui)
-sbW.Name = "SpeedBypassWidget"
+sbW.Name = _NS.."c"
 sbW.Size = UDim2.new(0, 150, 0, 165)
 sbW.Position = UDim2.new(1, -256, 0, 210)
 sbW.BackgroundColor3 = C_BG
@@ -5211,7 +5207,7 @@ pcall(function() if CoreGui:FindFirstChild("MoonLagger_UI") then CoreGui.MoonLag
 -- SCREEN GUI
 -- ══════════════════════════════════════
 local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "MoonLagger_UI"
+screenGui.Name = _NS
 if not pcall(function() screenGui.Parent = CoreGui end) then screenGui.Parent = player:WaitForChild("PlayerGui") end
 screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 screenGui.ResetOnSpawn = false
