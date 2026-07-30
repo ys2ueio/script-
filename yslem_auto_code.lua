@@ -969,7 +969,8 @@ function appendToBox(text)
                     setStatus("Invalid - repasted: " .. combinedCode, COLORS.Text)
                     flashCode(combinedCode, COLORS.Red)
                 else
-                    setStatus("Invalid / cooldown", COLORS.Red)
+                    local errMsg = type(res) == "table" and tostring(res.message or res.Message or "fail") or tostring(res)
+                    setStatus("Fail: " .. errMsg, COLORS.Red)
                 end
             end
         end
