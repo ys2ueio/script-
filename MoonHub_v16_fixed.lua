@@ -705,6 +705,7 @@ local function tpToGround()
 	root.CFrame = CFrame.new(root.Position.X, -7.00, root.Position.Z)
 		* CFrame.Angles(0, select(2, root.CFrame:ToEulerAnglesYXZ()), 0)
 	root.AssemblyLinearVelocity = Vector3.zero
+	pcall(function() if sethiddenproperty then sethiddenproperty(root,"PhysicsRepRootPart",root) end end)
 end
 
 -- ===================================================================
@@ -736,6 +737,7 @@ local function runDropBrainrot()
 				local off  = (hum2 and hum2.HipHeight or 2) + (r.Size.Y / 2)
 				r.CFrame = CFrame.new(r.Position.X, rr.Position.Y + off, r.Position.Z)
 				r.AssemblyLinearVelocity = Vector3.zero
+				pcall(function() if sethiddenproperty then sethiddenproperty(r,"PhysicsRepRootPart",r) end end)
 			end
 			_dropActive = false
 			return
@@ -791,6 +793,7 @@ local function startAutoLeft()
 				if alConn then alConn:Disconnect(); alConn = nil end
 				alPhase = 1
 				hrp.CFrame = CFrame.new(hrp.Position, Vector3.new(AP_L_FACE.X, hrp.Position.Y, AP_L_FACE.Z))
+				pcall(function() if sethiddenproperty then sethiddenproperty(hrp,"PhysicsRepRootPart",hrp) end end)
 				return
 			end
 			local d = AP_L2 - hrp.Position
@@ -822,6 +825,7 @@ local function startAutoRight()
 				if arConn then arConn:Disconnect(); arConn = nil end
 				arPhase = 1
 				hrp.CFrame = CFrame.new(hrp.Position, Vector3.new(AP_R_FACE.X, hrp.Position.Y, AP_R_FACE.Z))
+				pcall(function() if sethiddenproperty then sethiddenproperty(hrp,"PhysicsRepRootPart",hrp) end end)
 				return
 			end
 			local d = AP_R2 - hrp.Position
