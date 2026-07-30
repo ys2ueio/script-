@@ -395,7 +395,6 @@ local h, hrp
 local function setupChar(char)
 	h = char:WaitForChild("Humanoid", 5)
 	hrp = char:WaitForChild("HumanoidRootPart", 5)
-	if h then h.WalkSpeed = getCurrentSpeed() end
 	ensureProxy()
 end
 LP.CharacterAdded:Connect(setupChar)
@@ -846,8 +845,6 @@ local function _arResetCharacter(char)
 	pcall(function()
 		hum:ChangeState(Enum.HumanoidStateType.GettingUp)
 		hum:ChangeState(Enum.HumanoidStateType.Running)
-		root.Velocity = Vector3.zero
-		root.RotVelocity = Vector3.zero
 		root.AssemblyLinearVelocity = Vector3.zero
 		root.AssemblyAngularVelocity = Vector3.zero
 		hum.PlatformStand = false
@@ -1308,14 +1305,19 @@ function AimV3.start()
 		local tr=target.Character:FindFirstChild("HumanoidRootPart"); if not tr then return end
 		pcall(function()
 			if sethiddenproperty then sethiddenproperty(root,"PhysicsRepRootPart",tr) end
-			local targetPos=tr.Position+Vector3.new(0,0.9,0)
+			-- small random offset so TP destination is never machine-perfect
+			local jx=math.random(-12,12)/10
+			local jz=math.random(-12,12)/10
+			local targetPos=tr.Position+Vector3.new(jx,0.9,jz)
 			local now=tick()
 			if (root.Position-targetPos).Magnitude>8 and now-_av3LastTP>=_av3TP_CD then
 				root.CFrame=CFrame.new(targetPos)
 				_av3LastTP=now
 			end
 			local cam=workspace.CurrentCamera
-			cam.CFrame=CFrame.new(cam.CFrame.Position,tr.Position)
+			-- slight aim jitter so camera movement looks human
+			local aimJitter=Vector3.new(math.random(-3,3)/10,math.random(-2,2)/10,0)
+			cam.CFrame=CFrame.new(cam.CFrame.Position,tr.Position+aimJitter)
 			_av3Hit()
 		end)
 	end)
@@ -1405,10 +1407,7 @@ end
 local function swingBatForCounter(bat,char)
 	local hum2=char:FindFirstChildOfClass("Humanoid")
 	if bat.Parent~=char then if hum2 then pcall(function() hum2:EquipTool(bat) end) end; task.wait(0.05) end
-	local remote=bat:FindFirstChildOfClass("RemoteEvent") or bat:FindFirstChildOfClass("RemoteFunction")
-	if remote and remote:IsA("RemoteEvent") then
-		pcall(function() remote:FireServer() end); task.wait(0.15); pcall(function() remote:FireServer() end)
-	else pcall(function() bat:Activate() end); task.wait(0.15); pcall(function() bat:Activate() end) end
+	pcall(function() bat:Activate() end)
 end
 function BatCounter.start()
 	if BatCounter.conn then BatCounter.conn:Disconnect() end
@@ -1422,7 +1421,7 @@ function BatCounter.start()
 			task.spawn(function()
 				local bat=findBatForCounter()
 				if bat then swingBatForCounter(bat,char) end
-				task.wait(0.5); _bcDebounce=false
+				task.wait(0.35 + math.random()*0.30); _bcDebounce=false
 			end)
 		end
 	end)
