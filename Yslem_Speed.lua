@@ -123,19 +123,10 @@ do
     end
 end
 
--- Dark overlay (lisibilité)
-local overlay = Instance.new("Frame", spW)
-overlay.Size = UDim2.new(1,0,1,0)
-overlay.BackgroundColor3 = Color3.fromRGB(3, 5, 16)
-overlay.BackgroundTransparency = 0.38
-overlay.BorderSizePixel = 0
-overlay.ZIndex = 2
-
 -- ── Header ──────────────────────────────────────────────────
 local spH = Instance.new("Frame", spW)
-spH.Size = UDim2.new(1,0,0,26); spH.BackgroundColor3 = C_HEADER
-spH.BackgroundTransparency = 0.55; spH.BorderSizePixel = 0; spH.ZIndex = 3
-addCorner(spH, 12)
+spH.Size = UDim2.new(1,0,0,26); spH.BackgroundTransparency = 1
+spH.BorderSizePixel = 0; spH.ZIndex = 3
 
 -- drag
 local _dragging, _dragInput, _dragStart, _startPos = false, nil, nil, nil
@@ -181,9 +172,7 @@ addCorner(spMinBtn, 6); addLivingStroke(spMinBtn, 1)
 -- ── Status row ──────────────────────────────────────────────
 local stRow = Instance.new("Frame", spW)
 stRow.Size = UDim2.new(1,-16,0,26); stRow.Position = UDim2.new(0,8,0,32)
-stRow.BackgroundColor3 = C_ROW; stRow.BackgroundTransparency = 0.5
-stRow.BorderSizePixel = 0; stRow.ZIndex = 3
-addCorner(stRow, 8); addLivingStroke(stRow, 1)
+stRow.BackgroundTransparency = 1; stRow.BorderSizePixel = 0; stRow.ZIndex = 3
 
 local stLbl = Instance.new("TextLabel", stRow)
 stLbl.Size = UDim2.new(0.5,0,1,0); stLbl.Position = UDim2.new(0,12,0,0)
@@ -208,13 +197,11 @@ local stClk = Instance.new("TextButton", stRow)
 stClk.Size = UDim2.new(1,0,1,0); stClk.BackgroundTransparency = 1
 stClk.Text = ""; stClk.ZIndex = 6
 
--- ── mkInput ─────────────────────────────────────────────────
+-- ── mkInput — retourne (box, row) ───────────────────────────
 local function mkInput(yPos, lbl, val, cb)
     local row = Instance.new("Frame", spW)
     row.Size = UDim2.new(1,-16,0,28); row.Position = UDim2.new(0,8,0,yPos)
-    row.BackgroundColor3 = C_ROW; row.BackgroundTransparency = 0.5
-    row.BorderSizePixel = 0; row.ZIndex = 3
-    addCorner(row, 8); addLivingStroke(row, 1)
+    row.BackgroundTransparency = 1; row.BorderSizePixel = 0; row.ZIndex = 3
     local l = Instance.new("TextLabel", row)
     l.Size = UDim2.new(1,-80,1,0); l.Position = UDim2.new(0,12,0,0)
     l.BackgroundTransparency = 1; l.Text = lbl; l.TextColor3 = C_WHITE
@@ -222,7 +209,7 @@ local function mkInput(yPos, lbl, val, cb)
     l.ZIndex = 4; addLivingTextGradient(l)
     local bw = Instance.new("Frame", row)
     bw.Size = UDim2.new(0,62,0,22); bw.Position = UDim2.new(1,-70,0.5,-11)
-    bw.BackgroundColor3 = C_OFF_BG; bw.BackgroundTransparency = 0.25
+    bw.BackgroundColor3 = C_OFF_BG; bw.BackgroundTransparency = 0.45
     bw.BorderSizePixel = 0; bw.ZIndex = 4
     addCorner(bw, 6); addLivingStroke(bw, 1)
     local box = Instance.new("TextBox", bw)
@@ -239,24 +226,26 @@ local function mkInput(yPos, lbl, val, cb)
         if n and n > 0 and n <= 500 then cb(n)
         else box.Text = tostring(val) end
     end)
-    return box
+    return box, row
 end
 
 -- ── Inputs ──────────────────────────────────────────────────
 local normalSpeed = 60
 local stealSpeed  = 31
 
-local speedBox = mkInput(64,  "Speed",     normalSpeed, function(n) normalSpeed = n end)
-local stealBox = mkInput(98,  "Steal Spd", stealSpeed,  function(n) stealSpeed  = n end)
+local speedBox, speedRow = mkInput(64,  "Speed",     normalSpeed, function(n) normalSpeed = n end)
+local stealBox, stealRow = mkInput(98,  "Steal Spd", stealSpeed,  function(n) stealSpeed  = n end)
 
 -- ── Minimize ────────────────────────────────────────────────
 local _collapsed = false
-local FULL_H, COL_H = 142, 64
+local FULL_H, COL_H = 142, 26
 spMinBtn.MouseButton1Click:Connect(function()
     _collapsed = not _collapsed
     spW.Size = UDim2.new(0,150,0, _collapsed and COL_H or FULL_H)
     spMinBtn.Text = _collapsed and "+" or "-"
-    stRow.Visible = not _collapsed
+    stRow.Visible  = not _collapsed
+    speedRow.Visible = not _collapsed
+    stealRow.Visible = not _collapsed
 end)
 
 -- ── Source logic (v4gg.xyz) — verbatim ──────────────────────
