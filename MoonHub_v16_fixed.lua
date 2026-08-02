@@ -425,6 +425,8 @@ local AutoSteal = {
 
 
 -- ── AUTO GRAB V2 mode (new default) ────────────────────────────
+local startAutoSteal, stopAutoSteal   -- pre-declared; assigned inside do..end
+do
 local _KAG_started  = false
 local _KAG_conn     = nil
 local _KAG_scanTask = nil
@@ -693,8 +695,9 @@ local function stopAutoStealV2()
 	if AutoSteal.StatusLabel then AutoSteal.StatusLabel.Text="READY" end
 end
 
-local function startAutoSteal() startAutoStealV2() end
-local function stopAutoSteal()  stopAutoStealV2()  end
+startAutoSteal = function() startAutoStealV2() end
+stopAutoSteal  = function() stopAutoStealV2()  end
+end -- do..end AUTO GRAB V2
 
 
 
