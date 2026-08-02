@@ -288,8 +288,6 @@ spMinBtn.MouseButton1Click:Connect(function()
 end)
 
 -- ── Logic ───────────────────────────────────────────────────
--- BodyVelocity parented au HRP : force continue qui écrase le mover du Humanoid.
--- WalkSpeed JAMAIS modifié — lu uniquement pour detect steal (> 25).
 local ACCESSORIES_TO_REMOVE = {
     "Black Shield", "MechHorseHelmet_AccAccessory", "Glasses",
     "MeshPartAccessory", "LeftShoeAccessory", "RightShoeAccessory",
@@ -298,27 +296,36 @@ local ACCESSORIES_TO_REMOVE = {
 local player       = LP
 local boostEnabled = false
 local boostConn    = nil
-local _bv          = nil   -- BodyVelocity instance
+local ownTimer     = 0
+local ownInterval  = 0.8 + math.random() * 0.4
+local speedRamp    = 0
 
 local function getHumHrp()
     local char = player.Character; if not char then return nil, nil end
     return char:FindFirstChildOfClass("Humanoid"), char:FindFirstChild("HumanoidRootPart")
 end
 
-local function ensureBV(hrp)
-    if _bv and _bv.Parent == hrp then return _bv end
-    if _bv then pcall(function() _bv:Destroy() end); _bv = nil end
-    local bv       = Instance.new("BodyVelocity")
-    bv.Name        = "_YS_BV"
-    bv.MaxForce    = Vector3.new(1e5, 0, 1e5)   -- X/Z max, Y=0 → saut/gravité libres
-    bv.Velocity    = Vector3.zero
-    bv.Parent      = hrp
-    _bv = bv
-    return bv
+local function claimOwn(hrp)
+    pcall(function() hrp:SetNetworkOwner(player) end)
 end
 
-local function cleanBV()
-    if _bv then pcall(function() _bv:Destroy() end); _bv = nil end
+local _ownerWatchConn = nil
+local function startOwnerWatch(hrp)
+    if _ownerWatchConn then pcall(function() _ownerWatchConn:Disconnect() end) end
+    _ownerWatchConn = hrp:GetPropertyChangedSignal("ReceiveAge"):Connect(function()
+        if boostEnabled then task.defer(function() claimOwn(hrp) end) end
+    end)
+end
+
+local function applyBoost()
+    local _, hrp = getHumHrp(); if not hrp then return end
+    claimOwn(hrp)
+    startOwnerWatch(hrp)
+end
+
+local function removeBoost()
+    if _ownerWatchConn then pcall(function() _ownerWatchConn:Disconnect() end); _ownerWatchConn = nil end
+    speedRamp = 0
 end
 
 local function _pillUpdate(on)
@@ -333,28 +340,54 @@ local function toggleBoost()
     _pillUpdate(boostEnabled)
 
     if boostEnabled then
+        speedRamp = 0
+        applyBoost()
         if boostConn then boostConn:Disconnect() end
 
-        local function _hb(_dt)
+        local function _hb(dt)
             local hum, hrp = getHumHrp(); if not hum or not hrp then return end
-            local bv = ensureBV(hrp)
-            local activeSpeed = hum.WalkSpeed > 25 and stealSpeed or currentSpeed
-            local moveDir     = hum.MoveDirection
-            bv.Velocity = Vector3.new(moveDir.X * activeSpeed, 0, moveDir.Z * activeSpeed)
+
+            ownTimer = ownTimer + dt
+            if ownTimer >= ownInterval then
+                claimOwn(hrp)
+                ownTimer    = 0
+                ownInterval = 0.8 + math.random() * 0.4
+            end
+
+            local dir = hum.MoveDirection
+            if dir.Magnitude < 0.1 then
+                speedRamp = math.max(speedRamp - dt * 6, 0)
+                return
+            end
+
+            speedRamp = math.min(speedRamp + dt * 4, 1)
+            local baseSpeed = hum.WalkSpeed > 25 and stealSpeed or currentSpeed
+            local effective = 16 + (baseSpeed - 16) * speedRamp
+
+            local vel  = hrp.AssemblyLinearVelocity
+            local n    = 1 + (math.random() - 0.5) * 0.012
+            local tgtX = dir.X * effective * n
+            local tgtZ = dir.Z * effective * n
+            local a    = math.min(dt * 20, 1)
+            hrp.AssemblyLinearVelocity = Vector3.new(
+                vel.X + (tgtX - vel.X) * a,
+                vel.Y,
+                vel.Z + (tgtZ - vel.Z) * a
+            )
         end
 
         boostConn = RunService.Heartbeat:Connect((newcclosure and newcclosure(_hb)) or _hb)
     else
         if boostConn then boostConn:Disconnect(); boostConn = nil end
-        cleanBV()
+        removeBoost()
     end
 end
 
 local function onCharacterAdded(char)
-    cleanBV()   -- l'ancienne BV est dans l'ancien char, on repart propre
     for _, name in ipairs(ACCESSORIES_TO_REMOVE) do
         local p = char:FindFirstChild(name); if p then p:Destroy() end
     end
+    if boostEnabled then task.wait(0.3); applyBoost() end
 end
 
 if player.Character then onCharacterAdded(player.Character) end
