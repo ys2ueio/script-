@@ -307,12 +307,13 @@ local function setupLinearVelocity(hrp)
     if attachment  then attachment:Destroy();  attachment  = nil end
     attachment = Instance.new("Attachment"); attachment.Parent = hrp
     linVelocity = Instance.new("LinearVelocity")
-    linVelocity.Parent       = attachment
-    linVelocity.Attachment0  = attachment
-    linVelocity.MaxForce     = math.huge
-    linVelocity.VectorVelocity = Vector3.new(0, 0, 0)
-    linVelocity.RelativeTo   = Enum.ActuatorRelativeTo.World
-    linVelocity.Enabled      = true
+    linVelocity.Parent              = attachment
+    linVelocity.Attachment0         = attachment
+    linVelocity.ForceLimitsEnabled  = true
+    linVelocity.MaxAxesForce        = Vector3.new(math.huge, 0, math.huge)  -- X/Z only, Y untouched
+    linVelocity.VectorVelocity      = Vector3.new(0, 0, 0)
+    linVelocity.RelativeTo          = Enum.ActuatorRelativeTo.World
+    linVelocity.Enabled             = true
 end
 
 local function applyBoost()
