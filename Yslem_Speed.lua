@@ -73,8 +73,6 @@ local function addLivingStroke(parent, thickness)
     }); table.insert(_livingStrokes, g); return s
 end
 
-local _IMG_URL  = "https://litter.catbox.moe/xnbgt6qhibc9z4db.png"
-local _IMG_FILE = "yslem_bg.png"
 
 -- ── ScreenGui ───────────────────────────────────────────────
 local gui = Instance.new("ScreenGui")
@@ -96,7 +94,7 @@ spW.BackgroundColor3 = C_BG
 spW.BorderSizePixel = 0; spW.ClipsDescendants = true; spW.Active = true
 addCorner(spW, 12); addLivingStroke(spW, 1.5)
 
--- Background image — UI appears instantly, image loads in background
+-- Background image (artwork YSLEM)
 local bgImg = Instance.new("ImageLabel", spW)
 bgImg.Size = UDim2.new(1,0,1,0)
 bgImg.BackgroundTransparency = 1
@@ -104,25 +102,26 @@ bgImg.Image = ""
 bgImg.ScaleType = Enum.ScaleType.Crop
 bgImg.ImageTransparency = 0
 bgImg.ZIndex = 1
-
-task.spawn(function()
-    if type(getcustomasset) ~= "function" then return end
-    if type(isfile) ~= "function" or not isfile(_IMG_FILE) then
-        local reqFn = (syn and type(syn.request)=="function" and syn.request)
-                   or (type(request)=="function" and request)
-                   or (type(http_request)=="function" and http_request)
-        if reqFn then
-            local ok, res = pcall(reqFn, {Url=_IMG_URL, Method="GET"})
-            if ok and res and res.Body and #res.Body > 0 then
-                pcall(writefile, _IMG_FILE, res.Body)
+addCorner(bgImg, 12)
+do
+    local fname = "yslem_bg.png"
+    local url   = "https://litter.catbox.moe/xnbgt6qhibc9z4db.png"
+    local function tryLoad()
+        if not (getcustomasset and isfile and isfile(fname)) then return false end
+        local rid = getcustomasset(fname)
+        if rid and rid ~= "" then bgImg.Image = rid; return true end
+        return false
+    end
+    if not tryLoad() then
+        pcall(function()
+            local ok, data = pcall(function() return game:HttpGet(url) end)
+            if ok and data and data ~= "" then
+                if writefile then writefile(fname, data) end
+                tryLoad()
             end
-        end
+        end)
     end
-    local ok, asset = pcall(getcustomasset, _IMG_FILE)
-    if ok and asset and bgImg and bgImg.Parent then
-        bgImg.Image = asset
-    end
-end)
+end
 
 -- Dark overlay (lisibilité)
 local overlay = Instance.new("Frame", spW)
