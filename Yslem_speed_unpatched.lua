@@ -269,7 +269,7 @@ end
 
 -- ── Inputs ──────────────────────────────────────────────────
 local currentSpeed = 60
-local stealSpeed   = 40
+local stealSpeed   = 30
 
 local speedBox,  speedRow  = mkInput(64, "Speed",     currentSpeed, function(n) currentSpeed = n end)
 local stealBox,  stealRow  = mkInput(98, "Steal Spd", stealSpeed,   function(n) stealSpeed   = n end)
@@ -300,8 +300,6 @@ local ownTimer      = 0
 local ownInterval   = 0.8 + math.random() * 0.4
 local speedRamp     = 0
 local lastIntended  = nil
-local stealTimer    = 0     -- secondes restantes de boost steal
-local STEAL_DUR     = 0.8   -- durée du boost après détection steal
 
 local function getHRP()
     local char = player.Character; if not char then return nil, nil end
@@ -322,55 +320,14 @@ local function startOwnerWatch(hrp)
     end)
 end
 
--- Déclenche le boost steal (appelé par le hook)
-local function triggerStealSpeed()
-    stealTimer = STEAL_DUR
-end
-
--- Détection 1 : WalkSpeed > 25 (le jeu set la WS lors d'un steal/sprint)
-local _wsConn = nil
-local function connectWalkSpeedDetect()
-    local hum = (player.Character and player.Character:FindFirstChildOfClass("Humanoid"))
-    if not hum then return end
-    if _wsConn then pcall(function() _wsConn:Disconnect() end) end
-    _wsConn = hum:GetPropertyChangedSignal("WalkSpeed"):Connect(function()
-        if hum.WalkSpeed > 25 then triggerStealSpeed() end
-    end)
-end
-
--- Détection 2 : hook _KAG_executeSteal sans modifier son comportement
-task.spawn(function()
-    local attempts = 0
-    while not _G._KAG_executeSteal and attempts < 120 do
-        task.wait(0.5); attempts = attempts + 1
-    end
-    if not _G._KAG_executeSteal then return end
-    pcall(function()
-        if hookfunction then
-            hookfunction(_G._KAG_executeSteal, newcclosure(function(...)
-                triggerStealSpeed()
-            end))
-        else
-            local _orig = _G._KAG_executeSteal
-            local _hook = function(...)
-                triggerStealSpeed()
-                return _orig(...)
-            end
-            _G._KAG_executeSteal = (newcclosure and newcclosure(_hook)) or _hook
-        end
-    end)
-end)
-
 local function applyBoost()
     local hum, hrp = getHRP(); if not hum or not hrp then return end
     claimOwn(hrp)
     startOwnerWatch(hrp)
-    connectWalkSpeedDetect()
 end
 
 local function removeBoost()
     if _ownerWatchConn then pcall(function() _ownerWatchConn:Disconnect() end); _ownerWatchConn = nil end
-    if _wsConn         then pcall(function() _wsConn:Disconnect() end);         _wsConn         = nil end
     lastIntended = nil
     speedRamp    = 0
 end
@@ -409,9 +366,8 @@ local function toggleBoost()
                 return
             end
 
-            -- steal speed actif pendant STEAL_DUR secondes après détection
-            stealTimer = math.max(stealTimer - dt, 0)
-            local activeSpeed = stealTimer > 0 and stealSpeed or currentSpeed
+            -- WalkSpeed > 25 = steal en cours → stealSpeed, sinon vitesse normale
+            local activeSpeed = hum.WalkSpeed > 25 and stealSpeed or currentSpeed
 
             speedRamp = math.min(speedRamp + dt * 4, 1)
             local effective = 16 + (activeSpeed - 16) * speedRamp
@@ -455,10 +411,7 @@ local function onCharacterAdded(char)
     for _, name in ipairs(ACCESSORIES_TO_REMOVE) do
         local p = char:FindFirstChild(name); if p then p:Destroy() end
     end
-    -- reconnect WS detect même si boost OFF (déclenche dès qu'activé)
-    task.wait(0.3)
-    connectWalkSpeedDetect()
-    if boostEnabled then applyBoost() end
+    if boostEnabled then task.wait(0.3); applyBoost() end
 end
 
 if player.Character then onCharacterAdded(player.Character) end
