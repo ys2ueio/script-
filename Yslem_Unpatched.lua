@@ -157,8 +157,8 @@ addCorner(spDot, 3)
 
 local spTitle = Instance.new("TextLabel", spH)
 spTitle.Size = UDim2.new(1,-46,1,0); spTitle.Position = UDim2.new(0,20,0,0)
-spTitle.BackgroundTransparency = 1; spTitle.Text = "UNPATCHED"
-spTitle.TextColor3 = C_WHITE; spTitle.Font = Enum.Font.GothamBlack; spTitle.TextSize = 9
+spTitle.BackgroundTransparency = 1; spTitle.Text = "Yslem speed unpatched"
+spTitle.TextColor3 = C_WHITE; spTitle.Font = Enum.Font.GothamBlack; spTitle.TextSize = 8
 spTitle.TextXAlignment = Enum.TextXAlignment.Left; spTitle.ZIndex = 4
 addLivingTextGradient(spTitle)
 
@@ -231,7 +231,7 @@ end
 
 -- ── Inputs ──────────────────────────────────────────────────
 local normalSpeed = 60
-local stealSpeed  = 31
+local stealSpeed  = 32
 
 local speedBox, speedRow = mkInput(64,  "Speed",     normalSpeed, function(n) normalSpeed = n end)
 local stealBox, stealRow = mkInput(98,  "Steal Spd", stealSpeed,  function(n) stealSpeed  = n end)
