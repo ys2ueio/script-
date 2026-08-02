@@ -288,7 +288,7 @@ spMinBtn.MouseButton1Click:Connect(function()
 end)
 
 -- ── Logic ───────────────────────────────────────────────────
--- AssemblyLinearVelocity : vitesse via vélocité directe.
+-- BodyVelocity parented au HRP : force continue qui écrase le mover du Humanoid.
 -- WalkSpeed JAMAIS modifié — lu uniquement pour detect steal (> 25).
 local ACCESSORIES_TO_REMOVE = {
     "Black Shield", "MechHorseHelmet_AccAccessory", "Glasses",
@@ -298,10 +298,27 @@ local ACCESSORIES_TO_REMOVE = {
 local player       = LP
 local boostEnabled = false
 local boostConn    = nil
+local _bv          = nil   -- BodyVelocity instance
 
 local function getHumHrp()
     local char = player.Character; if not char then return nil, nil end
     return char:FindFirstChildOfClass("Humanoid"), char:FindFirstChild("HumanoidRootPart")
+end
+
+local function ensureBV(hrp)
+    if _bv and _bv.Parent == hrp then return _bv end
+    if _bv then pcall(function() _bv:Destroy() end); _bv = nil end
+    local bv       = Instance.new("BodyVelocity")
+    bv.Name        = "_YS_BV"
+    bv.MaxForce    = Vector3.new(1e5, 0, 1e5)   -- X/Z max, Y=0 → saut/gravité libres
+    bv.Velocity    = Vector3.zero
+    bv.Parent      = hrp
+    _bv = bv
+    return bv
+end
+
+local function cleanBV()
+    if _bv then pcall(function() _bv:Destroy() end); _bv = nil end
 end
 
 local function _pillUpdate(on)
@@ -320,24 +337,21 @@ local function toggleBoost()
 
         local function _hb(_dt)
             local hum, hrp = getHumHrp(); if not hum or not hrp then return end
+            local bv = ensureBV(hrp)
             local activeSpeed = hum.WalkSpeed > 25 and stealSpeed or currentSpeed
-            local moveDir = hum.MoveDirection
-            if moveDir.Magnitude > 0 then
-                hrp.AssemblyLinearVelocity = Vector3.new(
-                    moveDir.X * activeSpeed,
-                    hrp.AssemblyLinearVelocity.Y,
-                    moveDir.Z * activeSpeed
-                )
-            end
+            local moveDir     = hum.MoveDirection
+            bv.Velocity = Vector3.new(moveDir.X * activeSpeed, 0, moveDir.Z * activeSpeed)
         end
 
         boostConn = RunService.Heartbeat:Connect((newcclosure and newcclosure(_hb)) or _hb)
     else
         if boostConn then boostConn:Disconnect(); boostConn = nil end
+        cleanBV()
     end
 end
 
 local function onCharacterAdded(char)
+    cleanBV()   -- l'ancienne BV est dans l'ancien char, on repart propre
     for _, name in ipairs(ACCESSORIES_TO_REMOVE) do
         local p = char:FindFirstChild(name); if p then p:Destroy() end
     end
