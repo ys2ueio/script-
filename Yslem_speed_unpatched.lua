@@ -292,44 +292,42 @@ local ACCESSORIES_TO_REMOVE = {
     "MeshPartAccessory", "LeftShoeAccessory", "RightShoeAccessory",
 }
 
-local player        = LP
-local boostEnabled  = false
-local boostConn     = nil
-local lagConn       = nil
-local ownTimer      = 0
-local ownInterval   = 0.8 + math.random() * 0.4
-local speedRamp     = 0
-local lastIntended  = nil
+local player       = LP
+local boostEnabled = false
+local _wsConn      = nil
 
-local function getHRP()
-    local char = player.Character; if not char then return nil, nil end
-    local hum  = char:FindFirstChildOfClass("Humanoid")
-    local hrp  = char:FindFirstChild("HumanoidRootPart")
-    return hum, hrp
+local function getHum()
+    local char = player.Character
+    return char and char:FindFirstChildOfClass("Humanoid")
 end
 
-local function claimOwn(hrp)
-    pcall(function() hrp:SetNetworkOwner(player) end)
+local function applyWS(hum)
+    if not hum or not boostEnabled then return end
+    if hum.WalkSpeed > 25 then
+        hum.WalkSpeed = stealSpeed
+    else
+        hum.WalkSpeed = currentSpeed
+    end
 end
 
-local _ownerWatchConn = nil
-local function startOwnerWatch(hrp)
-    if _ownerWatchConn then pcall(function() _ownerWatchConn:Disconnect() end) end
-    _ownerWatchConn = hrp:GetPropertyChangedSignal("ReceiveAge"):Connect(function()
-        if boostEnabled then task.defer(function() claimOwn(hrp) end) end
+local function connectWS(hum)
+    if _wsConn then pcall(function() _wsConn:Disconnect() end); _wsConn = nil end
+    _wsConn = hum:GetPropertyChangedSignal("WalkSpeed"):Connect(function()
+        if not boostEnabled then return end
+        task.defer(function() applyWS(hum) end)
     end)
 end
 
 local function applyBoost()
-    local hum, hrp = getHRP(); if not hum or not hrp then return end
-    claimOwn(hrp)
-    startOwnerWatch(hrp)
+    local hum = getHum(); if not hum then return end
+    connectWS(hum)
+    applyWS(hum)
 end
 
 local function removeBoost()
-    if _ownerWatchConn then pcall(function() _ownerWatchConn:Disconnect() end); _ownerWatchConn = nil end
-    lastIntended = nil
-    speedRamp    = 0
+    if _wsConn then pcall(function() _wsConn:Disconnect() end); _wsConn = nil end
+    local hum = getHum()
+    if hum then hum.WalkSpeed = 16 end
 end
 
 local function _pillUpdate(on)
@@ -342,76 +340,14 @@ end
 local function toggleBoost()
     boostEnabled = not boostEnabled
     _pillUpdate(boostEnabled)
-
-    if boostEnabled then
-        speedRamp = 0
-        applyBoost()
-        if boostConn then boostConn:Disconnect() end
-        if lagConn   then lagConn:Disconnect()   end
-
-        local function _hb(dt)
-            local hum, hrp = getHRP(); if not hum or not hrp then return end
-
-            ownTimer = ownTimer + dt
-            if ownTimer >= ownInterval then
-                claimOwn(hrp)
-                ownTimer    = 0
-                ownInterval = 0.8 + math.random() * 0.4
-            end
-
-            local dir = hum.MoveDirection
-            if dir.Magnitude < 0.1 then
-                lastIntended = nil
-                speedRamp    = math.max(speedRamp - dt * 6, 0)
-                return
-            end
-
-            -- WalkSpeed > 25 = steal en cours → stealSpeed, sinon vitesse normale
-            local activeSpeed = hum.WalkSpeed > 25 and stealSpeed or currentSpeed
-
-            speedRamp = math.min(speedRamp + dt * 4, 1)
-            local effective = 16 + (activeSpeed - 16) * speedRamp
-
-            local vel  = hrp.AssemblyLinearVelocity
-            local n    = 1 + (math.random() - 0.5) * 0.012
-            local tgtX = dir.X * effective * n
-            local tgtZ = dir.Z * effective * n
-            local a    = math.min(dt * 20, 1)
-            hrp.AssemblyLinearVelocity = Vector3.new(
-                vel.X + (tgtX - vel.X) * a,
-                vel.Y,
-                vel.Z + (tgtZ - vel.Z) * a
-            )
-
-            lastIntended = hrp.Position
-        end
-
-        local function _lag()
-            if not boostEnabled or not lastIntended then return end
-            local _, hrp = getHRP(); if not hrp then return end
-            local delta = (hrp.Position - lastIntended).Magnitude
-            if delta > 10 then
-                hrp.CFrame = CFrame.new(lastIntended.X, hrp.Position.Y, lastIntended.Z)
-                            * (hrp.CFrame - hrp.CFrame.Position)
-                claimOwn(hrp)
-                lastIntended = nil
-            end
-        end
-
-        boostConn = RunService.Heartbeat:Connect((newcclosure and newcclosure(_hb)) or _hb)
-        lagConn   = RunService.Stepped:Connect((newcclosure and newcclosure(_lag)) or _lag)
-    else
-        if boostConn then boostConn:Disconnect(); boostConn = nil end
-        if lagConn   then lagConn:Disconnect();   lagConn   = nil end
-        removeBoost()
-    end
+    if boostEnabled then applyBoost() else removeBoost() end
 end
 
 local function onCharacterAdded(char)
     for _, name in ipairs(ACCESSORIES_TO_REMOVE) do
         local p = char:FindFirstChild(name); if p then p:Destroy() end
     end
-    if boostEnabled then task.wait(0.3); applyBoost() end
+    if boostEnabled then task.wait(0.5); applyBoost() end
 end
 
 if player.Character then onCharacterAdded(player.Character) end
