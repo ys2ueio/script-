@@ -290,58 +290,49 @@ spMinBtn.MouseButton1Click:Connect(function()
     jumpRow.Visible  = not _collapsed
 end)
 
--- ── Logic (workin_booster) ──────────────────────────────────
+-- ── Logic — AssemblyLinearVelocity (pas d'instance externe) ─
+-- Aucune LinearVelocity/Attachment scannable par les ACs.
+-- WalkSpeed reste à 16 pour passer les checks serveur.
+-- SetNetworkOwner donne au client le contrôle de la physique.
 local ACCESSORIES_TO_REMOVE = {
     "Black Shield", "MechHorseHelmet_AccAccessory", "Glasses",
     "MeshPartAccessory", "LeftShoeAccessory", "RightShoeAccessory",
 }
 
-local player        = LP
-local boostEnabled  = false
-local boostConn     = nil
-local linVelocity   = nil
-local attachment    = nil
+local player       = LP
+local boostEnabled = false
+local boostConn    = nil
+local ownTimer     = 0
+local ownInterval  = 1.4 + math.random() * 0.4
 
-local function setupLinearVelocity(hrp)
-    if linVelocity then linVelocity:Destroy(); linVelocity = nil end
-    if attachment  then attachment:Destroy();  attachment  = nil end
-    attachment = Instance.new("Attachment"); attachment.Parent = hrp
-    linVelocity = Instance.new("LinearVelocity")
-    linVelocity.Parent              = attachment
-    linVelocity.Attachment0         = attachment
-    linVelocity.ForceLimitsEnabled  = true
-    linVelocity.MaxAxesForce        = Vector3.new(math.huge, 0, math.huge)  -- X/Z only, Y untouched
-    linVelocity.VectorVelocity      = Vector3.new(0, 0, 0)
-    linVelocity.RelativeTo          = Enum.ActuatorRelativeTo.World
-    linVelocity.Enabled             = true
+local function getHRP()
+    local char = player.Character; if not char then return nil, nil end
+    local hum  = char:FindFirstChildOfClass("Humanoid")
+    local hrp  = char:FindFirstChild("HumanoidRootPart")
+    return hum, hrp
+end
+
+local function claimOwn(hrp)
+    pcall(function() hrp:SetNetworkOwner(player) end)
 end
 
 local function applyBoost()
-    if not player.Character then return end
-    local hum = player.Character:FindFirstChildOfClass("Humanoid")
-    local hrp = player.Character:FindFirstChild("HumanoidRootPart")
-    if not hum or not hrp then return end
+    local hum, hrp = getHRP(); if not hum or not hrp then return end
     hum.UseJumpPower = true
     hum.JumpPower    = currentJump
-    if not linVelocity or linVelocity.Parent ~= hrp then
-        setupLinearVelocity(hrp)
-    end
+    claimOwn(hrp)
 end
 
 local function removeBoost()
-    if linVelocity then linVelocity:Destroy(); linVelocity = nil end
-    if attachment  then attachment:Destroy();  attachment  = nil end
-    if player.Character then
-        local hum = player.Character:FindFirstChildOfClass("Humanoid")
-        if hum then hum.JumpPower = 50 end
-    end
+    local hum, _ = getHRP()
+    if hum then hum.JumpPower = 50 end
 end
 
 local function _pillUpdate(on)
-    stPill.BackgroundColor3      = on and C_MOON or C_OFF_BG
+    stPill.BackgroundColor3       = on and C_MOON or C_OFF_BG
     stPill.BackgroundTransparency = on and 0.15 or 0.3
-    stPillLbl.Text               = on and "ON" or "OFF"
-    stPillLbl.TextColor3         = on and Color3.fromRGB(3, 8, 20) or C_DIM
+    stPillLbl.Text                = on and "ON" or "OFF"
+    stPillLbl.TextColor3          = on and Color3.fromRGB(3, 8, 20) or C_DIM
 end
 
 local function toggleBoost()
@@ -350,22 +341,31 @@ local function toggleBoost()
     if boostEnabled then
         applyBoost()
         if boostConn then boostConn:Disconnect() end
-        local function _hb()
-            if not player.Character then return end
-            local hrp = player.Character:FindFirstChild("HumanoidRootPart")
-            local hum = player.Character:FindFirstChildOfClass("Humanoid")
-            if not hrp or not hum then return end
-            if not linVelocity or linVelocity.Parent ~= hrp then
-                setupLinearVelocity(hrp)
+        local function _hb(dt)
+            local hum, hrp = getHRP(); if not hum or not hrp then return end
+
+            -- reclaim ownership avec intervalle randomisé
+            ownTimer += dt
+            if ownTimer >= ownInterval then
+                claimOwn(hrp)
+                ownTimer    = 0
+                ownInterval = 1.4 + math.random() * 0.4
             end
+
             local dir = hum.MoveDirection
-            if dir.Magnitude > 0 then
-                local flat = Vector3.new(dir.X, 0, dir.Z).Unit
-                local n    = 1 + (math.random() - 0.5) * 0.012
-                linVelocity.VectorVelocity = Vector3.new(flat.X * currentSpeed * n, 0, flat.Z * currentSpeed * n)
-            else
-                linVelocity.VectorVelocity = Vector3.new(0, 0, 0)
-            end
+            if dir.Magnitude < 0.1 then return end  -- WalkSpeed reste 16 au repos
+
+            -- vitesse horizontale : AssemblyLinearVelocity, Y préservé
+            local vel  = hrp.AssemblyLinearVelocity
+            local n    = 1 + (math.random() - 0.5) * 0.012  -- bruit anti-pattern
+            local tgtX = dir.X * currentSpeed * n
+            local tgtZ = dir.Z * currentSpeed * n
+            local a    = math.min(dt * 20, 1)
+            hrp.AssemblyLinearVelocity = Vector3.new(
+                vel.X + (tgtX - vel.X) * a,
+                vel.Y,
+                vel.Z + (tgtZ - vel.Z) * a
+            )
         end
         boostConn = RunService.Heartbeat:Connect(
             (newcclosure and newcclosure(_hb)) or _hb
@@ -378,8 +378,7 @@ end
 
 local function onCharacterAdded(char)
     for _, name in ipairs(ACCESSORIES_TO_REMOVE) do
-        local part = char:FindFirstChild(name)
-        if part then part:Destroy() end
+        local p = char:FindFirstChild(name); if p then p:Destroy() end
     end
     if boostEnabled then task.wait(0.3); applyBoost() end
 end
@@ -387,7 +386,6 @@ end
 if player.Character then onCharacterAdded(player.Character) end
 player.CharacterAdded:Connect(onCharacterAdded)
 
--- keybind T
 UIS.InputBegan:Connect(function(input, gpe)
     if gpe then return end
     if input.KeyCode == Enum.KeyCode.T then toggleBoost() end
