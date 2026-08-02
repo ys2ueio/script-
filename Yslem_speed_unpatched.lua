@@ -155,10 +155,16 @@ spDot.Size = UDim2.new(0,5,0,5); spDot.Position = UDim2.new(0,10,0,11)
 spDot.BackgroundColor3 = C_MOON; spDot.BorderSizePixel = 0; spDot.ZIndex = 4
 addCorner(spDot, 3)
 
+local spSub = Instance.new("TextLabel", spH)
+spSub.Size = UDim2.new(1,-46,0,11); spSub.Position = UDim2.new(0,20,0,2)
+spSub.BackgroundTransparency = 1; spSub.Text = "yslem"
+spSub.TextColor3 = C_SILVER; spSub.Font = Enum.Font.Gotham; spSub.TextSize = 8
+spSub.TextXAlignment = Enum.TextXAlignment.Left; spSub.ZIndex = 4
+
 local spTitle = Instance.new("TextLabel", spH)
-spTitle.Size = UDim2.new(1,-46,1,0); spTitle.Position = UDim2.new(0,20,0,0)
-spTitle.BackgroundTransparency = 1; spTitle.Text = "UNPATCHED"
-spTitle.TextColor3 = C_WHITE; spTitle.Font = Enum.Font.GothamBlack; spTitle.TextSize = 9
+spTitle.Size = UDim2.new(1,-46,0,13); spTitle.Position = UDim2.new(0,20,0,13)
+spTitle.BackgroundTransparency = 1; spTitle.Text = "Speed"
+spTitle.TextColor3 = C_WHITE; spTitle.Font = Enum.Font.GothamBlack; spTitle.TextSize = 10
 spTitle.TextXAlignment = Enum.TextXAlignment.Left; spTitle.ZIndex = 4
 addLivingTextGradient(spTitle)
 
