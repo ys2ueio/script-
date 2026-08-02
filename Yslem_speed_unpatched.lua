@@ -361,7 +361,7 @@ local function toggleBoost()
             end
 
             speedRamp = math.min(speedRamp + dt * 4, 1)
-            local baseSpeed = hum.WalkSpeed > 25 and stealSpeed or currentSpeed
+            local baseSpeed = hum.WalkSpeed > 25 and currentSpeed or stealSpeed
             local effective = 16 + (baseSpeed - 16) * speedRamp
 
             local vel  = hrp.AssemblyLinearVelocity
