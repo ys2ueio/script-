@@ -341,20 +341,22 @@ end)
 makeSectionLabel("Contrôle")
 
 local statusDot, statusLbl = makeStatusRow()
-local setSpeedToggle        -- forward ref
+-- ── Source logic (v4gg.xyz) — verbatim ──────────────────────
+local player = LP
+local character = player.Character or player.CharacterAdded:Wait()
 
--- ── Core Speed Variables ─────────────────────────────────────
-local speedEnabled   = false
-local targetSpeed    = 16
+-- Core Speed Variables
+local speedEnabled = false
+local targetSpeed = 16
 local connection
-local lastPosition   = nil
-local lastTime       = nil
+local lastPosition = nil
+local lastTime = nil
 
 -- Get char parts safely
 local function getCharParts()
-    local char = LP.Character
+    local char = player.Character
     if not char then return nil, nil end
-    local hum  = char:FindFirstChildOfClass("Humanoid")
+    local hum = char:FindFirstChildOfClass("Humanoid")
     local root = char:FindFirstChild("HumanoidRootPart")
     if not hum or not root then return nil, nil end
     return hum, root
@@ -363,7 +365,7 @@ end
 -- Silently reclaim network ownership without triggering resets
 local function claimOwnership(root)
     pcall(function()
-        root:SetNetworkOwner(LP)
+        root:SetNetworkOwner(player)
     end)
 end
 
@@ -381,9 +383,9 @@ local function applySpeed(spd)
     claimOwnership(root)
 
     lastPosition = root.Position
-    lastTime     = tick()
+    lastTime = tick()
 
-    local ownershipTimer  = 0
+    local ownershipTimer = 0
     local lagbackCooldown = 0
 
     connection = RunService.Heartbeat:Connect(function(dt)
@@ -393,7 +395,7 @@ local function applySpeed(spd)
         if not hum or not root then return end
 
         -- reclaim ownership every 1.5s silently
-        ownershipTimer = ownershipTimer + dt
+        ownershipTimer += dt
         if ownershipTimer >= 1.5 then
             claimOwnership(root)
             ownershipTimer = 0
@@ -402,24 +404,24 @@ local function applySpeed(spd)
         local dir = hum.MoveDirection
         if dir.Magnitude < 0.1 then
             lastPosition = root.Position
-            lastTime     = tick()
+            lastTime = tick()
             return
         end
 
         local currentVel = root.AssemblyLinearVelocity
-        local targetVel  = Vector3.new(dir.X * spd, currentVel.Y, dir.Z * spd)
+        local targetVel = Vector3.new(dir.X * spd, currentVel.Y, dir.Z * spd)
 
         -- framerate independent smooth lerp
         local alpha = math.min(dt * 22, 1)
         root.AssemblyLinearVelocity = currentVel:Lerp(targetVel, alpha)
 
         -- lagback detection using position delta
-        lagbackCooldown = lagbackCooldown - dt
-        local now     = tick()
+        lagbackCooldown -= dt
+        local now = tick()
         local elapsed = now - lastTime
         if elapsed > 0.1 and lastPosition then
             local expectedDist = spd * elapsed
-            local actualDist   = (root.Position - lastPosition).Magnitude
+            local actualDist = (root.Position - lastPosition).Magnitude
 
             -- if we moved way less than expected server corrected us
             if actualDist < expectedDist * 0.3 and lagbackCooldown <= 0 then
@@ -430,10 +432,19 @@ local function applySpeed(spd)
         end
 
         lastPosition = root.Position
-        lastTime     = now
+        lastTime = now
     end)
 end
 
+player.CharacterAdded:Connect(function(char)
+    character = char
+    if speedEnabled then
+        task.wait(0.1)
+        applySpeed(targetSpeed)
+    end
+end)
+
+-- ── Wiring UI → logique source ───────────────────────────────
 local function setStatus(on, spd)
     if on then
         statusDot.BackgroundColor3 = Color3.fromRGB(60,220,120)
@@ -446,24 +457,20 @@ local function setStatus(on, spd)
     end
 end
 
-setSpeedToggle = makeToggleRow("Speed", false, function(on)
-    targetSpeed  = currentSpeed
-    speedEnabled = on
+makeToggleRow("Speed", false, function(on)
+    local inputVal = tonumber(speedBox.Text) or currentSpeed
     if on then
+        speedEnabled = true
+        targetSpeed  = inputVal
         setStatus(true, targetSpeed)
         applySpeed(targetSpeed)
     else
-        setStatus(false, 0)
+        speedEnabled = false
         if connection then connection:Disconnect(); connection = nil end
         local hum, _ = getCharParts()
         if hum then hum.WalkSpeed = 16 end
-        lastPosition = nil; lastTime = nil
-    end
-end)
-
-LP.CharacterAdded:Connect(function(char)
-    if speedEnabled then
-        task.wait(0.1)
-        applySpeed(targetSpeed)
+        lastPosition = nil
+        lastTime = nil
+        setStatus(false, 0)
     end
 end)
