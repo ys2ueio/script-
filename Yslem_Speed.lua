@@ -1,5 +1,5 @@
 -- ============================================================
---  Yslem Speed — MoonHub Speed Widget UI  |  strictly private
+--  Yslem Speed  |  strictly private
 -- ============================================================
 if _G["_YS_SPEED"] then
     pcall(function() _G["_YS_SPEED"]:Destroy() end)
@@ -13,20 +13,20 @@ local TweenService = game:GetService("TweenService")
 local LP = Players.LocalPlayer
 if not LP.Character then LP.CharacterAdded:Wait() end
 
--- ── Palette MoonHub (identique) ─────────────────────────────
-local C_BG     = Color3.fromRGB(0,0,0)
-local C_HEADER = Color3.fromRGB(0,0,0)
-local C_ROW    = Color3.fromRGB(0,0,0)
-local C_WHITE  = Color3.fromRGB(255,255,255)
-local C_MOON   = Color3.fromRGB(90,160,255)
-local C_ON_BG  = Color3.fromRGB(20,45,80)
-local C_OFF_BG = Color3.fromRGB(0,0,0)
-local C_SILVER = Color3.fromRGB(210,222,240)
-local C_DIM    = Color3.fromRGB(110,120,140)
-local C_DEEP1  = Color3.fromRGB(4,7,16)
-local C_DEEP2  = Color3.fromRGB(14,28,58)
-local C_DEEP3  = Color3.fromRGB(40,80,165)
-local C_DEEP4  = Color3.fromRGB(90,150,255)
+-- ── Palette — adaptée au background (deep navy + electric blue) ─
+local C_BG     = Color3.fromRGB(4, 6, 18)
+local C_HEADER = Color3.fromRGB(4, 6, 18)
+local C_ROW    = Color3.fromRGB(8, 14, 38)
+local C_WHITE  = Color3.fromRGB(220, 235, 255)   -- blanc énergie (comme texte YSLEM)
+local C_MOON   = Color3.fromRGB(95, 160, 255)    -- bleu électrique
+local C_ON_BG  = Color3.fromRGB(18, 45, 115)     -- navy activé
+local C_OFF_BG = Color3.fromRGB(4, 6, 18)
+local C_SILVER = Color3.fromRGB(195, 220, 255)   -- argent-bleu inputs
+local C_DIM    = Color3.fromRGB(75, 105, 160)    -- bleu-gris dim
+local C_DEEP1  = Color3.fromRGB(4, 6, 18)
+local C_DEEP2  = Color3.fromRGB(12, 25, 70)
+local C_DEEP3  = Color3.fromRGB(45, 95, 210)
+local C_DEEP4  = Color3.fromRGB(110, 175, 255)
 
 -- ── Living gradients ────────────────────────────────────────
 local _livingGradients = {}
@@ -84,7 +84,7 @@ if not pcall(function() gui.Parent = game:GetService("CoreGui") end) then
 end
 _G["_YS_SPEED"] = gui
 
--- ── Widget (same dimensions as MoonHub Speed Booster) ───────
+-- ── Widget ──────────────────────────────────────────────────
 local spW = Instance.new("Frame", gui)
 spW.Name = "SpeedWidget"
 spW.Size = UDim2.new(0, 150, 0, 142)
@@ -93,12 +93,30 @@ spW.BackgroundColor3 = C_BG
 spW.BorderSizePixel = 0; spW.ClipsDescendants = true; spW.Active = true
 addCorner(spW, 12); addLivingStroke(spW, 1.5)
 
--- ── Header (spH) ────────────────────────────────────────────
+-- Background image (artwork YSLEM)
+local bgImg = Instance.new("ImageLabel", spW)
+bgImg.Size = UDim2.new(1,0,1,0)
+bgImg.BackgroundTransparency = 1
+bgImg.Image = "https://litter.catbox.moe/xnbgt6qhibc9z4db.png"
+bgImg.ScaleType = Enum.ScaleType.Crop
+bgImg.ImageTransparency = 0
+bgImg.ZIndex = 1
+
+-- Dark overlay (lisibilité)
+local overlay = Instance.new("Frame", spW)
+overlay.Size = UDim2.new(1,0,1,0)
+overlay.BackgroundColor3 = Color3.fromRGB(3, 5, 16)
+overlay.BackgroundTransparency = 0.38
+overlay.BorderSizePixel = 0
+overlay.ZIndex = 2
+
+-- ── Header ──────────────────────────────────────────────────
 local spH = Instance.new("Frame", spW)
-spH.Size = UDim2.new(1,0,0,26); spH.BackgroundColor3 = C_HEADER; spH.BorderSizePixel = 0
+spH.Size = UDim2.new(1,0,0,26); spH.BackgroundColor3 = C_HEADER
+spH.BackgroundTransparency = 0.55; spH.BorderSizePixel = 0; spH.ZIndex = 3
 addCorner(spH, 12)
 
--- drag via header
+-- drag
 local _dragging, _dragInput, _dragStart, _startPos = false, nil, nil, nil
 spH.InputBegan:Connect(function(inp)
     if inp.UserInputType == Enum.UserInputType.MouseButton1
@@ -115,79 +133,82 @@ spH.InputChanged:Connect(function(inp)
 end)
 game:GetService("UserInputService").InputChanged:Connect(function(inp)
     if _dragging and _dragInput and inp == _dragInput then
-        local delta = inp.Position - _dragStart
-        spW.Position = UDim2.new(
-            _startPos.X.Scale, _startPos.X.Offset + delta.X,
-            _startPos.Y.Scale, _startPos.Y.Offset + delta.Y
-        )
+        local d = inp.Position - _dragStart
+        spW.Position = UDim2.new(_startPos.X.Scale, _startPos.X.Offset+d.X, _startPos.Y.Scale, _startPos.Y.Offset+d.Y)
     end
 end)
 
 local spDot = Instance.new("Frame", spH)
 spDot.Size = UDim2.new(0,5,0,5); spDot.Position = UDim2.new(0,10,0,11)
-spDot.BackgroundColor3 = C_MOON; spDot.BorderSizePixel = 0; addCorner(spDot, 3)
+spDot.BackgroundColor3 = C_MOON; spDot.BorderSizePixel = 0; spDot.ZIndex = 4
+addCorner(spDot, 3)
 
 local spTitle = Instance.new("TextLabel", spH)
 spTitle.Size = UDim2.new(1,-46,1,0); spTitle.Position = UDim2.new(0,20,0,0)
 spTitle.BackgroundTransparency = 1; spTitle.Text = "SPEED"
 spTitle.TextColor3 = C_WHITE; spTitle.Font = Enum.Font.GothamBlack; spTitle.TextSize = 9
-spTitle.TextXAlignment = Enum.TextXAlignment.Left
+spTitle.TextXAlignment = Enum.TextXAlignment.Left; spTitle.ZIndex = 4
 addLivingTextGradient(spTitle)
 
 local spMinBtn = Instance.new("TextButton", spH)
 spMinBtn.Size = UDim2.new(0,18,0,18); spMinBtn.Position = UDim2.new(1,-24,0.5,-9)
-spMinBtn.BackgroundColor3 = Color3.fromRGB(30,30,34); spMinBtn.BorderSizePixel = 0
-spMinBtn.Text = "-"; spMinBtn.TextColor3 = C_WHITE
-spMinBtn.Font = Enum.Font.GothamBlack; spMinBtn.TextSize = 15
+spMinBtn.BackgroundColor3 = Color3.fromRGB(8,14,38); spMinBtn.BackgroundTransparency = 0.3
+spMinBtn.BorderSizePixel = 0; spMinBtn.Text = "-"; spMinBtn.TextColor3 = C_WHITE
+spMinBtn.Font = Enum.Font.GothamBlack; spMinBtn.TextSize = 15; spMinBtn.ZIndex = 4
 addCorner(spMinBtn, 6); addLivingStroke(spMinBtn, 1)
 
--- ── Status row (stRow) ──────────────────────────────────────
+-- ── Status row ──────────────────────────────────────────────
 local stRow = Instance.new("Frame", spW)
 stRow.Size = UDim2.new(1,-16,0,26); stRow.Position = UDim2.new(0,8,0,32)
-stRow.BackgroundColor3 = C_ROW; stRow.BackgroundTransparency = 0.35
-stRow.BorderSizePixel = 0; addCorner(stRow, 8); addLivingStroke(stRow, 1)
+stRow.BackgroundColor3 = C_ROW; stRow.BackgroundTransparency = 0.5
+stRow.BorderSizePixel = 0; stRow.ZIndex = 3
+addCorner(stRow, 8); addLivingStroke(stRow, 1)
 
 local stLbl = Instance.new("TextLabel", stRow)
 stLbl.Size = UDim2.new(0.5,0,1,0); stLbl.Position = UDim2.new(0,12,0,0)
 stLbl.BackgroundTransparency = 1; stLbl.Text = "Status:"
 stLbl.TextColor3 = C_WHITE; stLbl.Font = Enum.Font.GothamBold; stLbl.TextSize = 11
-stLbl.TextXAlignment = Enum.TextXAlignment.Left
+stLbl.TextXAlignment = Enum.TextXAlignment.Left; stLbl.ZIndex = 4
 addLivingTextGradient(stLbl)
 
 local stPill = Instance.new("Frame", stRow)
 stPill.Size = UDim2.new(0.44,0,0,22); stPill.Position = UDim2.new(0.54,0,0.5,-11)
-stPill.BackgroundColor3 = C_OFF_BG; stPill.BorderSizePixel = 0
+stPill.BackgroundColor3 = C_OFF_BG; stPill.BackgroundTransparency = 0.3
+stPill.BorderSizePixel = 0; stPill.ZIndex = 4
 addCorner(stPill, 6); addLivingStroke(stPill, 1)
 
 local stPillLbl = Instance.new("TextLabel", stPill)
 stPillLbl.Size = UDim2.new(1,0,1,0); stPillLbl.BackgroundTransparency = 1
 stPillLbl.Text = "OFF"; stPillLbl.TextColor3 = C_DIM
-stPillLbl.Font = Enum.Font.GothamBlack; stPillLbl.TextSize = 11
+stPillLbl.Font = Enum.Font.GothamBlack; stPillLbl.TextSize = 11; stPillLbl.ZIndex = 5
 addLivingTextGradient(stPillLbl)
 
 local stClk = Instance.new("TextButton", stRow)
-stClk.Size = UDim2.new(1,0,1,0); stClk.BackgroundTransparency = 1; stClk.Text = ""
+stClk.Size = UDim2.new(1,0,1,0); stClk.BackgroundTransparency = 1
+stClk.Text = ""; stClk.ZIndex = 6
 
--- ── mkInput (identique MoonHub) ─────────────────────────────
+-- ── mkInput ─────────────────────────────────────────────────
 local function mkInput(yPos, lbl, val, cb)
     local row = Instance.new("Frame", spW)
     row.Size = UDim2.new(1,-16,0,28); row.Position = UDim2.new(0,8,0,yPos)
-    row.BackgroundColor3 = C_ROW; row.BackgroundTransparency = 0.35
-    row.BorderSizePixel = 0; addCorner(row, 8); addLivingStroke(row, 1)
+    row.BackgroundColor3 = C_ROW; row.BackgroundTransparency = 0.5
+    row.BorderSizePixel = 0; row.ZIndex = 3
+    addCorner(row, 8); addLivingStroke(row, 1)
     local l = Instance.new("TextLabel", row)
     l.Size = UDim2.new(1,-80,1,0); l.Position = UDim2.new(0,12,0,0)
     l.BackgroundTransparency = 1; l.Text = lbl; l.TextColor3 = C_WHITE
     l.Font = Enum.Font.GothamBold; l.TextSize = 11; l.TextXAlignment = Enum.TextXAlignment.Left
-    addLivingTextGradient(l)
+    l.ZIndex = 4; addLivingTextGradient(l)
     local bw = Instance.new("Frame", row)
     bw.Size = UDim2.new(0,62,0,22); bw.Position = UDim2.new(1,-70,0.5,-11)
-    bw.BackgroundColor3 = C_OFF_BG; bw.BackgroundTransparency = 0.1
-    bw.BorderSizePixel = 0; addCorner(bw, 6); addLivingStroke(bw, 1)
+    bw.BackgroundColor3 = C_OFF_BG; bw.BackgroundTransparency = 0.25
+    bw.BorderSizePixel = 0; bw.ZIndex = 4
+    addCorner(bw, 6); addLivingStroke(bw, 1)
     local box = Instance.new("TextBox", bw)
     box.Size = UDim2.new(1,-6,1,0); box.Position = UDim2.new(0,3,0,0)
     box.BackgroundTransparency = 1; box.Text = tostring(val)
     box.TextColor3 = C_SILVER; box.Font = Enum.Font.GothamBold; box.TextSize = 12
-    box.ClearTextOnFocus = false; box.TextXAlignment = Enum.TextXAlignment.Center
+    box.ClearTextOnFocus = false; box.TextXAlignment = Enum.TextXAlignment.Center; box.ZIndex = 5
     box:GetPropertyChangedSignal("Text"):Connect(function()
         local f = box.Text:gsub("%D", "")
         if box.Text ~= f then box.Text = f end
@@ -320,15 +341,16 @@ player.CharacterAdded:Connect(function(char)
     end
 end)
 
--- ── Toggle wiring ────────────────────────────────────────────
+-- ── Toggle ──────────────────────────────────────────────────
 local _spActive = false
 
 local function toggleSp()
     _spActive = not _spActive
     speedEnabled = _spActive
     stPill.BackgroundColor3 = _spActive and C_MOON or C_OFF_BG
+    stPill.BackgroundTransparency = _spActive and 0.15 or 0.3
     stPillLbl.Text = _spActive and "ON" or "OFF"
-    stPillLbl.TextColor3 = _spActive and Color3.fromRGB(0,10,20) or C_DIM
+    stPillLbl.TextColor3 = _spActive and Color3.fromRGB(3, 8, 20) or C_DIM
     if _spActive then
         targetSpeed = normalSpeed
         applySpeed(targetSpeed)
