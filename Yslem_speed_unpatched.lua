@@ -287,7 +287,10 @@ spMinBtn.MouseButton1Click:Connect(function()
     stealRow.Visible = not _collapsed
 end)
 
--- ── Logic — AssemblyLinearVelocity + détect WalkSpeed steal ─
+-- ── Logic ───────────────────────────────────────────────────
+-- WalkSpeed direct : le serveur valide le mouvement contre WalkSpeed.
+-- Stepped cache le WalkSpeed du jeu AVANT notre override (détect steal).
+-- Heartbeat applique la vitesse active.
 local ACCESSORIES_TO_REMOVE = {
     "Black Shield", "MechHorseHelmet_AccAccessory", "Glasses",
     "MeshPartAccessory", "LeftShoeAccessory", "RightShoeAccessory",
@@ -296,41 +299,26 @@ local ACCESSORIES_TO_REMOVE = {
 local player       = LP
 local boostEnabled = false
 local boostConn    = nil
-local lagConn      = nil
-local ownTimer     = 0
-local ownInterval  = 0.8 + math.random() * 0.4
-local speedRamp    = 0
-local lastIntended = nil
+local steppedConn  = nil
+local _gameWS      = 16   -- WalkSpeed tel que le JEU le met (mis à jour dans Stepped)
+local _lastSetWS   = -1   -- WalkSpeed qu'ON a set (pour filtrer le cache)
 
-local function getHRP()
-    local char = player.Character; if not char then return nil, nil end
-    local hum  = char:FindFirstChildOfClass("Humanoid")
-    local hrp  = char:FindFirstChild("HumanoidRootPart")
-    return hum, hrp
-end
-
-local function claimOwn(hrp)
-    pcall(function() hrp:SetNetworkOwner(player) end)
-end
-
-local _ownerWatchConn = nil
-local function startOwnerWatch(hrp)
-    if _ownerWatchConn then pcall(function() _ownerWatchConn:Disconnect() end) end
-    _ownerWatchConn = hrp:GetPropertyChangedSignal("ReceiveAge"):Connect(function()
-        if boostEnabled then task.defer(function() claimOwn(hrp) end) end
-    end)
+local function getHum()
+    local char = player.Character; if not char then return nil end
+    return char:FindFirstChildOfClass("Humanoid")
 end
 
 local function applyBoost()
-    local hum, hrp = getHRP(); if not hum or not hrp then return end
-    claimOwn(hrp)
-    startOwnerWatch(hrp)
+    local hum = getHum(); if not hum then return end
+    _gameWS    = hum.WalkSpeed   -- snapshot : état du jeu avant nos overrides
+    _lastSetWS = _gameWS
 end
 
 local function removeBoost()
-    if _ownerWatchConn then pcall(function() _ownerWatchConn:Disconnect() end); _ownerWatchConn = nil end
-    lastIntended = nil
-    speedRamp    = 0
+    local hum = getHum()
+    if hum then hum.WalkSpeed = 16 end
+    _gameWS    = 16
+    _lastSetWS = -1
 end
 
 local function _pillUpdate(on)
@@ -345,65 +333,30 @@ local function toggleBoost()
     _pillUpdate(boostEnabled)
 
     if boostEnabled then
-        speedRamp = 0
         applyBoost()
-        if boostConn then boostConn:Disconnect() end
-        if lagConn   then lagConn:Disconnect()   end
+        if boostConn   then boostConn:Disconnect()   end
+        if steppedConn then steppedConn:Disconnect() end
 
-        local function _hb(dt)
-            local hum, hrp = getHRP(); if not hum or not hrp then return end
-
-            ownTimer = ownTimer + dt
-            if ownTimer >= ownInterval then
-                claimOwn(hrp)
-                ownTimer    = 0
-                ownInterval = 0.8 + math.random() * 0.4
-            end
-
-            local dir = hum.MoveDirection
-            if dir.Magnitude < 0.1 then
-                lastIntended = nil
-                speedRamp    = math.max(speedRamp - dt * 6, 0)
-                return
-            end
-
-            -- WalkSpeed > 25 = grab/steal détecté → stealSpeed, sinon vitesse normale
-            local activeSpeed = hum.WalkSpeed > 25 and stealSpeed or currentSpeed
-
-            speedRamp = math.min(speedRamp + dt * 4, 1)
-            local effective = 16 + (activeSpeed - 16) * speedRamp
-
-            local vel  = hrp.AssemblyLinearVelocity
-            local n    = 1 + (math.random() - 0.5) * 0.012
-            local tgtX = dir.X * effective * n
-            local tgtZ = dir.Z * effective * n
-            local a    = math.min(dt * 20, 1)
-            hrp.AssemblyLinearVelocity = Vector3.new(
-                vel.X + (tgtX - vel.X) * a,
-                vel.Y,
-                vel.Z + (tgtZ - vel.Z) * a
-            )
-
-            lastIntended = hrp.Position
+        -- Stepped (avant physics) : lit le WalkSpeed du jeu avant qu'on l'écrase
+        local function _stepped(_t, _dt)
+            local hum = getHum(); if not hum then return end
+            local ws = hum.WalkSpeed
+            if ws ~= _lastSetWS then _gameWS = ws end   -- ignore nos propres sets
         end
 
-        local function _lag()
-            if not boostEnabled or not lastIntended then return end
-            local _, hrp = getHRP(); if not hrp then return end
-            local delta = (hrp.Position - lastIntended).Magnitude
-            if delta > 10 then
-                hrp.CFrame = CFrame.new(lastIntended.X, hrp.Position.Y, lastIntended.Z)
-                            * (hrp.CFrame - hrp.CFrame.Position)
-                claimOwn(hrp)
-                lastIntended = nil
-            end
+        -- Heartbeat (après physics) : applique la vitesse
+        local function _hb(_dt)
+            local hum = getHum(); if not hum then return end
+            local activeSpeed = _gameWS > 25 and stealSpeed or currentSpeed
+            hum.WalkSpeed = activeSpeed
+            _lastSetWS    = activeSpeed
         end
 
-        boostConn = RunService.Heartbeat:Connect((newcclosure and newcclosure(_hb)) or _hb)
-        lagConn   = RunService.Stepped:Connect((newcclosure and newcclosure(_lag)) or _lag)
+        steppedConn = RunService.Stepped:Connect((newcclosure and newcclosure(_stepped)) or _stepped)
+        boostConn   = RunService.Heartbeat:Connect((newcclosure and newcclosure(_hb)) or _hb)
     else
-        if boostConn then boostConn:Disconnect(); boostConn = nil end
-        if lagConn   then lagConn:Disconnect();   lagConn   = nil end
+        if boostConn   then boostConn:Disconnect();   boostConn   = nil end
+        if steppedConn then steppedConn:Disconnect(); steppedConn = nil end
         removeBoost()
     end
 end
