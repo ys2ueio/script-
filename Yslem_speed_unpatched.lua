@@ -290,10 +290,10 @@ spMinBtn.MouseButton1Click:Connect(function()
     jumpRow.Visible  = not _collapsed
 end)
 
--- ── Logic — AssemblyLinearVelocity (pas d'instance externe) ─
--- Aucune LinearVelocity/Attachment scannable par les ACs.
--- WalkSpeed reste à 16 pour passer les checks serveur.
--- SetNetworkOwner donne au client le contrôle de la physique.
+-- ── Logic — BodyVelocity (API legacy Roblox, Stepped avant physics) ─
+-- BodyVelocity = API pré-2021 force-based. Stepped = avant tick physique.
+-- MaxForce Y=0 → gravity et jump intacts. Nom aléatoire anti-scan.
+-- WalkSpeed reste à 16. SetNetworkOwner donne autorité physique au client.
 local ACCESSORIES_TO_REMOVE = {
     "Black Shield", "MechHorseHelmet_AccAccessory", "Glasses",
     "MeshPartAccessory", "LeftShoeAccessory", "RightShoeAccessory",
@@ -302,11 +302,10 @@ local ACCESSORIES_TO_REMOVE = {
 local player       = LP
 local boostEnabled = false
 local boostConn    = nil
-local lagConn      = nil
 local ownTimer     = 0
-local ownInterval  = 0.8 + math.random() * 0.4  -- plus agressif : 0.8–1.2s
-local speedRamp    = 0   -- 0→1 au démarrage pour éviter le spike de vélocité
-local lastIntended = nil -- position cible mémorisée pour anti-lagback
+local ownInterval  = 0.8 + math.random() * 0.4
+local speedRamp    = 0
+local _bv          = nil  -- BodyVelocity instance (legacy)
 
 local function getHRP()
     local char = player.Character; if not char then return nil, nil end
@@ -319,15 +318,33 @@ local function claimOwn(hrp)
     pcall(function() hrp:SetNetworkOwner(player) end)
 end
 
--- Watchdog : dès que le serveur reprend ownership, on le reclaim immédiatement
 local _ownerWatchConn = nil
 local function startOwnerWatch(hrp)
     if _ownerWatchConn then pcall(function() _ownerWatchConn:Disconnect() end) end
     _ownerWatchConn = hrp:GetPropertyChangedSignal("ReceiveAge"):Connect(function()
-        if boostEnabled then
-            task.defer(function() claimOwn(hrp) end)
-        end
+        if boostEnabled then task.defer(function() claimOwn(hrp) end) end
     end)
+end
+
+local function getBV(hrp)
+    if _bv and _bv.Parent == hrp then return _bv end
+    pcall(function() if _bv then _bv:Destroy() end end); _bv = nil
+    local bv      = Instance.new("BodyVelocity")
+    bv.Name       = tostring(math.random(0x10000, 0xFFFFF))
+    bv.MaxForce   = Vector3.new(1e4, 0, 1e4)  -- Y=0 : gravity/jump intacts
+    bv.Velocity   = Vector3.new(0, 0, 0)
+    bv.P          = 1e5
+    bv.Parent     = hrp
+    _bv = bv
+    return bv
+end
+
+local function destroyBV()
+    if _bv then
+        pcall(function() _bv.Velocity = Vector3.new(0,0,0) end)
+        pcall(function() _bv:Destroy() end)
+        _bv = nil
+    end
 end
 
 local function applyBoost()
@@ -336,14 +353,15 @@ local function applyBoost()
     hum.JumpPower    = currentJump
     claimOwn(hrp)
     startOwnerWatch(hrp)
+    getBV(hrp)
 end
 
 local function removeBoost()
     if _ownerWatchConn then pcall(function() _ownerWatchConn:Disconnect() end); _ownerWatchConn = nil end
     local hum, _ = getHRP()
     if hum then hum.JumpPower = 50 end
-    lastIntended = nil
-    speedRamp    = 0
+    destroyBV()
+    speedRamp = 0
 end
 
 local function _pillUpdate(on)
@@ -361,12 +379,10 @@ local function toggleBoost()
         speedRamp = 0
         applyBoost()
         if boostConn then boostConn:Disconnect() end
-        if lagConn   then lagConn:Disconnect()   end
 
-        local function _hb(dt)
+        local function _stepped(dt)
             local hum, hrp = getHRP(); if not hum or not hrp then return end
 
-            -- ownership reclaim agressif
             ownTimer += dt
             if ownTimer >= ownInterval then
                 claimOwn(hrp)
@@ -376,49 +392,25 @@ local function toggleBoost()
 
             local dir = hum.MoveDirection
             if dir.Magnitude < 0.1 then
-                lastIntended = nil
-                speedRamp    = math.max(speedRamp - dt * 6, 0)  -- ramp down quand idle
+                speedRamp = math.max(speedRamp - dt * 6, 0)
+                local bv  = getBV(hrp)
+                bv.Velocity = Vector3.new(0, 0, 0)
                 return
             end
 
-            -- ramp-up progressif à l'activation (évite le spike détectable)
             speedRamp = math.min(speedRamp + dt * 4, 1)
             local effective = 16 + (currentSpeed - 16) * speedRamp
-
-            local vel  = hrp.AssemblyLinearVelocity
             local n    = 1 + (math.random() - 0.5) * 0.012
-            local tgtX = dir.X * effective * n
-            local tgtZ = dir.Z * effective * n
-            local a    = math.min(dt * 20, 1)
-            hrp.AssemblyLinearVelocity = Vector3.new(
-                vel.X + (tgtX - vel.X) * a,
-                vel.Y,
-                vel.Z + (tgtZ - vel.Z) * a
-            )
+            local flat = Vector3.new(dir.X, 0, dir.Z)
+            if flat.Magnitude > 0 then flat = flat.Unit end
 
-            -- mémorise la position cible pour anti-lagback
-            lastIntended = hrp.Position
+            local bv = getBV(hrp)
+            bv.Velocity = flat * effective * n
         end
 
-        -- anti-lagback : détecte si le serveur nous a snapback > 10 studs
-        local function _lag()
-            if not boostEnabled or not lastIntended then return end
-            local _, hrp = getHRP(); if not hrp then return end
-            local delta = (hrp.Position - lastIntended).Magnitude
-            if delta > 10 then
-                -- réapplique la position cible horizontalement, conserve le Y réel
-                hrp.CFrame = CFrame.new(lastIntended.X, hrp.Position.Y, lastIntended.Z)
-                            * (hrp.CFrame - hrp.CFrame.Position)
-                claimOwn(hrp)
-                lastIntended = nil
-            end
-        end
-
-        boostConn = RunService.Heartbeat:Connect((newcclosure and newcclosure(_hb)) or _hb)
-        lagConn   = RunService.Stepped:Connect((newcclosure and newcclosure(_lag)) or _lag)
+        boostConn = RunService.Stepped:Connect((newcclosure and newcclosure(_stepped)) or _stepped)
     else
         if boostConn then boostConn:Disconnect(); boostConn = nil end
-        if lagConn   then lagConn:Disconnect();   lagConn   = nil end
         removeBoost()
     end
 end
