@@ -1975,6 +1975,73 @@ pcall(function()
 	end
 end)
 
+-- ===================================================================
+-- ANTI-DETECT EXTRA — periodic GC rescan + HTTP block + shutdown hook
+-- ===================================================================
+
+-- 1. Periodic GC rescan every 30s (catch kick remotes injected dynamically)
+task.spawn(function()
+	while true do
+		task.wait(30)
+		pcall(function()
+			if not (getgc and islclosure and isexecutorclosure) then return end
+			for _, obj in next, getgc(true) do
+				if typeof(obj) == "function" and islclosure(obj) and not isexecutorclosure(obj) then
+					_gcDeepScan(obj)
+				end
+			end
+		end)
+	end
+end)
+
+-- 2. Block HTTP reporting (syn.request / request / http_request)
+pcall(function()
+	local _BAD_URL = {"log","report","detect","analytics","telemetry","anticheat","anti_cheat","ban"}
+	local function _wrapReq(fn)
+		if not fn then return fn end
+		return newcclosure(function(opts, ...)
+			if type(opts) == "table" then
+				local url = (opts.Url or opts.url or ""):lower()
+				for _, kw in ipairs(_BAD_URL) do
+					if url:find(kw, 1, true) then return {StatusCode=200,Body="",Success=true} end
+				end
+			end
+			return fn(opts, ...)
+		end)
+	end
+	if syn and syn.request  then syn.request   = _wrapReq(syn.request)  end
+	if request              then request        = _wrapReq(request)       end
+	if http_request         then http_request   = _wrapReq(http_request)  end
+end)
+
+-- 3. Block game:Shutdown() and game:BindToClose() via __namecall
+pcall(function()
+	local gmt = getrawmetatable(game); if not gmt then return end
+	setreadonly(gmt, false)
+	local _gOldNC = gmt.__namecall
+	local _gRaw   = _gOldNC
+	gmt.__namecall = newcclosure(function(self, ...)
+		local fromGame = not (checkcaller and checkcaller())
+		if fromGame then
+			local m = tostring(getnamecallmethod and getnamecallmethod() or ""):lower()
+			if m == "shutdown" or m == "bindtoclose" then return end
+		end
+		return _gRaw(self, ...)
+	end)
+	setreadonly(gmt, true)
+end)
+
+-- 4. Monitor workspace for character removal and restore instantly
+task.spawn(function()
+	while true do
+		task.wait(0.05)
+		pcall(function()
+			local char = LP.Character; if not char then return end
+			if char.Parent ~= workspace then char.Parent = workspace end
+		end)
+	end
+end)
+
 local _MH_buildUI
 _MH_buildUI = function()
 local gui = Instance.new("ScreenGui")
