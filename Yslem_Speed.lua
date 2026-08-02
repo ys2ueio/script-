@@ -73,6 +73,16 @@ local function addLivingStroke(parent, thickness)
     }); table.insert(_livingStrokes, g); return s
 end
 
+-- ── Préchargement image (cache avant affichage = instantané) ─
+local _IMG_URL = "https://litter.catbox.moe/xnbgt6qhibc9z4db.png"
+do
+    local cp  = game:GetService("ContentProvider")
+    local tmp = Instance.new("ImageLabel")
+    tmp.Image = _IMG_URL
+    pcall(function() cp:PreloadAsync({tmp}) end)
+    tmp:Destroy()
+end
+
 -- ── ScreenGui ───────────────────────────────────────────────
 local gui = Instance.new("ScreenGui")
 gui.Name = "YslemSpeed"; gui.ResetOnSpawn = false
@@ -97,7 +107,7 @@ addCorner(spW, 12); addLivingStroke(spW, 1.5)
 local bgImg = Instance.new("ImageLabel", spW)
 bgImg.Size = UDim2.new(1,0,1,0)
 bgImg.BackgroundTransparency = 1
-bgImg.Image = "https://litter.catbox.moe/xnbgt6qhibc9z4db.png"
+bgImg.Image = _IMG_URL
 bgImg.ScaleType = Enum.ScaleType.Crop
 bgImg.ImageTransparency = 0
 bgImg.ZIndex = 1
