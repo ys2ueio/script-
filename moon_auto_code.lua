@@ -185,7 +185,6 @@ local function submitBox(box, code)
     forceParentVisible(box)
     box.Text = code
     pcall(function() box.CursorPosition = #code + 1 end)
-    task.wait(0.05)
 end
 
 local function redeemCode(code)
@@ -209,7 +208,6 @@ local function redeemCode(code)
         inner.Visible  = true
         tb.Text = code
         pcall(function() tb.CursorPosition = #code + 1 end)
-        task.wait(0.15)
         if not fireSubmitButton(cr) then fireSubmitButton(inner) end
         inner.Visible = wasVis
         submitted = true
@@ -313,7 +311,7 @@ end)
 -- GUI ROOT
 -- ================================================================
 local GUI = Instance.new("ScreenGui")
-GUI.Name           = tostring(math.random(0x10000, 0xFFFFFF))
+GUI.Name           = "MoonHubAutoCode"
 GUI.ResetOnSpawn   = false
 GUI.IgnoreGuiInset = true
 GUI.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
@@ -331,7 +329,7 @@ _ownGui = GUI
 -- STATUS PILL
 -- ================================================================
 local pillWidget = Instance.new("Frame", GUI)
-pillWidget.Name                   = tostring(math.random(0x10000, 0xFFFFFF))
+pillWidget.Name                   = "ScanPill"
 pillWidget.Size                   = UDim2.new(0, 200, 0, 36)
 pillWidget.Position               = UDim2.new(0.5, -100, 0, 35)
 pillWidget.BackgroundTransparency = 1
@@ -1225,3 +1223,4 @@ if getgenv then
 end
 
 setStatus("Moon Hub Auto Code loaded", COLORS.Green)
+print("[MOON HUB AUTO CODE] by Yslem - Loaded")
