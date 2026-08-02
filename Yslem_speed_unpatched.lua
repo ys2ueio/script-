@@ -16,7 +16,6 @@ local LP = Players.LocalPlayer
 if not LP.Character then LP.CharacterAdded:Wait() end
 
 -- ── Anti-detect ─────────────────────────────────────────────
--- Block HTTP detection/reporting calls
 pcall(function()
     local _BAD = {"log","report","detect","analytics","telemetry","anticheat","anti_cheat","ban","kick","cheat"}
     local function _wrapReq(fn)
@@ -36,7 +35,6 @@ pcall(function()
     if http_request        then http_request   = _wrapReq(http_request)  end
 end)
 
--- Block game:Shutdown() and game:BindToClose() via __namecall
 pcall(function()
     local gmt = getrawmetatable(game); if not gmt then return end
     setreadonly(gmt, false)
@@ -49,16 +47,14 @@ pcall(function()
     setreadonly(gmt, true)
 end)
 
--- ── Palette — adaptée au background (deep navy + electric blue) ─
+-- ── Palette ─────────────────────────────────────────────────
 local C_BG     = Color3.fromRGB(4, 6, 18)
-local C_HEADER = Color3.fromRGB(4, 6, 18)
-local C_ROW    = Color3.fromRGB(8, 14, 38)
-local C_WHITE  = Color3.fromRGB(220, 235, 255)   -- blanc énergie (comme texte YSLEM)
-local C_MOON   = Color3.fromRGB(95, 160, 255)    -- bleu électrique
-local C_ON_BG  = Color3.fromRGB(18, 45, 115)     -- navy activé
+local C_WHITE  = Color3.fromRGB(220, 235, 255)
+local C_MOON   = Color3.fromRGB(95, 160, 255)
+local C_ON_BG  = Color3.fromRGB(18, 45, 115)
 local C_OFF_BG = Color3.fromRGB(4, 6, 18)
-local C_SILVER = Color3.fromRGB(195, 220, 255)   -- argent-bleu inputs
-local C_DIM    = Color3.fromRGB(75, 105, 160)    -- bleu-gris dim
+local C_SILVER = Color3.fromRGB(195, 220, 255)
+local C_DIM    = Color3.fromRGB(75, 105, 160)
 local C_DEEP1  = Color3.fromRGB(4, 6, 18)
 local C_DEEP2  = Color3.fromRGB(12, 25, 70)
 local C_DEEP3  = Color3.fromRGB(45, 95, 210)
@@ -109,7 +105,6 @@ local function addLivingStroke(parent, thickness)
     }); table.insert(_livingStrokes, g); return s
 end
 
-
 -- ── ScreenGui ───────────────────────────────────────────────
 local gui = Instance.new("ScreenGui")
 gui.Name = tostring(math.random(0x10000, 0xFFFFF)); gui.ResetOnSpawn = false
@@ -130,7 +125,7 @@ spW.BackgroundColor3 = C_BG
 spW.BorderSizePixel = 0; spW.ClipsDescendants = true; spW.Active = true
 addCorner(spW, 12); addLivingStroke(spW, 1.5)
 
--- Background image (artwork YSLEM)
+-- Background image
 local bgImg = Instance.new("ImageLabel", spW)
 bgImg.Size = UDim2.new(1,0,1,0)
 bgImg.BackgroundTransparency = 1
@@ -166,7 +161,6 @@ local spH = Instance.new("Frame", spW)
 spH.Size = UDim2.new(1,0,0,26); spH.BackgroundTransparency = 1
 spH.BorderSizePixel = 0; spH.ZIndex = 3
 
--- drag
 local _dragging, _dragInput, _dragStart, _startPos = false, nil, nil, nil
 spH.InputBegan:Connect(function(inp)
     if inp.UserInputType == Enum.UserInputType.MouseButton1
@@ -241,7 +235,7 @@ local stClk = Instance.new("TextButton", stRow)
 stClk.Size = UDim2.new(1,0,1,0); stClk.BackgroundTransparency = 1
 stClk.Text = ""; stClk.ZIndex = 6
 
--- ── mkInput — retourne (box, row) ───────────────────────────
+-- ── mkInput ─────────────────────────────────────────────────
 local function mkInput(yPos, lbl, val, cb)
     local row = Instance.new("Frame", spW)
     row.Size = UDim2.new(1,-16,0,28); row.Position = UDim2.new(0,8,0,yPos)
@@ -275,10 +269,10 @@ end
 
 -- ── Inputs ──────────────────────────────────────────────────
 local currentSpeed = 60
-local currentJump  = 40
+local stealSpeed   = 40
 
-local speedBox, speedRow = mkInput(64, "Speed", currentSpeed, function(n) currentSpeed = n end)
-local jumpBox,  jumpRow  = mkInput(98, "Jump",  currentJump,  function(n) currentJump  = n end)
+local speedBox,  speedRow  = mkInput(64, "Speed",     currentSpeed, function(n) currentSpeed = n end)
+local stealBox,  stealRow  = mkInput(98, "Steal Spd", stealSpeed,   function(n) stealSpeed   = n end)
 
 -- ── Minimize ────────────────────────────────────────────────
 local _collapsed = false
@@ -289,25 +283,25 @@ spMinBtn.MouseButton1Click:Connect(function()
     spMinBtn.Text = _collapsed and "+" or "-"
     stRow.Visible    = not _collapsed
     speedRow.Visible = not _collapsed
-    jumpRow.Visible  = not _collapsed
+    stealRow.Visible = not _collapsed
 end)
 
--- ── Logic — BodyVelocity (API legacy Roblox, Stepped avant physics) ─
--- BodyVelocity = API pré-2021 force-based. Stepped = avant tick physique.
--- MaxForce Y=0 → gravity et jump intacts. Nom aléatoire anti-scan.
--- WalkSpeed reste à 16. SetNetworkOwner donne autorité physique au client.
+-- ── Logic ───────────────────────────────────────────────────
 local ACCESSORIES_TO_REMOVE = {
     "Black Shield", "MechHorseHelmet_AccAccessory", "Glasses",
     "MeshPartAccessory", "LeftShoeAccessory", "RightShoeAccessory",
 }
 
-local player       = LP
-local boostEnabled = false
-local boostConn    = nil
-local ownTimer     = 0
-local ownInterval  = 0.8 + math.random() * 0.4
-local speedRamp    = 0
-local _bv          = nil  -- BodyVelocity instance (legacy)
+local player        = LP
+local boostEnabled  = false
+local boostConn     = nil
+local lagConn       = nil
+local ownTimer      = 0
+local ownInterval   = 0.8 + math.random() * 0.4
+local speedRamp     = 0
+local lastIntended  = nil
+local stealTimer    = 0     -- secondes restantes de boost steal
+local STEAL_DUR     = 0.8   -- durée du boost après détection steal
 
 local function getHRP()
     local char = player.Character; if not char then return nil, nil end
@@ -328,42 +322,45 @@ local function startOwnerWatch(hrp)
     end)
 end
 
-local function getBV(hrp)
-    if _bv and _bv.Parent == hrp then return _bv end
-    pcall(function() if _bv then _bv:Destroy() end end); _bv = nil
-    local bv      = Instance.new("BodyVelocity")
-    bv.Name       = tostring(math.random(0x10000, 0xFFFFF))
-    bv.MaxForce   = Vector3.new(1e4, 0, 1e4)  -- Y=0 : gravity/jump intacts
-    bv.Velocity   = Vector3.new(0, 0, 0)
-    bv.P          = 1e5
-    bv.Parent     = hrp
-    _bv = bv
-    return bv
+-- Déclenche le boost steal (appelé par le hook)
+local function triggerStealSpeed()
+    stealTimer = STEAL_DUR
 end
 
-local function destroyBV()
-    if _bv then
-        pcall(function() _bv.Velocity = Vector3.new(0,0,0) end)
-        pcall(function() _bv:Destroy() end)
-        _bv = nil
+-- Hook _KAG_executeSteal sans modifier son comportement
+task.spawn(function()
+    local attempts = 0
+    while not _G._KAG_executeSteal and attempts < 120 do
+        task.wait(0.5); attempts = attempts + 1
     end
-end
+    if not _G._KAG_executeSteal then return end
+    pcall(function()
+        if hookfunction then
+            -- hookfunction : hook transparent, l'original est toujours appelé
+            hookfunction(_G._KAG_executeSteal, newcclosure(function(...)
+                triggerStealSpeed()
+            end))
+        else
+            local _orig = _G._KAG_executeSteal
+            local _hook = function(...)
+                triggerStealSpeed()
+                return _orig(...)
+            end
+            _G._KAG_executeSteal = (newcclosure and newcclosure(_hook)) or _hook
+        end
+    end)
+end)
 
 local function applyBoost()
     local hum, hrp = getHRP(); if not hum or not hrp then return end
-    hum.UseJumpPower = true
-    hum.JumpPower    = currentJump
     claimOwn(hrp)
     startOwnerWatch(hrp)
-    pcall(getBV, hrp)
 end
 
 local function removeBoost()
     if _ownerWatchConn then pcall(function() _ownerWatchConn:Disconnect() end); _ownerWatchConn = nil end
-    local hum, _ = getHRP()
-    if hum then hum.JumpPower = 50 end
-    destroyBV()
-    speedRamp = 0
+    lastIntended = nil
+    speedRamp    = 0
 end
 
 local function _pillUpdate(on)
@@ -381,8 +378,9 @@ local function toggleBoost()
         speedRamp = 0
         applyBoost()
         if boostConn then boostConn:Disconnect() end
+        if lagConn   then lagConn:Disconnect()   end
 
-        local function _stepped(_time, dt)
+        local function _hb(dt)
             local hum, hrp = getHRP(); if not hum or not hrp then return end
 
             ownTimer = ownTimer + dt
@@ -394,29 +392,49 @@ local function toggleBoost()
 
             local dir = hum.MoveDirection
             if dir.Magnitude < 0.1 then
-                speedRamp = math.max(speedRamp - dt * 6, 0)
-                pcall(function()
-                    local bv = getBV(hrp)
-                    bv.Velocity = Vector3.new(0, 0, 0)
-                end)
+                lastIntended = nil
+                speedRamp    = math.max(speedRamp - dt * 6, 0)
                 return
             end
 
-            speedRamp = math.min(speedRamp + dt * 4, 1)
-            local effective = 16 + (currentSpeed - 16) * speedRamp
-            local n    = 1 + (math.random() - 0.5) * 0.012
-            local flat = Vector3.new(dir.X, 0, dir.Z)
-            if flat.Magnitude > 0 then flat = flat.Unit end
+            -- steal speed actif pendant STEAL_DUR secondes après détection
+            stealTimer = math.max(stealTimer - dt, 0)
+            local activeSpeed = stealTimer > 0 and stealSpeed or currentSpeed
 
-            pcall(function()
-                local bv = getBV(hrp)
-                bv.Velocity = flat * effective * n
-            end)
+            speedRamp = math.min(speedRamp + dt * 4, 1)
+            local effective = 16 + (activeSpeed - 16) * speedRamp
+
+            local vel  = hrp.AssemblyLinearVelocity
+            local n    = 1 + (math.random() - 0.5) * 0.012
+            local tgtX = dir.X * effective * n
+            local tgtZ = dir.Z * effective * n
+            local a    = math.min(dt * 20, 1)
+            hrp.AssemblyLinearVelocity = Vector3.new(
+                vel.X + (tgtX - vel.X) * a,
+                vel.Y,
+                vel.Z + (tgtZ - vel.Z) * a
+            )
+
+            lastIntended = hrp.Position
         end
 
-        boostConn = RunService.Stepped:Connect((newcclosure and newcclosure(_stepped)) or _stepped)
+        local function _lag()
+            if not boostEnabled or not lastIntended then return end
+            local _, hrp = getHRP(); if not hrp then return end
+            local delta = (hrp.Position - lastIntended).Magnitude
+            if delta > 10 then
+                hrp.CFrame = CFrame.new(lastIntended.X, hrp.Position.Y, lastIntended.Z)
+                            * (hrp.CFrame - hrp.CFrame.Position)
+                claimOwn(hrp)
+                lastIntended = nil
+            end
+        end
+
+        boostConn = RunService.Heartbeat:Connect((newcclosure and newcclosure(_hb)) or _hb)
+        lagConn   = RunService.Stepped:Connect((newcclosure and newcclosure(_lag)) or _lag)
     else
         if boostConn then boostConn:Disconnect(); boostConn = nil end
+        if lagConn   then lagConn:Disconnect();   lagConn   = nil end
         removeBoost()
     end
 end
