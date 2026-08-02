@@ -1,6 +1,4 @@
 local _NS = tostring(math.random(0x100000, 0xFFFFFF)) .. tostring(tick()):gsub("%.", "")
-if _G[_NS] then return end
-_G[_NS] = true
 local _GH  = {}   -- replaces all _GH.* / _GH.MH_* to leave zero _G footprint
 
 if not game:IsLoaded() then game.Loaded:Wait() end
@@ -321,17 +319,10 @@ end)
 -- DESTROY EXISTING
 -- ===================================================================
 local function destroyAllMoonHub()
-	local function sweep(container)
-		if not container then return end
-		pcall(function()
-			for _, inst in ipairs(container:GetChildren()) do
-				if inst.Name == _NS and inst:IsA("ScreenGui") then pcall(function() inst:Destroy() end) end
-			end
-		end)
+	if _G["_MH_GUI"] and _G["_MH_GUI"].Parent then
+		pcall(function() _G["_MH_GUI"]:Destroy() end)
 	end
-	sweep(LP:FindFirstChildOfClass("PlayerGui"))
-	sweep(game:GetService("CoreGui"))
-	pcall(function() if gethui then sweep(gethui()) end end)
+	_G["_MH_GUI"] = nil
 end
 destroyAllMoonHub()
 
@@ -2055,6 +2046,7 @@ end)
 if not pcall(function() gui.Parent = game:GetService("CoreGui") end) then
 	gui.Parent = (gethui and gethui()) or LP:WaitForChild("PlayerGui")
 end
+_G["_MH_GUI"] = gui
 
 -- ===================================================================
 -- INTRO CUTSCENE — crescent moon reveal, orbit ring, cinematic zoom (~4.2s)
