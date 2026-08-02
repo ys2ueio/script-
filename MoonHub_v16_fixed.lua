@@ -595,29 +595,11 @@ local function _KAG_executeSteal(prompt, a)
 	if AutoSteal.SetReadyColor then AutoSteal.SetReadyColor("UNREADY") end
 	task.spawn(function()
 		for _,fn in ipairs(data.hold) do task.spawn(fn) end
-		-- Progress loop (test_speed.lua exact)
-		task.spawn(function()
-			local _readyShown=false
-			while _KAG_Active do
-				local prog=math.clamp((tick()-_KAG_Start)/_V2_CFG.HOLD_MAX,0,1)
-				if AutoSteal.ProgressFill then AutoSteal.ProgressFill.Size=UDim2.new(prog,0,1,0) end
-				if AutoSteal.ProgressText then AutoSteal.ProgressText.Text=math.floor(prog*100).."%" end
-				if prog>=0.6 and not _readyShown then
-					_readyShown=true
-					if AutoSteal.StatusLabel then AutoSteal.StatusLabel.Text="READY" end
-					if AutoSteal.SetReadyColor then AutoSteal.SetReadyColor("READY") end
-				end
-				task.wait()
-			end
-		end)
-		task.wait(_V2_CFG.HOLD_MIN)
-		local alreadyClose=_KAG_distTo(a)<=_V2_CFG.STEAL_RANGE
 		local fired=false
+		local deadline=tick()+_V2_CFG.HOLD_MAX
 		while true do
-			if tick()-_KAG_Start>_V2_CFG.HOLD_MAX then break end
-			if not prompt.Parent then break end
+			if tick()>deadline or not prompt.Parent then break end
 			if _KAG_distTo(a)<=_V2_CFG.STEAL_RANGE then
-				if not alreadyClose then task.wait(_V2_CFG.ENTRY_DELAY) end
 				for _,fn in ipairs(data.trigger) do task.spawn(fn) end
 				fired=true; break
 			end
