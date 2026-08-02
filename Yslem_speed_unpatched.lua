@@ -327,7 +327,18 @@ local function triggerStealSpeed()
     stealTimer = STEAL_DUR
 end
 
--- Hook _KAG_executeSteal sans modifier son comportement
+-- Détection 1 : WalkSpeed > 25 (le jeu set la WS lors d'un steal/sprint)
+local _wsConn = nil
+local function connectWalkSpeedDetect()
+    local hum = (player.Character and player.Character:FindFirstChildOfClass("Humanoid"))
+    if not hum then return end
+    if _wsConn then pcall(function() _wsConn:Disconnect() end) end
+    _wsConn = hum:GetPropertyChangedSignal("WalkSpeed"):Connect(function()
+        if hum.WalkSpeed > 25 then triggerStealSpeed() end
+    end)
+end
+
+-- Détection 2 : hook _KAG_executeSteal sans modifier son comportement
 task.spawn(function()
     local attempts = 0
     while not _G._KAG_executeSteal and attempts < 120 do
@@ -336,7 +347,6 @@ task.spawn(function()
     if not _G._KAG_executeSteal then return end
     pcall(function()
         if hookfunction then
-            -- hookfunction : hook transparent, l'original est toujours appelé
             hookfunction(_G._KAG_executeSteal, newcclosure(function(...)
                 triggerStealSpeed()
             end))
@@ -355,10 +365,12 @@ local function applyBoost()
     local hum, hrp = getHRP(); if not hum or not hrp then return end
     claimOwn(hrp)
     startOwnerWatch(hrp)
+    connectWalkSpeedDetect()
 end
 
 local function removeBoost()
     if _ownerWatchConn then pcall(function() _ownerWatchConn:Disconnect() end); _ownerWatchConn = nil end
+    if _wsConn         then pcall(function() _wsConn:Disconnect() end);         _wsConn         = nil end
     lastIntended = nil
     speedRamp    = 0
 end
@@ -443,7 +455,10 @@ local function onCharacterAdded(char)
     for _, name in ipairs(ACCESSORIES_TO_REMOVE) do
         local p = char:FindFirstChild(name); if p then p:Destroy() end
     end
-    if boostEnabled then task.wait(0.3); applyBoost() end
+    -- reconnect WS detect même si boost OFF (déclenche dès qu'activé)
+    task.wait(0.3)
+    connectWalkSpeedDetect()
+    if boostEnabled then applyBoost() end
 end
 
 if player.Character then onCharacterAdded(player.Character) end
