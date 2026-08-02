@@ -209,13 +209,14 @@ local function setStatus(msg, active)
     end
 end
 
--- ── Logique speed (unpatch) ──────────────────────────────────
-local speedEnabled = false
-local targetSpeed  = 16
-local connection   = nil
-local lastPos      = nil
-local lastTime     = nil
+-- ── Core Speed Variables ─────────────────────────────────────
+local speedEnabled   = false
+local targetSpeed    = 16
+local connection
+local lastPosition   = nil
+local lastTime       = nil
 
+-- Get char parts safely
 local function getCharParts()
     local char = player.Character
     if not char then return nil, nil end
@@ -225,66 +226,77 @@ local function getCharParts()
     return hum, root
 end
 
+-- Silently reclaim network ownership without triggering resets
 local function claimOwnership(root)
-    pcall(function() root:SetNetworkOwner(player) end)
+    pcall(function()
+        root:SetNetworkOwner(player)
+    end)
 end
 
 local function applySpeed(spd)
-    if connection then connection:Disconnect(); connection = nil end
+    if connection then
+        connection:Disconnect()
+        connection = nil
+    end
 
     local hum, root = getCharParts()
     if not hum or not root then return end
 
+    -- set walkspeed once cleanly
     hum.WalkSpeed = spd
     claimOwnership(root)
-    lastPos  = root.Position
-    lastTime = tick()
 
-    local ownerTimer  = 0
-    local lagCooldown = 0
+    lastPosition = root.Position
+    lastTime     = tick()
+
+    local ownershipTimer  = 0
+    local lagbackCooldown = 0
 
     connection = RunService.Heartbeat:Connect(function(dt)
         if not speedEnabled then return end
 
-        local h, r = getCharParts()
-        if not h or not r then return end
+        local hum, root = getCharParts()
+        if not hum or not root then return end
 
-        -- reclaim network ownership toutes les 1.5s
-        ownerTimer = ownerTimer + dt
-        if ownerTimer >= 1.5 then
-            claimOwnership(r)
-            ownerTimer = 0
+        -- reclaim ownership every 1.5s silently
+        ownershipTimer = ownershipTimer + dt
+        if ownershipTimer >= 1.5 then
+            claimOwnership(root)
+            ownershipTimer = 0
         end
 
-        local dir = h.MoveDirection
+        local dir = hum.MoveDirection
         if dir.Magnitude < 0.1 then
-            lastPos  = r.Position
-            lastTime = tick()
+            lastPosition = root.Position
+            lastTime     = tick()
             return
         end
 
-        local curVel    = r.AssemblyLinearVelocity
-        local targetVel = Vector3.new(dir.X * spd, curVel.Y, dir.Z * spd)
+        local currentVel = root.AssemblyLinearVelocity
+        local targetVel  = Vector3.new(dir.X * spd, currentVel.Y, dir.Z * spd)
 
-        -- lerp smooth indépendant du framerate
+        -- framerate independent smooth lerp
         local alpha = math.min(dt * 22, 1)
-        r.AssemblyLinearVelocity = curVel:Lerp(targetVel, alpha)
+        root.AssemblyLinearVelocity = currentVel:Lerp(targetVel, alpha)
 
-        -- détection lagback + correction
-        lagCooldown = lagCooldown - dt
+        -- lagback detection using position delta
+        lagbackCooldown = lagbackCooldown - dt
         local now     = tick()
         local elapsed = now - lastTime
-        if elapsed > 0.1 and lastPos then
-            local expected = spd * elapsed
-            local actual   = (r.Position - lastPos).Magnitude
-            if actual < expected * 0.3 and lagCooldown <= 0 then
-                r.AssemblyLinearVelocity = targetVel * 1.2
-                lagCooldown = 0.3
+        if elapsed > 0.1 and lastPosition then
+            local expectedDist = spd * elapsed
+            local actualDist   = (root.Position - lastPosition).Magnitude
+
+            -- if we moved way less than expected server corrected us
+            if actualDist < expectedDist * 0.3 and lagbackCooldown <= 0 then
+                -- reapply velocity hard to push back
+                root.AssemblyLinearVelocity = targetVel * 1.2
+                lagbackCooldown = 0.3 -- cooldown so it doesnt spam
             end
         end
 
-        lastPos  = r.Position
-        lastTime = now
+        lastPosition = root.Position
+        lastTime     = now
     end)
 end
 
@@ -292,21 +304,20 @@ local function stopSpeed()
     if connection then connection:Disconnect(); connection = nil end
     local hum, _ = getCharParts()
     if hum then hum.WalkSpeed = 16 end
-    lastPos  = nil
-    lastTime = nil
+    lastPosition = nil
+    lastTime     = nil
 end
 
--- filtre chiffres uniquement
+-- Numbers Only
 box:GetPropertyChangedSignal("Text"):Connect(function()
-    local f = box.Text:gsub("%D", "")
-    if box.Text ~= f then box.Text = f end
-    if f ~= "" then curVal.Text = f end
+    local filtered = box.Text:gsub("%D", "")
+    if box.Text ~= filtered then box.Text = filtered end
+    if filtered ~= "" then curVal.Text = filtered end
 end)
 
--- toggle
 toggleBtn.MouseButton1Click:Connect(function()
     local inputVal = tonumber(box.Text)
-    if not inputVal or inputVal < 1 then
+    if not inputVal then
         setStatus("Valeur invalide!", false)
         statusLbl.TextColor3 = Color3.fromRGB(255, 80, 80)
         return
@@ -328,8 +339,8 @@ toggleBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- respawn
-player.CharacterAdded:Connect(function()
+player.CharacterAdded:Connect(function(char)
+    character = char
     if speedEnabled then
         task.wait(0.1)
         applySpeed(targetSpeed)
