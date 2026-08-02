@@ -341,6 +341,7 @@ local function toggleBoost()
 
     if boostEnabled then
         speedRamp = 0
+        ownTimer  = 0
         applyBoost()
         if boostConn then boostConn:Disconnect() end
 
@@ -360,7 +361,7 @@ local function toggleBoost()
                 return
             end
 
-            speedRamp = math.min(speedRamp + dt * 4, 1)
+            speedRamp = math.min(speedRamp + dt * 12, 1)
             local baseSpeed = hum.WalkSpeed > 25 and currentSpeed or stealSpeed
             local effective = 16 + (baseSpeed - 16) * speedRamp
 
