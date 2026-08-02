@@ -73,14 +73,28 @@ local function addLivingStroke(parent, thickness)
     }); table.insert(_livingStrokes, g); return s
 end
 
--- ── Préchargement image (cache avant affichage = instantané) ─
-local _IMG_URL = "https://litter.catbox.moe/xnbgt6qhibc9z4db.png"
+-- ── Image loading via executor getcustomasset ───────────────
+-- Downloads the image once, caches to disk, returns local rbxassetid://
+-- (the only way to display external URLs in Roblox ImageLabel)
+local _IMG_URL  = "https://litter.catbox.moe/xnbgt6qhibc9z4db.png"
+local _IMG_FILE = "yslem_bg.png"
+local _IMG_ASSET
 do
-    local cp  = game:GetService("ContentProvider")
-    local tmp = Instance.new("ImageLabel")
-    tmp.Image = _IMG_URL
-    pcall(function() cp:PreloadAsync({tmp}) end)
-    tmp:Destroy()
+    if type(getcustomasset) == "function" then
+        if type(isfile) ~= "function" or not isfile(_IMG_FILE) then
+            local reqFn = (syn and type(syn.request)=="function" and syn.request)
+                       or (type(request)=="function" and request)
+                       or (type(http_request)=="function" and http_request)
+            if reqFn then
+                local ok, res = pcall(reqFn, {Url=_IMG_URL, Method="GET"})
+                if ok and res and res.Body and #res.Body > 0 then
+                    pcall(writefile, _IMG_FILE, res.Body)
+                end
+            end
+        end
+        local ok, asset = pcall(getcustomasset, _IMG_FILE)
+        if ok and asset then _IMG_ASSET = asset end
+    end
 end
 
 -- ── ScreenGui ───────────────────────────────────────────────
@@ -107,7 +121,7 @@ addCorner(spW, 12); addLivingStroke(spW, 1.5)
 local bgImg = Instance.new("ImageLabel", spW)
 bgImg.Size = UDim2.new(1,0,1,0)
 bgImg.BackgroundTransparency = 1
-bgImg.Image = _IMG_URL
+bgImg.Image = _IMG_ASSET or ""
 bgImg.ScaleType = Enum.ScaleType.Crop
 bgImg.ImageTransparency = 0
 bgImg.ZIndex = 1
