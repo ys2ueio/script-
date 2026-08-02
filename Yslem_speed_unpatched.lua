@@ -272,11 +272,11 @@ local function mkInput(yPos, lbl, val, cb)
 end
 
 -- ── Inputs ──────────────────────────────────────────────────
-local normalSpeed = 60
-local stealSpeed  = 31
+local currentSpeed = 60
+local currentJump  = 40
 
-local speedBox, speedRow = mkInput(64,  "Speed",     normalSpeed, function(n) normalSpeed = n end)
-local stealBox, stealRow = mkInput(98,  "Steal Spd", stealSpeed,  function(n) stealSpeed  = n end)
+local speedBox, speedRow = mkInput(64, "Speed", currentSpeed, function(n) currentSpeed = n end)
+local jumpBox,  jumpRow  = mkInput(98, "Jump",  currentJump,  function(n) currentJump  = n end)
 
 -- ── Minimize ────────────────────────────────────────────────
 local _collapsed = false
@@ -285,137 +285,111 @@ spMinBtn.MouseButton1Click:Connect(function()
     _collapsed = not _collapsed
     spW.Size = UDim2.new(0,150,0, _collapsed and COL_H or FULL_H)
     spMinBtn.Text = _collapsed and "+" or "-"
-    stRow.Visible  = not _collapsed
+    stRow.Visible    = not _collapsed
     speedRow.Visible = not _collapsed
-    stealRow.Visible = not _collapsed
+    jumpRow.Visible  = not _collapsed
 end)
 
--- ── Source logic (v4gg.xyz) — verbatim ──────────────────────
-local player = LP
-local character = player.Character or player.CharacterAdded:Wait()
+-- ── Logic (workin_booster) ──────────────────────────────────
+local ACCESSORIES_TO_REMOVE = {
+    "Black Shield", "MechHorseHelmet_AccAccessory", "Glasses",
+    "MeshPartAccessory", "LeftShoeAccessory", "RightShoeAccessory",
+}
 
--- Core Speed Variables
-local speedEnabled = false
-local targetSpeed = 16
-local connection
-local lastPosition = nil
-local lastTime = nil
+local player        = LP
+local boostEnabled  = false
+local boostConn     = nil
+local linVelocity   = nil
+local attachment    = nil
 
--- Get char parts safely
-local function getCharParts()
-    local char = player.Character
-    if not char then return nil, nil end
-    local hum = char:FindFirstChildOfClass("Humanoid")
-    local root = char:FindFirstChild("HumanoidRootPart")
-    if not hum or not root then return nil, nil end
-    return hum, root
+local function setupLinearVelocity(hrp)
+    if linVelocity then linVelocity:Destroy(); linVelocity = nil end
+    if attachment  then attachment:Destroy();  attachment  = nil end
+    attachment = Instance.new("Attachment"); attachment.Parent = hrp
+    linVelocity = Instance.new("LinearVelocity")
+    linVelocity.Parent       = attachment
+    linVelocity.Attachment0  = attachment
+    linVelocity.MaxForce     = math.huge
+    linVelocity.VectorVelocity = Vector3.new(0, 0, 0)
+    linVelocity.RelativeTo   = Enum.ActuatorRelativeTo.World
+    linVelocity.Enabled      = true
 end
 
--- Silently reclaim network ownership without triggering resets
-local function claimOwnership(root)
-    pcall(function()
-        root:SetNetworkOwner(player)
-    end)
-end
-
-local function applySpeed(spd)
-    if connection then
-        connection:Disconnect()
-        connection = nil
+local function applyBoost()
+    if not player.Character then return end
+    local hum = player.Character:FindFirstChildOfClass("Humanoid")
+    local hrp = player.Character:FindFirstChild("HumanoidRootPart")
+    if not hum or not hrp then return end
+    hum.UseJumpPower = true
+    hum.JumpPower    = currentJump
+    if not linVelocity or linVelocity.Parent ~= hrp then
+        setupLinearVelocity(hrp)
     end
+end
 
-    local hum, root = getCharParts()
-    if not hum or not root then return end
+local function removeBoost()
+    if linVelocity then linVelocity:Destroy(); linVelocity = nil end
+    if attachment  then attachment:Destroy();  attachment  = nil end
+    if player.Character then
+        local hum = player.Character:FindFirstChildOfClass("Humanoid")
+        if hum then hum.JumpPower = 50 end
+    end
+end
 
-    hum.WalkSpeed = spd
-    claimOwnership(root)
+local function _pillUpdate(on)
+    stPill.BackgroundColor3      = on and C_MOON or C_OFF_BG
+    stPill.BackgroundTransparency = on and 0.15 or 0.3
+    stPillLbl.Text               = on and "ON" or "OFF"
+    stPillLbl.TextColor3         = on and Color3.fromRGB(3, 8, 20) or C_DIM
+end
 
-    lastPosition = root.Position
-    lastTime = tick()
-
-    local ownershipTimer    = 0
-    local ownershipInterval = 1.3 + math.random() * 0.4  -- randomized 1.3–1.7s
-    local lagbackCooldown   = 0
-
-    local function _heartbeat(dt)
-        if not speedEnabled then return end
-
-        local hum, root = getCharParts()
-        if not hum or not root then return end
-
-        ownershipTimer += dt
-        if ownershipTimer >= ownershipInterval then
-            claimOwnership(root)
-            ownershipTimer    = 0
-            ownershipInterval = 1.3 + math.random() * 0.4
-        end
-
-        local dir = hum.MoveDirection
-        if dir.Magnitude < 0.1 then
-            hum.WalkSpeed = 16  -- masque WalkSpeed quand idle (évite checks serveur)
-            lastPosition = root.Position
-            lastTime = tick()
-            return
-        end
-
-        hum.WalkSpeed = spd
-
-        -- bruit microscopique sur la vélocité pour éviter la détection par valeur exacte
-        local n = 1 + (math.random() - 0.5) * 0.012
-        local currentVel = root.AssemblyLinearVelocity
-        local targetVel  = Vector3.new(dir.X * spd * n, currentVel.Y, dir.Z * spd * n)
-
-        local alpha = math.min(dt * 22, 1)
-        root.AssemblyLinearVelocity = currentVel:Lerp(targetVel, alpha)
-
-        lagbackCooldown -= dt
-        local now     = tick()
-        local elapsed = now - lastTime
-        if elapsed > 0.1 and lastPosition then
-            local expectedDist = spd * elapsed
-            local actualDist   = (root.Position - lastPosition).Magnitude
-            if actualDist < expectedDist * 0.3 and lagbackCooldown <= 0 then
-                root.AssemblyLinearVelocity = targetVel * 1.2
-                lagbackCooldown = 0.3
+local function toggleBoost()
+    boostEnabled = not boostEnabled
+    _pillUpdate(boostEnabled)
+    if boostEnabled then
+        applyBoost()
+        if boostConn then boostConn:Disconnect() end
+        local function _hb()
+            if not player.Character then return end
+            local hrp = player.Character:FindFirstChild("HumanoidRootPart")
+            local hum = player.Character:FindFirstChildOfClass("Humanoid")
+            if not hrp or not hum then return end
+            if not linVelocity or linVelocity.Parent ~= hrp then
+                setupLinearVelocity(hrp)
+            end
+            local dir = hum.MoveDirection
+            if dir.Magnitude > 0 then
+                local flat = Vector3.new(dir.X, 0, dir.Z).Unit
+                local n    = 1 + (math.random() - 0.5) * 0.012
+                linVelocity.VectorVelocity = Vector3.new(flat.X * currentSpeed * n, 0, flat.Z * currentSpeed * n)
+            else
+                linVelocity.VectorVelocity = Vector3.new(0, 0, 0)
             end
         end
-
-        lastPosition = root.Position
-        lastTime = now
+        boostConn = RunService.Heartbeat:Connect(
+            (newcclosure and newcclosure(_hb)) or _hb
+        )
+    else
+        if boostConn then boostConn:Disconnect(); boostConn = nil end
+        removeBoost()
     end
-
-    connection = RunService.Heartbeat:Connect(
-        (newcclosure and newcclosure(_heartbeat)) or _heartbeat
-    )
 end
 
-player.CharacterAdded:Connect(function(char)
-    character = char
-    if speedEnabled then
-        task.wait(0.1)
-        applySpeed(targetSpeed)
+local function onCharacterAdded(char)
+    for _, name in ipairs(ACCESSORIES_TO_REMOVE) do
+        local part = char:FindFirstChild(name)
+        if part then part:Destroy() end
     end
+    if boostEnabled then task.wait(0.3); applyBoost() end
+end
+
+if player.Character then onCharacterAdded(player.Character) end
+player.CharacterAdded:Connect(onCharacterAdded)
+
+-- keybind T
+UIS.InputBegan:Connect(function(input, gpe)
+    if gpe then return end
+    if input.KeyCode == Enum.KeyCode.T then toggleBoost() end
 end)
 
--- ── Toggle ──────────────────────────────────────────────────
-local _spActive = false
-
-local function toggleSp()
-    _spActive = not _spActive
-    speedEnabled = _spActive
-    stPill.BackgroundColor3 = _spActive and C_MOON or C_OFF_BG
-    stPill.BackgroundTransparency = _spActive and 0.15 or 0.3
-    stPillLbl.Text = _spActive and "ON" or "OFF"
-    stPillLbl.TextColor3 = _spActive and Color3.fromRGB(3, 8, 20) or C_DIM
-    if _spActive then
-        targetSpeed = normalSpeed
-        applySpeed(targetSpeed)
-    else
-        if connection then connection:Disconnect(); connection = nil end
-        local hum, _ = getCharParts()
-        if hum then hum.WalkSpeed = 16 end
-        lastPosition = nil; lastTime = nil
-    end
-end
-
-stClk.MouseButton1Click:Connect(toggleSp)
+stClk.MouseButton1Click:Connect(toggleBoost)
