@@ -6,12 +6,48 @@ if _G["_YS_UNPATCHED"] then
     _G["_YS_UNPATCHED"] = nil
 end
 
-local Players      = game:GetService("Players")
-local RunService   = game:GetService("RunService")
+local cloneref     = cloneref or function(x) return x end
+local Players      = cloneref(game:GetService("Players"))
+local RunService   = cloneref(game:GetService("RunService"))
 local TweenService = game:GetService("TweenService")
+local UIS          = cloneref(game:GetService("UserInputService"))
 
 local LP = Players.LocalPlayer
 if not LP.Character then LP.CharacterAdded:Wait() end
+
+-- ── Anti-detect ─────────────────────────────────────────────
+-- Block HTTP detection/reporting calls
+pcall(function()
+    local _BAD = {"log","report","detect","analytics","telemetry","anticheat","anti_cheat","ban","kick","cheat"}
+    local function _wrapReq(fn)
+        if not fn then return fn end
+        return newcclosure(function(opts, ...)
+            if type(opts) == "table" then
+                local url = ((opts.Url or opts.url) or ""):lower()
+                for _, kw in ipairs(_BAD) do
+                    if url:find(kw, 1, true) then return {StatusCode=200,Body="",Success=true} end
+                end
+            end
+            return fn(opts, ...)
+        end)
+    end
+    if syn and syn.request then syn.request   = _wrapReq(syn.request)  end
+    if request             then request        = _wrapReq(request)       end
+    if http_request        then http_request   = _wrapReq(http_request)  end
+end)
+
+-- Block game:Shutdown() and game:BindToClose() via __namecall
+pcall(function()
+    local gmt = getrawmetatable(game); if not gmt then return end
+    setreadonly(gmt, false)
+    local _nc = gmt.__namecall
+    gmt.__namecall = newcclosure(function(self, ...)
+        local m = (getnamecallmethod and getnamecallmethod() or ""):lower()
+        if m == "shutdown" or m == "bindtoclose" then return end
+        return _nc(self, ...)
+    end)
+    setreadonly(gmt, true)
+end)
 
 -- ── Palette — adaptée au background (deep navy + electric blue) ─
 local C_BG     = Color3.fromRGB(4, 6, 18)
@@ -76,7 +112,7 @@ end
 
 -- ── ScreenGui ───────────────────────────────────────────────
 local gui = Instance.new("ScreenGui")
-gui.Name = "YslemUnpatched"; gui.ResetOnSpawn = false
+gui.Name = tostring(math.random(0x10000, 0xFFFFF)); gui.ResetOnSpawn = false
 gui.DisplayOrder = 10; gui.IgnoreGuiInset = true
 gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 pcall(function() if protectgui then protectgui(gui) end end)
@@ -143,7 +179,7 @@ spH.InputChanged:Connect(function(inp)
     if inp.UserInputType == Enum.UserInputType.MouseMovement
     or inp.UserInputType == Enum.UserInputType.Touch then _dragInput = inp end
 end)
-game:GetService("UserInputService").InputChanged:Connect(function(inp)
+UIS.InputChanged:Connect(function(inp)
     if _dragging and _dragInput and inp == _dragInput then
         local d = inp.Position - _dragStart
         spW.Position = UDim2.new(_startPos.X.Scale, _startPos.X.Offset+d.X, _startPos.Y.Scale, _startPos.Y.Offset+d.Y)
@@ -291,62 +327,66 @@ local function applySpeed(spd)
     local hum, root = getCharParts()
     if not hum or not root then return end
 
-    -- set walkspeed once cleanly
     hum.WalkSpeed = spd
     claimOwnership(root)
 
     lastPosition = root.Position
     lastTime = tick()
 
-    local ownershipTimer = 0
-    local lagbackCooldown = 0
+    local ownershipTimer    = 0
+    local ownershipInterval = 1.3 + math.random() * 0.4  -- randomized 1.3–1.7s
+    local lagbackCooldown   = 0
 
-    connection = RunService.Heartbeat:Connect(function(dt)
+    local function _heartbeat(dt)
         if not speedEnabled then return end
 
         local hum, root = getCharParts()
         if not hum or not root then return end
 
-        -- reclaim ownership every 1.5s silently
         ownershipTimer += dt
-        if ownershipTimer >= 1.5 then
+        if ownershipTimer >= ownershipInterval then
             claimOwnership(root)
-            ownershipTimer = 0
+            ownershipTimer    = 0
+            ownershipInterval = 1.3 + math.random() * 0.4
         end
 
         local dir = hum.MoveDirection
         if dir.Magnitude < 0.1 then
+            hum.WalkSpeed = 16  -- masque WalkSpeed quand idle (évite checks serveur)
             lastPosition = root.Position
             lastTime = tick()
             return
         end
 
-        local currentVel = root.AssemblyLinearVelocity
-        local targetVel = Vector3.new(dir.X * spd, currentVel.Y, dir.Z * spd)
+        hum.WalkSpeed = spd
 
-        -- framerate independent smooth lerp
+        -- bruit microscopique sur la vélocité pour éviter la détection par valeur exacte
+        local n = 1 + (math.random() - 0.5) * 0.012
+        local currentVel = root.AssemblyLinearVelocity
+        local targetVel  = Vector3.new(dir.X * spd * n, currentVel.Y, dir.Z * spd * n)
+
         local alpha = math.min(dt * 22, 1)
         root.AssemblyLinearVelocity = currentVel:Lerp(targetVel, alpha)
 
-        -- lagback detection using position delta
         lagbackCooldown -= dt
-        local now = tick()
+        local now     = tick()
         local elapsed = now - lastTime
         if elapsed > 0.1 and lastPosition then
             local expectedDist = spd * elapsed
-            local actualDist = (root.Position - lastPosition).Magnitude
-
-            -- if we moved way less than expected server corrected us
+            local actualDist   = (root.Position - lastPosition).Magnitude
             if actualDist < expectedDist * 0.3 and lagbackCooldown <= 0 then
-                -- reapply velocity hard to push back
                 root.AssemblyLinearVelocity = targetVel * 1.2
-                lagbackCooldown = 0.3 -- cooldown so it doesnt spam
+                lagbackCooldown = 0.3
             end
         end
 
         lastPosition = root.Position
         lastTime = now
-    end)
+    end
+
+    connection = RunService.Heartbeat:Connect(
+        (newcclosure and newcclosure(_heartbeat)) or _heartbeat
+    )
 end
 
 player.CharacterAdded:Connect(function(char)
