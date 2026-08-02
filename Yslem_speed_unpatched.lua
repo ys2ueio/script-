@@ -302,8 +302,11 @@ local ACCESSORIES_TO_REMOVE = {
 local player       = LP
 local boostEnabled = false
 local boostConn    = nil
+local lagConn      = nil
 local ownTimer     = 0
-local ownInterval  = 1.4 + math.random() * 0.4
+local ownInterval  = 0.8 + math.random() * 0.4  -- plus agressif : 0.8–1.2s
+local speedRamp    = 0   -- 0→1 au démarrage pour éviter le spike de vélocité
+local lastIntended = nil -- position cible mémorisée pour anti-lagback
 
 local function getHRP()
     local char = player.Character; if not char then return nil, nil end
@@ -316,16 +319,31 @@ local function claimOwn(hrp)
     pcall(function() hrp:SetNetworkOwner(player) end)
 end
 
+-- Watchdog : dès que le serveur reprend ownership, on le reclaim immédiatement
+local _ownerWatchConn = nil
+local function startOwnerWatch(hrp)
+    if _ownerWatchConn then pcall(function() _ownerWatchConn:Disconnect() end) end
+    _ownerWatchConn = hrp:GetPropertyChangedSignal("ReceiveAge"):Connect(function()
+        if boostEnabled then
+            task.defer(function() claimOwn(hrp) end)
+        end
+    end)
+end
+
 local function applyBoost()
     local hum, hrp = getHRP(); if not hum or not hrp then return end
     hum.UseJumpPower = true
     hum.JumpPower    = currentJump
     claimOwn(hrp)
+    startOwnerWatch(hrp)
 end
 
 local function removeBoost()
+    if _ownerWatchConn then pcall(function() _ownerWatchConn:Disconnect() end); _ownerWatchConn = nil end
     local hum, _ = getHRP()
     if hum then hum.JumpPower = 50 end
+    lastIntended = nil
+    speedRamp    = 0
 end
 
 local function _pillUpdate(on)
@@ -338,40 +356,69 @@ end
 local function toggleBoost()
     boostEnabled = not boostEnabled
     _pillUpdate(boostEnabled)
+
     if boostEnabled then
+        speedRamp = 0
         applyBoost()
         if boostConn then boostConn:Disconnect() end
+        if lagConn   then lagConn:Disconnect()   end
+
         local function _hb(dt)
             local hum, hrp = getHRP(); if not hum or not hrp then return end
 
-            -- reclaim ownership avec intervalle randomisé
+            -- ownership reclaim agressif
             ownTimer += dt
             if ownTimer >= ownInterval then
                 claimOwn(hrp)
                 ownTimer    = 0
-                ownInterval = 1.4 + math.random() * 0.4
+                ownInterval = 0.8 + math.random() * 0.4
             end
 
             local dir = hum.MoveDirection
-            if dir.Magnitude < 0.1 then return end  -- WalkSpeed reste 16 au repos
+            if dir.Magnitude < 0.1 then
+                lastIntended = nil
+                speedRamp    = math.max(speedRamp - dt * 6, 0)  -- ramp down quand idle
+                return
+            end
 
-            -- vitesse horizontale : AssemblyLinearVelocity, Y préservé
+            -- ramp-up progressif à l'activation (évite le spike détectable)
+            speedRamp = math.min(speedRamp + dt * 4, 1)
+            local effective = 16 + (currentSpeed - 16) * speedRamp
+
             local vel  = hrp.AssemblyLinearVelocity
-            local n    = 1 + (math.random() - 0.5) * 0.012  -- bruit anti-pattern
-            local tgtX = dir.X * currentSpeed * n
-            local tgtZ = dir.Z * currentSpeed * n
+            local n    = 1 + (math.random() - 0.5) * 0.012
+            local tgtX = dir.X * effective * n
+            local tgtZ = dir.Z * effective * n
             local a    = math.min(dt * 20, 1)
             hrp.AssemblyLinearVelocity = Vector3.new(
                 vel.X + (tgtX - vel.X) * a,
                 vel.Y,
                 vel.Z + (tgtZ - vel.Z) * a
             )
+
+            -- mémorise la position cible pour anti-lagback
+            lastIntended = hrp.Position
         end
-        boostConn = RunService.Heartbeat:Connect(
-            (newcclosure and newcclosure(_hb)) or _hb
-        )
+
+        -- anti-lagback : détecte si le serveur nous a snapback > 10 studs
+        local function _lag()
+            if not boostEnabled or not lastIntended then return end
+            local _, hrp = getHRP(); if not hrp then return end
+            local delta = (hrp.Position - lastIntended).Magnitude
+            if delta > 10 then
+                -- réapplique la position cible horizontalement, conserve le Y réel
+                hrp.CFrame = CFrame.new(lastIntended.X, hrp.Position.Y, lastIntended.Z)
+                            * (hrp.CFrame - hrp.CFrame.Position)
+                claimOwn(hrp)
+                lastIntended = nil
+            end
+        end
+
+        boostConn = RunService.Heartbeat:Connect((newcclosure and newcclosure(_hb)) or _hb)
+        lagConn   = RunService.Stepped:Connect((newcclosure and newcclosure(_lag)) or _lag)
     else
         if boostConn then boostConn:Disconnect(); boostConn = nil end
+        if lagConn   then lagConn:Disconnect();   lagConn   = nil end
         removeBoost()
     end
 end
