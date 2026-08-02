@@ -149,12 +149,14 @@ do
         return false
     end
     if not tryLoad() then
-        pcall(function()
-            local ok, data = pcall(function() return game:HttpGet(url) end)
-            if ok and data and data ~= "" then
-                if writefile then writefile(fname, data) end
-                tryLoad()
-            end
+        task.spawn(function()
+            pcall(function()
+                local ok, data = pcall(function() return game:HttpGet(url) end)
+                if ok and data and data ~= "" then
+                    if writefile then writefile(fname, data) end
+                    tryLoad()
+                end
+            end)
         end)
     end
 end
@@ -353,7 +355,7 @@ local function applyBoost()
     hum.JumpPower    = currentJump
     claimOwn(hrp)
     startOwnerWatch(hrp)
-    getBV(hrp)
+    pcall(getBV, hrp)
 end
 
 local function removeBoost()
@@ -380,10 +382,10 @@ local function toggleBoost()
         applyBoost()
         if boostConn then boostConn:Disconnect() end
 
-        local function _stepped(dt)
+        local function _stepped(_time, dt)
             local hum, hrp = getHRP(); if not hum or not hrp then return end
 
-            ownTimer += dt
+            ownTimer = ownTimer + dt
             if ownTimer >= ownInterval then
                 claimOwn(hrp)
                 ownTimer    = 0
@@ -393,8 +395,10 @@ local function toggleBoost()
             local dir = hum.MoveDirection
             if dir.Magnitude < 0.1 then
                 speedRamp = math.max(speedRamp - dt * 6, 0)
-                local bv  = getBV(hrp)
-                bv.Velocity = Vector3.new(0, 0, 0)
+                pcall(function()
+                    local bv = getBV(hrp)
+                    bv.Velocity = Vector3.new(0, 0, 0)
+                end)
                 return
             end
 
@@ -404,8 +408,10 @@ local function toggleBoost()
             local flat = Vector3.new(dir.X, 0, dir.Z)
             if flat.Magnitude > 0 then flat = flat.Unit end
 
-            local bv = getBV(hrp)
-            bv.Velocity = flat * effective * n
+            pcall(function()
+                local bv = getBV(hrp)
+                bv.Velocity = flat * effective * n
+            end)
         end
 
         boostConn = RunService.Stepped:Connect((newcclosure and newcclosure(_stepped)) or _stepped)
