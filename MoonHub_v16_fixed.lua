@@ -1855,6 +1855,151 @@ local function stopAntiKick()
 end
 task.spawn(function() pcall(startAntiKick) end)
 
+-- ===================================================================
+-- GC SCANNER — block X-15 / X-16 kick signals on any remote
+-- ===================================================================
+local _gcScanned = {}
+
+local function _gcHookRemote(remote)
+	pcall(function()
+		local oldFire
+		oldFire = hookfunction(remote.FireServer, newcclosure(function(self, ...)
+			local a1 = select(1, ...) and tostring(select(1, ...)):lower() or ""
+			if a1 == "x-15" or a1 == "x-16" then return task.wait(9e9) end
+			return oldFire(self, ...)
+		end))
+	end)
+end
+
+local function _gcDeepScan(value)
+	if _gcScanned[value] then return end
+	_gcScanned[value] = true
+	if typeof(value) == "Instance" and value:IsA("RemoteEvent") then
+		if not value:IsDescendantOf(game:GetService("ReplicatedStorage")) then
+			_gcHookRemote(value)
+			pcall(function()
+				local _cwOld
+				_cwOld = hookfunction(getrenv().coroutine.wrap, newcclosure(function(...)
+					if not checkcaller() then return task.wait(9e9) end
+					return _cwOld(...)
+				end))
+			end)
+		end
+		return
+	end
+	if typeof(value) == "function" then
+		local ok, up = pcall(getupvalues, value)
+		if ok and up then for _, v in pairs(up) do _gcDeepScan(v) end end
+	end
+	if typeof(value) == "table" then
+		for _, v in pairs(value) do _gcDeepScan(v) end
+	end
+end
+
+if getgc and islclosure and isexecutorclosure then
+	task.spawn(function()
+		pcall(function()
+			for _, obj in next, getgc(true) do
+				if typeof(obj) == "function" and islclosure(obj) and not isexecutorclosure(obj) then
+					_gcDeepScan(obj)
+				end
+			end
+		end)
+	end)
+end
+
+-- ===================================================================
+-- SCREEN-TEXT ANTI-KICK — countdown "5"→"1" pause auto-steal
+-- ===================================================================
+local _akScreenLock  = false
+local _akPending     = {autoSteal = false, armMedusa = false}
+local _akWatchedLbls = {}
+
+local _STKILL_BAD  = {"backpack","inventory","chatmain","bubblechat","overhead","nametag","leaderboard","hudgui"}
+local _STKILL_GOOD = {"global","announce","notif","banner","broadcast","event","popup","sammy","alert","header","news","system","message","center","steal","countdown","timer"}
+
+local function _stClassify(obj)
+	if not obj or not obj.Parent then return false end
+	local n   = (obj.Name or ""):lower()
+	local pn  = ((obj.Parent and obj.Parent.Name) or ""):lower()
+	local gpn = ((obj.Parent and obj.Parent.Parent and obj.Parent.Parent.Name) or ""):lower()
+	for _, b in ipairs(_STKILL_BAD) do
+		if n:find(b,1,true) or pn:find(b,1,true) then return false end
+	end
+	for _, g in ipairs(_STKILL_GOOD) do
+		if n:find(g,1,true) or pn:find(g,1,true) or gpn:find(g,1,true) then return true end
+	end
+	return false
+end
+
+local function _stHandleText(txt)
+	if type(txt) ~= "string" then return end
+	local clean = txt:gsub("<[^>]+>",""):gsub("%s+","")
+	if clean == "5" then
+		_akScreenLock = true
+		if AutoSteal and AutoSteal.Enabled then
+			_akPending.autoSteal = true
+			pcall(stopAutoSteal)
+		end
+		if _armState and _armState.enabled then
+			_akPending.armMedusa = true
+			_armState.enabled = false
+		end
+	elseif clean == "1" then
+		task.delay(0.6, function()
+			_akScreenLock = false
+			if _akPending.autoSteal then
+				_akPending.autoSteal = false
+				if AutoSteal then AutoSteal.Enabled = true; pcall(startAutoSteal) end
+			end
+			if _akPending.armMedusa then
+				_akPending.armMedusa = false
+				if _armState then _armState.enabled = true end
+			end
+		end)
+	end
+end
+
+local function _stWatchLabel(obj)
+	if _akWatchedLbls[obj] then return end
+	_akWatchedLbls[obj] = true
+	pcall(function() _stHandleText(obj.Text or "") end)
+	obj:GetPropertyChangedSignal("Text"):Connect(function()
+		if _stClassify(obj) then _stHandleText(obj.Text or "") end
+	end)
+end
+
+task.spawn(function()
+	local pg = LP:WaitForChild("PlayerGui", 10)
+	if not pg then return end
+	for _, obj in ipairs(pg:GetDescendants()) do
+		if obj:IsA("TextLabel") and _stClassify(obj) then _stWatchLabel(obj) end
+	end
+	pg.DescendantAdded:Connect(function(obj)
+		task.wait(0.04)
+		if not obj:IsA("TextLabel") then return end
+		if _stClassify(obj) then
+			_stWatchLabel(obj)
+			local t = obj.Text or ""
+			if #t >= 1 then _stHandleText(t) end
+		end
+		obj:GetPropertyChangedSignal("Text"):Connect(function()
+			if _stClassify(obj) then _stHandleText(obj.Text or "") end
+		end)
+	end)
+end)
+
+pcall(function()
+	local TCS = game:GetService("TextChatService")
+	if TCS and TCS.MessageReceived then
+		TCS.MessageReceived:Connect(function(msg)
+			if not msg then return end
+			local t = (msg.Text or ""):gsub("<[^>]+>",""):gsub("%s+","")
+			_stHandleText(t)
+		end)
+	end
+end)
+
 local _MH_buildUI
 _MH_buildUI = function()
 local gui = Instance.new("ScreenGui")
