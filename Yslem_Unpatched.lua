@@ -1,9 +1,9 @@
 -- ============================================================
---  Yslem Speed  |  strictly private
+--  Yslem Unpatched  |  strictly private
 -- ============================================================
-if _G["_YS_SPEED"] then
-    pcall(function() _G["_YS_SPEED"]:Destroy() end)
-    _G["_YS_SPEED"] = nil
+if _G["_YS_UNPATCHED"] then
+    pcall(function() _G["_YS_UNPATCHED"]:Destroy() end)
+    _G["_YS_UNPATCHED"] = nil
 end
 
 local Players      = game:GetService("Players")
@@ -76,14 +76,14 @@ end
 
 -- ── ScreenGui ───────────────────────────────────────────────
 local gui = Instance.new("ScreenGui")
-gui.Name = "YslemSpeed"; gui.ResetOnSpawn = false
+gui.Name = "YslemUnpatched"; gui.ResetOnSpawn = false
 gui.DisplayOrder = 10; gui.IgnoreGuiInset = true
 gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 pcall(function() if protectgui then protectgui(gui) end end)
 if not pcall(function() gui.Parent = game:GetService("CoreGui") end) then
     gui.Parent = (gethui and gethui()) or LP:WaitForChild("PlayerGui")
 end
-_G["_YS_SPEED"] = gui
+_G["_YS_UNPATCHED"] = gui
 
 -- ── Widget ──────────────────────────────────────────────────
 local spW = Instance.new("Frame", gui)
@@ -157,7 +157,7 @@ addCorner(spDot, 3)
 
 local spTitle = Instance.new("TextLabel", spH)
 spTitle.Size = UDim2.new(1,-46,1,0); spTitle.Position = UDim2.new(0,20,0,0)
-spTitle.BackgroundTransparency = 1; spTitle.Text = "SPEED"
+spTitle.BackgroundTransparency = 1; spTitle.Text = "UNPATCHED"
 spTitle.TextColor3 = C_WHITE; spTitle.Font = Enum.Font.GothamBlack; spTitle.TextSize = 9
 spTitle.TextXAlignment = Enum.TextXAlignment.Left; spTitle.ZIndex = 4
 addLivingTextGradient(spTitle)
