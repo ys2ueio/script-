@@ -288,9 +288,8 @@ spMinBtn.MouseButton1Click:Connect(function()
 end)
 
 -- ── Logic ───────────────────────────────────────────────────
--- WalkSpeed direct : le serveur valide le mouvement contre WalkSpeed.
--- Stepped cache le WalkSpeed du jeu AVANT notre override (détect steal).
--- Heartbeat applique la vitesse active.
+-- AssemblyLinearVelocity : vitesse via vélocité directe.
+-- WalkSpeed JAMAIS modifié — lu uniquement pour detect steal (> 25).
 local ACCESSORIES_TO_REMOVE = {
     "Black Shield", "MechHorseHelmet_AccAccessory", "Glasses",
     "MeshPartAccessory", "LeftShoeAccessory", "RightShoeAccessory",
@@ -299,26 +298,10 @@ local ACCESSORIES_TO_REMOVE = {
 local player       = LP
 local boostEnabled = false
 local boostConn    = nil
-local steppedConn  = nil
-local _gameWS      = 16   -- WalkSpeed tel que le JEU le met (mis à jour dans Stepped)
-local _lastSetWS   = -1   -- WalkSpeed qu'ON a set (pour filtrer le cache)
 
-local function getHum()
-    local char = player.Character; if not char then return nil end
-    return char:FindFirstChildOfClass("Humanoid")
-end
-
-local function applyBoost()
-    local hum = getHum(); if not hum then return end
-    _gameWS    = hum.WalkSpeed   -- snapshot : état du jeu avant nos overrides
-    _lastSetWS = _gameWS
-end
-
-local function removeBoost()
-    local hum = getHum()
-    if hum then hum.WalkSpeed = 16 end
-    _gameWS    = 16
-    _lastSetWS = -1
+local function getHumHrp()
+    local char = player.Character; if not char then return nil, nil end
+    return char:FindFirstChildOfClass("Humanoid"), char:FindFirstChild("HumanoidRootPart")
 end
 
 local function _pillUpdate(on)
@@ -333,31 +316,24 @@ local function toggleBoost()
     _pillUpdate(boostEnabled)
 
     if boostEnabled then
-        applyBoost()
-        if boostConn   then boostConn:Disconnect()   end
-        if steppedConn then steppedConn:Disconnect() end
+        if boostConn then boostConn:Disconnect() end
 
-        -- Stepped (avant physics) : lit le WalkSpeed du jeu avant qu'on l'écrase
-        local function _stepped(_t, _dt)
-            local hum = getHum(); if not hum then return end
-            local ws = hum.WalkSpeed
-            if ws ~= _lastSetWS then _gameWS = ws end   -- ignore nos propres sets
-        end
-
-        -- Heartbeat (après physics) : applique la vitesse
         local function _hb(_dt)
-            local hum = getHum(); if not hum then return end
-            local activeSpeed = _gameWS > 25 and stealSpeed or currentSpeed
-            hum.WalkSpeed = activeSpeed
-            _lastSetWS    = activeSpeed
+            local hum, hrp = getHumHrp(); if not hum or not hrp then return end
+            local activeSpeed = hum.WalkSpeed > 25 and stealSpeed or currentSpeed
+            local moveDir = hum.MoveDirection
+            if moveDir.Magnitude > 0 then
+                hrp.AssemblyLinearVelocity = Vector3.new(
+                    moveDir.X * activeSpeed,
+                    hrp.AssemblyLinearVelocity.Y,
+                    moveDir.Z * activeSpeed
+                )
+            end
         end
 
-        steppedConn = RunService.Stepped:Connect((newcclosure and newcclosure(_stepped)) or _stepped)
-        boostConn   = RunService.Heartbeat:Connect((newcclosure and newcclosure(_hb)) or _hb)
+        boostConn = RunService.Heartbeat:Connect((newcclosure and newcclosure(_hb)) or _hb)
     else
-        if boostConn   then boostConn:Disconnect();   boostConn   = nil end
-        if steppedConn then steppedConn:Disconnect(); steppedConn = nil end
-        removeBoost()
+        if boostConn then boostConn:Disconnect(); boostConn = nil end
     end
 end
 
@@ -365,7 +341,6 @@ local function onCharacterAdded(char)
     for _, name in ipairs(ACCESSORIES_TO_REMOVE) do
         local p = char:FindFirstChild(name); if p then p:Destroy() end
     end
-    if boostEnabled then task.wait(0.3); applyBoost() end
 end
 
 if player.Character then onCharacterAdded(player.Character) end
