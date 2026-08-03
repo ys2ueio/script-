@@ -276,7 +276,7 @@ local speedBox, speedRow = mkInput(64, "Speed",     currentSpeed, function(n) cu
 local stealBox, stealRow = mkInput(98, "Steal Spd", stealSpeed,   function(n) stealSpeed   = n end)
 
 -- ── Sélecteur de méthode ────────────────────────────────────
-local METHODS = { "ALV Lerp", "ALV Direct", "WalkSpeed", "LinearVelocity", "PlatformStand" }
+local METHODS = { "ALV Lerp", "ALV Direct", "LinearVelocity", "VectorForce" }
 local methIdx  = 1
 
 local methRow = Instance.new("Frame", spW)
@@ -333,8 +333,11 @@ local boostConn    = nil
 local ownTimer     = 0
 local ownInterval  = 0.8 + math.random() * 0.4
 local speedRamp    = 0
-local _lv          = nil   -- LinearVelocity instance
-local _lv_att      = nil   -- Attachment pour LinearVelocity
+local _lv          = nil
+local _lv_att      = nil
+local _vf          = nil
+local _vf_att      = nil
+local _stealing    = false
 
 local function getHumHrp()
     local char = player.Character; if not char then return nil, nil end
@@ -364,6 +367,25 @@ local function ensureLV(hrp)
     return lv
 end
 
+local function cleanVF()
+    if _vf     then pcall(function() _vf:Destroy()     end); _vf     = nil end
+    if _vf_att then pcall(function() _vf_att:Destroy() end); _vf_att = nil end
+end
+
+local function ensureVF(hrp)
+    if _vf and _vf.Parent == hrp then return _vf end
+    cleanVF()
+    local att      = Instance.new("Attachment", hrp); att.Name = "_YS_VA"
+    local vf       = Instance.new("VectorForce", hrp)
+    vf.Name        = "_YS_VF"
+    vf.Attachment0 = att
+    vf.RelativeTo  = Enum.ActuatorRelativeTo.World
+    vf.ApplyAtCenterOfMass = true
+    vf.Force       = Vector3.zero
+    _vf_att = att; _vf = vf
+    return vf
+end
+
 local _ownerWatchConn = nil
 local function startOwnerWatch(hrp)
     if _ownerWatchConn then pcall(function() _ownerWatchConn:Disconnect() end) end
@@ -378,10 +400,8 @@ local function applyBoost()
 end
 
 local function _cleanupMethod(idx)
-    local hum, hrp = getHumHrp()
-    if idx == 3 and hum then hum.WalkSpeed = 16 end
-    if idx == 4 then cleanLV() end
-    if idx == 5 and hum then hum.PlatformStand = false end
+    if idx == 3 then cleanLV() end
+    if idx == 4 then cleanVF() end
 end
 
 local function removeBoost()
@@ -402,7 +422,7 @@ local function toggleBoost()
     _pillUpdate(boostEnabled)
 
     if boostEnabled then
-        speedRamp = 0; ownTimer = 0
+        speedRamp = 0; ownTimer = 0; _stealing = false
         applyBoost()
         if boostConn then boostConn:Disconnect() end
 
@@ -417,12 +437,16 @@ local function toggleBoost()
             local dir = hum.MoveDirection
             if dir.Magnitude < 0.1 then
                 speedRamp = math.max(speedRamp - dt * 6, 0)
-                if methIdx == 4 and _lv then _lv.VectorVelocity = Vector3.zero end
+                if methIdx == 3 and _lv then _lv.VectorVelocity = Vector3.zero end
+                if methIdx == 4 and _vf then _vf.Force = Vector3.zero end
                 return
             end
 
             speedRamp = math.min(speedRamp + dt * 12, 1)
-            local baseSpeed = hum.WalkSpeed > 25 and currentSpeed or stealSpeed
+            local ws = hum.WalkSpeed
+            if not _stealing and ws < 20 then _stealing = true
+            elseif _stealing and ws > 28 then _stealing = false end
+            local baseSpeed = _stealing and stealSpeed or currentSpeed
             local effective = 16 + (baseSpeed - 16) * speedRamp
 
             if methIdx == 1 then
@@ -441,16 +465,16 @@ local function toggleBoost()
                     dir.Z * effective
                 )
             elseif methIdx == 3 then
-                hum.WalkSpeed = effective
-            elseif methIdx == 4 then
                 local lv = ensureLV(hrp)
                 lv.VectorVelocity = Vector3.new(dir.X * effective, 0, dir.Z * effective)
-            elseif methIdx == 5 then
-                if not hum.PlatformStand then hum.PlatformStand = true end
-                hrp.AssemblyLinearVelocity = Vector3.new(
-                    dir.X * effective,
-                    hrp.AssemblyLinearVelocity.Y,
-                    dir.Z * effective
+            elseif methIdx == 4 then
+                local vf  = ensureVF(hrp)
+                local vel = hrp.AssemblyLinearVelocity
+                local kP  = 600
+                vf.Force  = Vector3.new(
+                    (dir.X * effective - vel.X) * kP,
+                    0,
+                    (dir.Z * effective - vel.Z) * kP
                 )
             end
         end
@@ -473,7 +497,7 @@ methBtnL.MouseButton1Click:Connect(function() _switchMeth(-1) end)
 methBtnR.MouseButton1Click:Connect(function() _switchMeth(1)  end)
 
 local function onCharacterAdded(char)
-    cleanLV()
+    cleanLV(); cleanVF()
     for _, name in ipairs(ACCESSORIES_TO_REMOVE) do
         local p = char:FindFirstChild(name); if p then p:Destroy() end
     end
