@@ -332,7 +332,6 @@ local boostEnabled = false
 local boostConn    = nil
 local ownTimer     = 0
 local ownInterval  = 0.8 + math.random() * 0.4
-local speedRamp    = 0
 local _lv          = nil
 local _lv_att      = nil
 local _vf          = nil
@@ -476,7 +475,6 @@ end
 local function removeBoost()
     if _ownerWatchConn then pcall(function() _ownerWatchConn:Disconnect() end); _ownerWatchConn = nil end
     _cleanupMethod(methIdx)
-    speedRamp = 0
 end
 
 local function _pillUpdate(on)
@@ -491,7 +489,7 @@ local function toggleBoost()
     _pillUpdate(boostEnabled)
 
     if boostEnabled then
-        speedRamp = 0; ownTimer = 0; _stealing = false
+        ownTimer = 0; _stealing = false
         applyBoost()
         if boostConn then boostConn:Disconnect() end
 
@@ -505,7 +503,6 @@ local function toggleBoost()
 
             local dir = hum.MoveDirection
             if dir.Magnitude < 0.1 then
-                speedRamp = math.max(speedRamp - dt * 6, 0)
                 if methIdx == 3 and _lv    then _lv.VectorVelocity = Vector3.zero end
                 if methIdx == 4 and _vf    then _vf.Force = Vector3.zero end
                 if methIdx == 5 and _bp    then _bp.Position = hrp.Position end
@@ -514,12 +511,10 @@ local function toggleBoost()
                 return
             end
 
-            speedRamp = math.min(speedRamp + dt * 12, 1)
             local ws = hum.WalkSpeed
             if not _stealing and ws < 20 then _stealing = true
             elseif _stealing and ws > 28 then _stealing = false end
-            local baseSpeed = _stealing and stealSpeed or currentSpeed
-            local effective = 16 + (baseSpeed - 16) * speedRamp
+            local effective = _stealing and stealSpeed or currentSpeed
 
             if methIdx == 1 then
                 local vel = hrp.AssemblyLinearVelocity
