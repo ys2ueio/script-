@@ -531,21 +531,13 @@ local function toggleBoost()
                     vel.Z + (dir.Z * effective * n - vel.Z) * a
                 )
             elseif methIdx == 2 then
-                local n = 1 + (math.random() - 0.5) * 0.04
-                if _stealing then
-                    local px = ensureProxy(hrp)
-                    px.AssemblyLinearVelocity = Vector3.new(
-                        dir.X * effective * n,
-                        hrp.AssemblyLinearVelocity.Y,
-                        dir.Z * effective * n
-                    )
-                else
-                    hrp.AssemblyLinearVelocity = Vector3.new(
-                        dir.X * effective * n,
-                        hrp.AssemblyLinearVelocity.Y,
-                        dir.Z * effective * n
-                    )
-                end
+                local n  = 1 + (math.random() - 0.5) * 0.04
+                local px = ensureProxy(hrp)
+                px.AssemblyLinearVelocity = Vector3.new(
+                    dir.X * effective * n,
+                    hrp.AssemblyLinearVelocity.Y,
+                    dir.Z * effective * n
+                )
             elseif methIdx == 3 then
                 local lv = ensureLV(hrp)
                 lv.VectorVelocity = Vector3.new(dir.X * effective, 0, dir.Z * effective)
