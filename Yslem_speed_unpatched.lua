@@ -276,7 +276,7 @@ local speedBox, speedRow = mkInput(64, "Speed",     currentSpeed, function(n) cu
 local stealBox, stealRow = mkInput(98, "Steal Spd", stealSpeed,   function(n) stealSpeed   = n end)
 
 -- ── Sélecteur de méthode ────────────────────────────────────
-local METHODS = { "ALV Lerp", "ALV Direct", "LinearVelocity", "VectorForce" }
+local METHODS = { "ALV Lerp", "LinearVelocity", "VectorForce" }
 local methIdx  = 1
 
 local methRow = Instance.new("Frame", spW)
@@ -400,8 +400,8 @@ local function applyBoost()
 end
 
 local function _cleanupMethod(idx)
-    if idx == 3 then cleanLV() end
-    if idx == 4 then cleanVF() end
+    if idx == 2 then cleanLV() end
+    if idx == 3 then cleanVF() end
 end
 
 local function removeBoost()
@@ -437,8 +437,8 @@ local function toggleBoost()
             local dir = hum.MoveDirection
             if dir.Magnitude < 0.1 then
                 speedRamp = math.max(speedRamp - dt * 6, 0)
-                if methIdx == 3 and _lv then _lv.VectorVelocity = Vector3.zero end
-                if methIdx == 4 and _vf then _vf.Force = Vector3.zero end
+                if methIdx == 2 and _lv then _lv.VectorVelocity = Vector3.zero end
+                if methIdx == 3 and _vf then _vf.Force = Vector3.zero end
                 return
             end
 
@@ -459,15 +459,9 @@ local function toggleBoost()
                     vel.Z + (dir.Z * effective * n - vel.Z) * a
                 )
             elseif methIdx == 2 then
-                hrp.AssemblyLinearVelocity = Vector3.new(
-                    dir.X * effective,
-                    hrp.AssemblyLinearVelocity.Y,
-                    dir.Z * effective
-                )
-            elseif methIdx == 3 then
                 local lv = ensureLV(hrp)
                 lv.VectorVelocity = Vector3.new(dir.X * effective, 0, dir.Z * effective)
-            elseif methIdx == 4 then
+            elseif methIdx == 3 then
                 local vf  = ensureVF(hrp)
                 local vel = hrp.AssemblyLinearVelocity
                 local kP  = 600
