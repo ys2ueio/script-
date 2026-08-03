@@ -121,7 +121,7 @@ _G["_YS_UNPATCHED"] = gui
 -- ── Widget ──────────────────────────────────────────────────
 local spW = Instance.new("Frame", gui)
 spW.Name = "SpeedWidget"
-spW.Size = UDim2.new(0, 150, 0, 142)
+spW.Size = UDim2.new(0, 150, 0, 168)
 spW.Position = UDim2.new(0.5, -75, 0.5, -71)
 spW.BackgroundColor3 = C_BG
 spW.BorderSizePixel = 0; spW.ClipsDescendants = true; spW.Active = true
@@ -275,9 +275,42 @@ local stealSpeed   = 30
 local speedBox, speedRow = mkInput(64, "Speed",     currentSpeed, function(n) currentSpeed = n end)
 local stealBox, stealRow = mkInput(98, "Steal Spd", stealSpeed,   function(n) stealSpeed   = n end)
 
+-- ── Sélecteur de méthode ────────────────────────────────────
+local METHODS = { "ALV Lerp", "ALV Direct", "WalkSpeed", "BodyVelocity" }
+local methIdx  = 1
+
+local methRow = Instance.new("Frame", spW)
+methRow.Size = UDim2.new(1,-16,0,24); methRow.Position = UDim2.new(0,8,0,130)
+methRow.BackgroundTransparency = 1; methRow.BorderSizePixel = 0; methRow.ZIndex = 3
+
+local methBtnL = Instance.new("TextButton", methRow)
+methBtnL.Size = UDim2.new(0,20,1,0); methBtnL.Position = UDim2.new(0,0,0,0)
+methBtnL.BackgroundColor3 = C_OFF_BG; methBtnL.BackgroundTransparency = 0.3
+methBtnL.BorderSizePixel = 0; methBtnL.Text = "<"; methBtnL.TextColor3 = C_SILVER
+methBtnL.Font = Enum.Font.GothamBlack; methBtnL.TextSize = 11; methBtnL.ZIndex = 4
+addCorner(methBtnL, 5); addLivingStroke(methBtnL, 1)
+
+local methBtnR = Instance.new("TextButton", methRow)
+methBtnR.Size = UDim2.new(0,20,1,0); methBtnR.Position = UDim2.new(1,-20,0,0)
+methBtnR.BackgroundColor3 = C_OFF_BG; methBtnR.BackgroundTransparency = 0.3
+methBtnR.BorderSizePixel = 0; methBtnR.Text = ">"; methBtnR.TextColor3 = C_SILVER
+methBtnR.Font = Enum.Font.GothamBlack; methBtnR.TextSize = 11; methBtnR.ZIndex = 4
+addCorner(methBtnR, 5); addLivingStroke(methBtnR, 1)
+
+local methLbl = Instance.new("TextLabel", methRow)
+methLbl.Size = UDim2.new(1,-46,1,0); methLbl.Position = UDim2.new(0,24,0,0)
+methLbl.BackgroundTransparency = 1; methLbl.Text = METHODS[methIdx]
+methLbl.TextColor3 = C_SILVER; methLbl.Font = Enum.Font.GothamBold; methLbl.TextSize = 10
+methLbl.TextXAlignment = Enum.TextXAlignment.Center; methLbl.ZIndex = 4
+addLivingTextGradient(methLbl)
+
+local function _methUpdate()
+    methLbl.Text = METHODS[methIdx]
+end
+
 -- ── Minimize ────────────────────────────────────────────────
 local _collapsed = false
-local FULL_H, COL_H = 142, 26
+local FULL_H, COL_H = 168, 26
 spMinBtn.MouseButton1Click:Connect(function()
     _collapsed = not _collapsed
     spW.Size = UDim2.new(0,150,0, _collapsed and COL_H or FULL_H)
@@ -285,6 +318,7 @@ spMinBtn.MouseButton1Click:Connect(function()
     stRow.Visible    = not _collapsed
     speedRow.Visible = not _collapsed
     stealRow.Visible = not _collapsed
+    methRow.Visible  = not _collapsed
 end)
 
 -- ── Logic ───────────────────────────────────────────────────
@@ -299,6 +333,7 @@ local boostConn    = nil
 local ownTimer     = 0
 local ownInterval  = 0.8 + math.random() * 0.4
 local speedRamp    = 0
+local _bv          = nil   -- BodyVelocity instance (méthode 4)
 
 local function getHumHrp()
     local char = player.Character; if not char then return nil, nil end
@@ -307,6 +342,10 @@ end
 
 local function claimOwn(hrp)
     pcall(function() hrp:SetNetworkOwner(player) end)
+end
+
+local function cleanBV()
+    if _bv then pcall(function() _bv:Destroy() end); _bv = nil end
 end
 
 local _ownerWatchConn = nil
@@ -319,12 +358,14 @@ end
 
 local function applyBoost()
     local _, hrp = getHumHrp(); if not hrp then return end
-    claimOwn(hrp)
-    startOwnerWatch(hrp)
+    claimOwn(hrp); startOwnerWatch(hrp)
 end
 
 local function removeBoost()
     if _ownerWatchConn then pcall(function() _ownerWatchConn:Disconnect() end); _ownerWatchConn = nil end
+    local hum = getHumHrp()
+    if hum and methIdx == 3 then hum.WalkSpeed = 16 end   -- restore si on était en WalkSpeed
+    cleanBV()
     speedRamp = 0
 end
 
@@ -340,8 +381,7 @@ local function toggleBoost()
     _pillUpdate(boostEnabled)
 
     if boostEnabled then
-        speedRamp = 0
-        ownTimer  = 0
+        speedRamp = 0; ownTimer = 0
         applyBoost()
         if boostConn then boostConn:Disconnect() end
 
@@ -350,14 +390,13 @@ local function toggleBoost()
 
             ownTimer = ownTimer + dt
             if ownTimer >= ownInterval then
-                claimOwn(hrp)
-                ownTimer    = 0
-                ownInterval = 0.8 + math.random() * 0.4
+                claimOwn(hrp); ownTimer = 0; ownInterval = 0.8 + math.random() * 0.4
             end
 
             local dir = hum.MoveDirection
             if dir.Magnitude < 0.1 then
                 speedRamp = math.max(speedRamp - dt * 6, 0)
+                if methIdx == 4 and _bv then _bv.Velocity = Vector3.zero end
                 return
             end
 
@@ -365,16 +404,39 @@ local function toggleBoost()
             local baseSpeed = hum.WalkSpeed > 25 and currentSpeed or stealSpeed
             local effective = 16 + (baseSpeed - 16) * speedRamp
 
-            local vel  = hrp.AssemblyLinearVelocity
-            local n    = 1 + (math.random() - 0.5) * 0.012
-            local tgtX = dir.X * effective * n
-            local tgtZ = dir.Z * effective * n
-            local a    = math.min(dt * 20, 1)
-            hrp.AssemblyLinearVelocity = Vector3.new(
-                vel.X + (tgtX - vel.X) * a,
-                vel.Y,
-                vel.Z + (tgtZ - vel.Z) * a
-            )
+            if methIdx == 1 then
+                -- ALV Lerp : lissé, moins de spikes détectables
+                local vel = hrp.AssemblyLinearVelocity
+                local n   = 1 + (math.random() - 0.5) * 0.012
+                local a   = math.min(dt * 20, 1)
+                hrp.AssemblyLinearVelocity = Vector3.new(
+                    vel.X + (dir.X * effective * n - vel.X) * a,
+                    vel.Y,
+                    vel.Z + (dir.Z * effective * n - vel.Z) * a
+                )
+            elseif methIdx == 2 then
+                -- ALV Direct : set immédiat chaque frame
+                hrp.AssemblyLinearVelocity = Vector3.new(
+                    dir.X * effective,
+                    hrp.AssemblyLinearVelocity.Y,
+                    dir.Z * effective
+                )
+            elseif methIdx == 3 then
+                -- WalkSpeed : override direct
+                hum.WalkSpeed = effective
+            elseif methIdx == 4 then
+                -- BodyVelocity : force continue sur HRP
+                if not _bv or _bv.Parent ~= hrp then
+                    cleanBV()
+                    local bv    = Instance.new("BodyVelocity")
+                    bv.Name     = "_YS_BV"
+                    bv.MaxForce = Vector3.new(1e5, 0, 1e5)
+                    bv.Velocity = Vector3.zero
+                    bv.Parent   = hrp
+                    _bv = bv
+                end
+                _bv.Velocity = Vector3.new(dir.X * effective, 0, dir.Z * effective)
+            end
         end
 
         boostConn = RunService.Heartbeat:Connect((newcclosure and newcclosure(_hb)) or _hb)
@@ -384,7 +446,24 @@ local function toggleBoost()
     end
 end
 
+-- Navigation méthodes : nettoie les effets de bord au changement
+local function _switchMeth(delta)
+    local prevIdx = methIdx
+    methIdx = ((methIdx - 1 + delta) % #METHODS) + 1
+    -- cleanup méthode précédente
+    if prevIdx == 3 then
+        local hum = getHumHrp(); if hum then hum.WalkSpeed = 16 end
+    elseif prevIdx == 4 then
+        cleanBV()
+    end
+    _methUpdate()
+end
+
+methBtnL.MouseButton1Click:Connect(function() _switchMeth(-1) end)
+methBtnR.MouseButton1Click:Connect(function() _switchMeth(1)  end)
+
 local function onCharacterAdded(char)
+    cleanBV()
     for _, name in ipairs(ACCESSORIES_TO_REMOVE) do
         local p = char:FindFirstChild(name); if p then p:Destroy() end
     end
