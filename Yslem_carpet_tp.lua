@@ -10,6 +10,7 @@ local cloneref     = cloneref or function(x) return x end
 local Players      = cloneref(game:GetService("Players"))
 local RunService   = cloneref(game:GetService("RunService"))
 local UIS          = cloneref(game:GetService("UserInputService"))
+local WS           = cloneref(game:GetService("Workspace"))
 
 local LP = Players.LocalPlayer
 if not LP.Character then LP.CharacterAdded:Wait() end
@@ -84,7 +85,7 @@ end
 _G["_YS_CTP"] = gui
 
 -- ── Widget ──────────────────────────────────────────────────
-local FULL_H, COL_H = 148, 26
+local FULL_H, COL_H = 122, 26
 local ctW = Instance.new("Frame", gui)
 ctW.Name = "CarpetTPWidget"
 ctW.Size = UDim2.new(0, 150, 0, FULL_H)
@@ -150,20 +151,20 @@ tgtRow.Size = UDim2.new(1,-16,0,26); tgtRow.Position = UDim2.new(0,8,0,32)
 tgtRow.BackgroundTransparency = 1; tgtRow.ZIndex = 3
 
 local tgtLbl = Instance.new("TextLabel", tgtRow)
-tgtLbl.Size = UDim2.new(0.45,0,1,0); tgtLbl.Position = UDim2.new(0,0,0,0)
-tgtLbl.BackgroundTransparency = 1; tgtLbl.Text = "Target:"
+tgtLbl.Size = UDim2.new(0.42,0,1,0); tgtLbl.Position = UDim2.new(0,0,0,0)
+tgtLbl.BackgroundTransparency = 1; tgtLbl.Text = "Animal:"
 tgtLbl.TextColor3 = C_WHITE; tgtLbl.Font = Enum.Font.GothamBold; tgtLbl.TextSize = 11
 tgtLbl.TextXAlignment = Enum.TextXAlignment.Left; tgtLbl.ZIndex = 4
 addLivingTextGradient(tgtLbl)
 
 local tgtName = Instance.new("TextLabel", tgtRow)
-tgtName.Size = UDim2.new(0.55,0,1,0); tgtName.Position = UDim2.new(0.45,0,0,0)
+tgtName.Size = UDim2.new(0.58,0,1,0); tgtName.Position = UDim2.new(0.42,0,0,0)
 tgtName.BackgroundTransparency = 1; tgtName.Text = "—"
 tgtName.TextColor3 = C_DIM; tgtName.Font = Enum.Font.GothamBold; tgtName.TextSize = 10
 tgtName.TextXAlignment = Enum.TextXAlignment.Right; tgtName.ZIndex = 4
 tgtName.TextTruncate = Enum.TextTruncate.AtEnd
 
--- ── Nav row (< target >) ─────────────────────────────────────
+-- ── Nav row ─────────────────────────────────────────────────
 local navRow = Instance.new("Frame", ctW)
 navRow.Size = UDim2.new(1,-16,0,22); navRow.Position = UDim2.new(0,8,0,62)
 navRow.BackgroundTransparency = 1; navRow.ZIndex = 3
@@ -198,36 +199,9 @@ tpBtn.ZIndex = 4
 addCorner(tpBtn, 8); addLivingStroke(tpBtn, 1.5)
 addLivingTextGradient(tpBtn)
 
--- ── Auto-TP toggle ──────────────────────────────────────────
-local autoRow = Instance.new("Frame", ctW)
-autoRow.Size = UDim2.new(1,-16,0,22); autoRow.Position = UDim2.new(0,8,0,124)
-autoRow.BackgroundTransparency = 1; autoRow.ZIndex = 3
-
-local autoLbl = Instance.new("TextLabel", autoRow)
-autoLbl.Size = UDim2.new(0.5,0,1,0); autoLbl.Position = UDim2.new(0,2,0,0)
-autoLbl.BackgroundTransparency = 1; autoLbl.Text = "Auto TP:"
-autoLbl.TextColor3 = C_WHITE; autoLbl.Font = Enum.Font.GothamBold; autoLbl.TextSize = 11
-autoLbl.TextXAlignment = Enum.TextXAlignment.Left; autoLbl.ZIndex = 4
-addLivingTextGradient(autoLbl)
-
-local autoPill = Instance.new("Frame", autoRow)
-autoPill.Size = UDim2.new(0.44,0,0,18); autoPill.Position = UDim2.new(0.54,0,0.5,-9)
-autoPill.BackgroundColor3 = C_OFF_BG; autoPill.BackgroundTransparency = 0.3
-autoPill.BorderSizePixel = 0; autoPill.ZIndex = 4
-addCorner(autoPill, 6); addLivingStroke(autoPill, 1)
-
-local autoPillLbl = Instance.new("TextLabel", autoPill)
-autoPillLbl.Size = UDim2.new(1,0,1,0); autoPillLbl.BackgroundTransparency = 1
-autoPillLbl.Text = "OFF"; autoPillLbl.TextColor3 = C_DIM
-autoPillLbl.Font = Enum.Font.GothamBlack; autoPillLbl.TextSize = 10; autoPillLbl.ZIndex = 5
-
-local autoClk = Instance.new("TextButton", autoRow)
-autoClk.Size = UDim2.new(1,0,1,0); autoClk.BackgroundTransparency = 1
-autoClk.Text = ""; autoClk.ZIndex = 6
-
 -- ── Minimize ────────────────────────────────────────────────
 local _collapsed = false
-local _bodyFrames = { tgtRow, navRow, tpBtn, autoRow }
+local _bodyFrames = { tgtRow, navRow, tpBtn }
 minBtn.MouseButton1Click:Connect(function()
     _collapsed = not _collapsed
     ctW.Size = UDim2.new(0, 150, 0, _collapsed and COL_H or FULL_H)
@@ -237,43 +211,54 @@ end)
 
 -- ── Logic ───────────────────────────────────────────────────
 local DUEL_DIST       = 3.5
-local _targetIdx      = 0    -- 0 = nearest auto, 1+ = pinned player index
-local _autoTP         = false
-local _autoConn       = nil
+local _targetIdx      = 0    -- 0 = nearest, 1+ = pinned index
 local _lastCarpetName = nil
 
-local function getEnemyList()
-    local char = LP.Character
-    local hrp  = char and char:FindFirstChild("HumanoidRootPart")
-    local list = {}
+-- Build set of player characters to exclude
+local function playerCharSet()
+    local s = {}
     for _, p in ipairs(Players:GetPlayers()) do
-        if p ~= LP then
-            local pc = p.Character
-            if pc and pc:FindFirstChild("HumanoidRootPart") then
-                local d = hrp and (pc.HumanoidRootPart.Position - hrp.Position).Magnitude or 0
-                table.insert(list, { player = p, dist = d })
+        if p.Character then s[p.Character] = true end
+    end
+    return s
+end
+
+-- Scan workspace for all brainrot animals (models with Humanoid, not players)
+local function getAnimalList()
+    local char  = LP.Character
+    local myHrp = char and char:FindFirstChild("HumanoidRootPart")
+    local pcSet = playerCharSet()
+    local list  = {}
+
+    for _, obj in ipairs(WS:GetDescendants()) do
+        if obj:IsA("Model") and not pcSet[obj] then
+            local hum = obj:FindFirstChildOfClass("Humanoid")
+            local hrp = obj:FindFirstChild("HumanoidRootPart") or obj.PrimaryPart
+            if hum and hrp then
+                local d = myHrp and (hrp.Position - myHrp.Position).Magnitude or 0
+                table.insert(list, { model = obj, hrp = hrp, name = obj.Name, dist = d })
             end
         end
     end
+
     table.sort(list, function(a, b) return a.dist < b.dist end)
     return list
 end
 
 local function getTarget()
-    local list = getEnemyList()
-    if #list == 0 then return nil, nil end
+    local list = getAnimalList()
+    if #list == 0 then return nil end
     local idx = (_targetIdx == 0) and 1 or ((_targetIdx - 1) % #list + 1)
-    local e = list[idx]
-    return e.player, e.player.Character and e.player.Character:FindFirstChild("HumanoidRootPart")
+    return list[idx]
 end
 
 local function updateNavLbl()
-    local list = getEnemyList()
+    local list = getAnimalList()
     if _targetIdx == 0 or #list == 0 then
         navLbl.Text = "Nearest"
     else
         local idx = (_targetIdx - 1) % #list + 1
-        navLbl.Text = list[idx].player.Name
+        navLbl.Text = list[idx].name
     end
 end
 
@@ -299,19 +284,20 @@ local function findCarpet()
 end
 
 local function doTP()
-    local tgtPlayer, tgtHrp = getTarget()
-    if not tgtHrp then return end
+    local entry = getTarget()
+    if not entry then return end
 
     local char = LP.Character; if not char then return end
     local hrp  = char:FindFirstChild("HumanoidRootPart"); if not hrp then return end
+    local tHrp = entry.hrp
 
-    -- Dest: in front of enemy facing them
-    local fwd = Vector3.new(tgtHrp.CFrame.LookVector.X, 0, tgtHrp.CFrame.LookVector.Z)
+    -- Dest: in front of animal facing it
+    local fwd = Vector3.new(tHrp.CFrame.LookVector.X, 0, tHrp.CFrame.LookVector.Z)
     if fwd.Magnitude > 0.01 then fwd = fwd.Unit else fwd = Vector3.new(0, 0, 1) end
     local dest = Vector3.new(
-        tgtHrp.Position.X + fwd.X * DUEL_DIST,
-        tgtHrp.Position.Y,
-        tgtHrp.Position.Z + fwd.Z * DUEL_DIST
+        tHrp.Position.X + fwd.X * DUEL_DIST,
+        tHrp.Position.Y,
+        tHrp.Position.Z + fwd.Z * DUEL_DIST
     )
 
     -- Equip carpet
@@ -321,7 +307,7 @@ local function doTP()
         task.wait()
     end
 
-    -- Fire carpet remote (try all patterns)
+    -- Fire carpet remote
     local fired = false
     if carpet then
         for _, v in ipairs(carpet:GetDescendants()) do
@@ -336,17 +322,17 @@ local function doTP()
         end
     end
 
-    -- Fallback: direct CFrame (carpet is equipped = AC sees tool active)
+    -- Fallback direct CFrame (carpet equipped)
     if not fired then
         hrp.CFrame = CFrame.new(dest)
     end
 
-    -- Face enemy after landing
+    -- Face animal
     task.delay(0.06, function()
         if hrp and hrp.Parent then
             hrp.CFrame = CFrame.lookAt(
                 hrp.Position,
-                Vector3.new(tgtHrp.Position.X, hrp.Position.Y, tgtHrp.Position.Z)
+                Vector3.new(tHrp.Position.X, hrp.Position.Y, tHrp.Position.Z)
             )
         end
     end)
@@ -357,51 +343,33 @@ local function doTP()
     end
 end
 
--- ── Auto TP ─────────────────────────────────────────────────
-local function setAuto(on)
-    _autoTP = on
-    autoPill.BackgroundColor3       = on and C_MOON or C_OFF_BG
-    autoPill.BackgroundTransparency = on and 0.15 or 0.3
-    autoPillLbl.Text                = on and "ON" or "OFF"
-    autoPillLbl.TextColor3          = on and Color3.fromRGB(3, 8, 20) or C_DIM
-    if _autoConn then _autoConn:Disconnect(); _autoConn = nil end
-    if on then
-        local t = 0
-        _autoConn = RunService.Heartbeat:Connect(function(dt)
-            t = t + dt
-            if t >= 0.6 then t = 0; doTP() end
-        end)
-    end
-end
-
--- ── Live target name ─────────────────────────────────────────
+-- ── Live target display ──────────────────────────────────────
 RunService.Heartbeat:Connect(function()
-    local p = getTarget()
-    if p then
-        tgtName.Text      = p.Name
+    local entry = getTarget()
+    if entry then
+        tgtName.Text       = entry.name
         tgtName.TextColor3 = C_SILVER
     else
-        tgtName.Text      = "—"
+        tgtName.Text       = "—"
         tgtName.TextColor3 = C_DIM
     end
 end)
 
 -- ── Bindings ─────────────────────────────────────────────────
 prevBtn.MouseButton1Click:Connect(function()
-    local list = getEnemyList(); if #list == 0 then return end
+    local list = getAnimalList(); if #list == 0 then return end
     _targetIdx = _targetIdx - 1
     if _targetIdx < 0 then _targetIdx = #list end
     updateNavLbl()
 end)
 nextBtn.MouseButton1Click:Connect(function()
-    local list = getEnemyList(); if #list == 0 then return end
+    local list = getAnimalList(); if #list == 0 then return end
     _targetIdx = _targetIdx + 1
     if _targetIdx > #list then _targetIdx = 0 end
     updateNavLbl()
 end)
 
 tpBtn.MouseButton1Click:Connect(doTP)
-autoClk.MouseButton1Click:Connect(function() setAuto(not _autoTP) end)
 
 UIS.InputBegan:Connect(function(input, gpe)
     if gpe then return end
