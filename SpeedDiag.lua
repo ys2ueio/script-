@@ -1,180 +1,272 @@
--- SpeedDiag v4  |  usage strictement privé
-if _G["_SPDIAG"] then pcall(function() _G["_SPDIAG"]() end) end
-_G["_SPDIAG"] = nil
+-- ============================================================
+--  Yslem Speed Diag  |  strictly private
+-- ============================================================
+if _G["_YS_SDIAG"] then
+    pcall(function() _G["_YS_SDIAG"]:Destroy() end)
+    _G["_YS_SDIAG"] = nil
+end
 
 local cloneref   = cloneref or function(x) return x end
 local Players    = cloneref(game:GetService("Players"))
 local RunService = cloneref(game:GetService("RunService"))
-local LP         = Players.LocalPlayer
+local UIS        = cloneref(game:GetService("UserInputService"))
+
+local LP = Players.LocalPlayer
 if not LP.Character then LP.CharacterAdded:Wait() end
 
-local char = LP.Character
-local hum  = char:FindFirstChildOfClass("Humanoid")
-local hrp  = char:FindFirstChild("HumanoidRootPart")
+-- ── Palette ─────────────────────────────────────────────────
+local C_BG    = Color3.fromRGB(4, 6, 18)
+local C_WHITE = Color3.fromRGB(220, 235, 255)
+local C_MOON  = Color3.fromRGB(95, 160, 255)
+local C_SILVER= Color3.fromRGB(195, 220, 255)
+local C_DIM   = Color3.fromRGB(75, 105, 160)
+local C_GREEN = Color3.fromRGB(80, 220, 130)
+local C_DEEP1 = Color3.fromRGB(4, 6, 18)
+local C_DEEP2 = Color3.fromRGB(12, 25, 70)
+local C_DEEP3 = Color3.fromRGB(45, 95, 210)
+local C_DEEP4 = Color3.fromRGB(110, 175, 255)
 
-print("[SpeedDiag] Bouge pendant 7 secondes...")
-
--- ── Données ────────────────────────────────────────────────
-local DURATION   = 7
-local t0         = tick()
-
-local frames     = 0
-local maxSpd     = 0
-local totalSpd   = 0
-local movingF    = 0
-local wsChanges  = {}
-local cfTele     = 0
-local alvSpikes  = 0
-local psChanges  = 0
-local sitChanges = 0
-local hrpLog     = {}
-local lastWS     = hum and hum.WalkSpeed or 16
-local lastPS     = hum and hum.PlatformStand or false
-local lastSit    = hum and hum.Sit or false
-local lastPos    = hrp and hrp.Position or Vector3.zero
-local lastVel    = hrp and hrp.AssemblyLinearVelocity or Vector3.zero
-
--- ── Watchers ChildAdded/Removed ──────────────────────────
-local _addC, _remC
-if hrp then
-    _addC = hrp.ChildAdded:Connect(function(v)
-        table.insert(hrpLog, string.format("+[%s] %s", v.ClassName, v.Name))
-    end)
-    _remC = hrp.ChildRemoved:Connect(function(v)
-        table.insert(hrpLog, string.format("-[%s] %s", v.ClassName, v.Name))
-    end)
-end
-
--- ── Stopper ──────────────────────────────────────────────
-local function _stop()
-    _G["_SPDIAG"] = nil
-    if _addC then pcall(function() _addC:Disconnect() end) end
-    if _remC then pcall(function() _remC:Disconnect() end) end
-end
-_G["_SPDIAG"] = _stop
-
--- ── Heartbeat : même pattern que les autres scripts ───────
-local _hbConn
-_hbConn = RunService.Heartbeat:Connect(function(dt)
-    local elapsed = tick() - t0
-
-    if not hum or not hrp then
-        hum = char:FindFirstChildOfClass("Humanoid")
-        hrp = char:FindFirstChild("HumanoidRootPart")
-        return
+-- ── Living gradients ────────────────────────────────────────
+local _livingGradients = {}
+local _livingStrokes   = {}
+local _purgeCounter    = 0
+RunService.RenderStepped:Connect(function()
+    _purgeCounter = _purgeCounter + 1
+    if _purgeCounter >= 300 then
+        _purgeCounter = 0
+        local a, b = {}, {}
+        for _, g in ipairs(_livingGradients) do if g and g.Parent then a[#a+1] = g end end
+        for _, g in ipairs(_livingStrokes)   do if g and g.Parent then b[#b+1] = g end end
+        _livingGradients = a; _livingStrokes = b
     end
+    for _, g in ipairs(_livingGradients) do if g and g.Parent then g.Rotation = (g.Rotation + 0.6) % 360 end end
+    for _, g in ipairs(_livingStrokes)   do if g and g.Parent then g.Rotation = (g.Rotation + 0.6) % 360 end end
+end)
 
-    frames = frames + 1
+local function addCorner(inst, r)
+    local c = Instance.new("UICorner", inst); c.CornerRadius = UDim.new(0, r or 8); return c
+end
+local function addLivingTextGradient(lbl)
+    local g = Instance.new("UIGradient", lbl)
+    g.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0,    C_DEEP4),
+        ColorSequenceKeypoint.new(0.25, C_DEEP3),
+        ColorSequenceKeypoint.new(0.5,  C_DEEP4),
+        ColorSequenceKeypoint.new(0.75, C_DEEP3),
+        ColorSequenceKeypoint.new(1,    C_DEEP4),
+    }); g.Rotation = 0; table.insert(_livingGradients, g); return g
+end
+local function addLivingStroke(parent, thickness)
+    local s = Instance.new("UIStroke", parent)
+    s.Thickness = thickness or 1.5
+    s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    s.Color = C_DEEP3
+    local g = Instance.new("UIGradient", s)
+    g.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0,    C_DEEP1),
+        ColorSequenceKeypoint.new(0.25, C_DEEP2),
+        ColorSequenceKeypoint.new(0.5,  C_DEEP1),
+        ColorSequenceKeypoint.new(0.75, C_DEEP2),
+        ColorSequenceKeypoint.new(1,    C_DEEP1),
+    }); table.insert(_livingStrokes, g); return s
+end
+
+-- ── ScreenGui ───────────────────────────────────────────────
+local gui = Instance.new("ScreenGui")
+gui.Name = tostring(math.random(0x10000, 0xFFFFF))
+gui.ResetOnSpawn = false; gui.DisplayOrder = 10; gui.IgnoreGuiInset = true
+gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+pcall(function() if protectgui then protectgui(gui) end end)
+if not pcall(function() gui.Parent = game:GetService("CoreGui") end) then
+    gui.Parent = (gethui and gethui()) or LP:WaitForChild("PlayerGui")
+end
+_G["_YS_SDIAG"] = gui
+
+-- ── Widget ──────────────────────────────────────────────────
+local FULL_H, COL_H = 118, 26
+local ctW = Instance.new("Frame", gui)
+ctW.Name = "SpeedDiagWidget"
+ctW.Size = UDim2.new(0, 150, 0, FULL_H)
+ctW.Position = UDim2.new(0.5, 90, 0.5, 100)
+ctW.BackgroundColor3 = C_BG
+ctW.BorderSizePixel = 0; ctW.ClipsDescendants = true; ctW.Active = true
+addCorner(ctW, 12); addLivingStroke(ctW, 1.5)
+
+-- ── Header ──────────────────────────────────────────────────
+local hdr = Instance.new("Frame", ctW)
+hdr.Size = UDim2.new(1,0,0,26); hdr.BackgroundTransparency = 1
+hdr.BorderSizePixel = 0; hdr.ZIndex = 3
+
+local _drag, _dragInput, _dragStart, _startPos = false, nil, nil, nil
+hdr.InputBegan:Connect(function(inp)
+    if inp.UserInputType == Enum.UserInputType.MouseButton1
+    or inp.UserInputType == Enum.UserInputType.Touch then
+        _drag = true; _dragStart = inp.Position; _startPos = ctW.Position
+        inp.Changed:Connect(function()
+            if inp.UserInputState == Enum.UserInputState.End then _drag = false end
+        end)
+    end
+end)
+hdr.InputChanged:Connect(function(inp)
+    if inp.UserInputType == Enum.UserInputType.MouseMovement
+    or inp.UserInputType == Enum.UserInputType.Touch then _dragInput = inp end
+end)
+UIS.InputChanged:Connect(function(inp)
+    if _drag and _dragInput and inp == _dragInput then
+        local d = inp.Position - _dragStart
+        ctW.Position = UDim2.new(_startPos.X.Scale, _startPos.X.Offset + d.X, _startPos.Y.Scale, _startPos.Y.Offset + d.Y)
+    end
+end)
+
+local dot = Instance.new("Frame", hdr)
+dot.Size = UDim2.new(0,5,0,5); dot.Position = UDim2.new(0,10,0,11)
+dot.BackgroundColor3 = C_MOON; dot.BorderSizePixel = 0; dot.ZIndex = 4
+addCorner(dot, 3)
+
+local subLbl = Instance.new("TextLabel", hdr)
+subLbl.Size = UDim2.new(1,-46,0,11); subLbl.Position = UDim2.new(0,20,0,2)
+subLbl.BackgroundTransparency = 1; subLbl.Text = "yslem"
+subLbl.TextColor3 = C_SILVER; subLbl.Font = Enum.Font.Gotham; subLbl.TextSize = 8
+subLbl.TextXAlignment = Enum.TextXAlignment.Left; subLbl.ZIndex = 4
+
+local titLbl = Instance.new("TextLabel", hdr)
+titLbl.Size = UDim2.new(1,-46,0,13); titLbl.Position = UDim2.new(0,20,0,13)
+titLbl.BackgroundTransparency = 1; titLbl.Text = "Speed Diag"
+titLbl.TextColor3 = C_WHITE; titLbl.Font = Enum.Font.GothamBlack; titLbl.TextSize = 10
+titLbl.TextXAlignment = Enum.TextXAlignment.Left; titLbl.ZIndex = 4
+addLivingTextGradient(titLbl)
+
+local minBtn = Instance.new("TextButton", hdr)
+minBtn.Size = UDim2.new(0,18,0,18); minBtn.Position = UDim2.new(1,-24,0.5,-9)
+minBtn.BackgroundColor3 = Color3.fromRGB(8,14,38); minBtn.BackgroundTransparency = 0.3
+minBtn.BorderSizePixel = 0; minBtn.Text = "-"; minBtn.TextColor3 = C_WHITE
+minBtn.Font = Enum.Font.GothamBlack; minBtn.TextSize = 15; minBtn.ZIndex = 4
+addCorner(minBtn, 6); addLivingStroke(minBtn, 1)
+
+-- ── Méthode row ─────────────────────────────────────────────
+local methRow = Instance.new("Frame", ctW)
+methRow.Size = UDim2.new(1,-16,0,20); methRow.Position = UDim2.new(0,8,0,32)
+methRow.BackgroundTransparency = 1; methRow.ZIndex = 3
+
+local methLbl = Instance.new("TextLabel", methRow)
+methLbl.Size = UDim2.new(0.45,0,1,0)
+methLbl.BackgroundTransparency = 1; methLbl.Text = "Méthode:"
+methLbl.TextColor3 = C_WHITE; methLbl.Font = Enum.Font.GothamBold; methLbl.TextSize = 10
+methLbl.TextXAlignment = Enum.TextXAlignment.Left; methLbl.ZIndex = 4
+addLivingTextGradient(methLbl)
+
+local methVal = Instance.new("TextLabel", methRow)
+methVal.Size = UDim2.new(0.55,0,1,0); methVal.Position = UDim2.new(0.45,0,0,0)
+methVal.BackgroundTransparency = 1; methVal.Text = "—"
+methVal.TextColor3 = C_DIM; methVal.Font = Enum.Font.GothamBold; methVal.TextSize = 10
+methVal.TextXAlignment = Enum.TextXAlignment.Right; methVal.ZIndex = 4
+methVal.TextTruncate = Enum.TextTruncate.AtEnd
+
+-- ── Vitesse (grand nombre) ───────────────────────────────────
+local speedNum = Instance.new("TextLabel", ctW)
+speedNum.Size = UDim2.new(1,-16,0,26); speedNum.Position = UDim2.new(0,8,0,58)
+speedNum.BackgroundTransparency = 1; speedNum.Text = "0.0"
+speedNum.TextColor3 = C_WHITE; speedNum.Font = Enum.Font.GothamBlack; speedNum.TextSize = 22
+speedNum.TextXAlignment = Enum.TextXAlignment.Center; speedNum.ZIndex = 4
+addLivingTextGradient(speedNum)
+
+local speedSub = Instance.new("TextLabel", ctW)
+speedSub.Size = UDim2.new(1,-16,0,10); speedSub.Position = UDim2.new(0,8,0,84)
+speedSub.BackgroundTransparency = 1; speedSub.Text = "studs/s"
+speedSub.TextColor3 = C_DIM; speedSub.Font = Enum.Font.Gotham; speedSub.TextSize = 8
+speedSub.TextXAlignment = Enum.TextXAlignment.Center; speedSub.ZIndex = 4
+
+-- ── WS / Dépassement row ─────────────────────────────────────
+local wsRow = Instance.new("Frame", ctW)
+wsRow.Size = UDim2.new(1,-16,0,18); wsRow.Position = UDim2.new(0,8,0,96)
+wsRow.BackgroundTransparency = 1; wsRow.ZIndex = 3
+
+local wsLbl = Instance.new("TextLabel", wsRow)
+wsLbl.Size = UDim2.new(0.5,0,1,0)
+wsLbl.BackgroundTransparency = 1; wsLbl.Text = "WS —"
+wsLbl.TextColor3 = C_SILVER; wsLbl.Font = Enum.Font.GothamBold; wsLbl.TextSize = 10
+wsLbl.TextXAlignment = Enum.TextXAlignment.Left; wsLbl.ZIndex = 4
+
+local overLbl = Instance.new("TextLabel", wsRow)
+overLbl.Size = UDim2.new(0.5,0,1,0); overLbl.Position = UDim2.new(0.5,0,0,0)
+overLbl.BackgroundTransparency = 1; overLbl.Text = "+0.0"
+overLbl.TextColor3 = C_DIM; overLbl.Font = Enum.Font.GothamBold; overLbl.TextSize = 10
+overLbl.TextXAlignment = Enum.TextXAlignment.Right; overLbl.ZIndex = 4
+
+-- ── Minimize ────────────────────────────────────────────────
+local _collapsed = false
+local _bodyFrames = { methRow, speedNum, speedSub, wsRow }
+minBtn.MouseButton1Click:Connect(function()
+    _collapsed = not _collapsed
+    ctW.Size = UDim2.new(0, 150, 0, _collapsed and COL_H or FULL_H)
+    minBtn.Text = _collapsed and "+" or "-"
+    for _, v in ipairs(_bodyFrames) do v.Visible = not _collapsed end
+end)
+
+-- ── Détection de méthode ─────────────────────────────────────
+-- Scan les descendants du char pour identifier la technique active.
+-- Priorité: proxy ALV Snap → contraintes → ALV direct → défaut
+local function detectMethod(char, hrp)
+    if not char or not hrp then return "—", false end
+    local hasProxy = char:FindFirstChild("_YS_PX") ~= nil
+    local hasVF, hasLV, hasBP, hasAP, hasBV = false, false, false, false, false
+    for _, v in ipairs(char:GetDescendants()) do
+        local cn = v.ClassName
+        if cn == "VectorForce"    then hasVF = true
+        elseif cn == "LinearVelocity" then hasLV = true
+        elseif cn == "BodyPosition"   then hasBP = true
+        elseif cn == "AlignPosition"  then hasAP = true
+        elseif cn == "BodyVelocity"   then hasBV = true
+        end
+    end
+    if hasProxy and hasVF then return "ALV+VF", true end
+    if hasProxy           then return "ALV Snap", true end
+    if hasLV              then return "Linear Vel", true end
+    if hasVF              then return "Vector F", true end
+    if hasBP              then return "Body Pos", true end
+    if hasAP              then return "Align Pos", true end
+    if hasBV              then return "Body Vel", true end
+    -- Dernier recours: vitesse élevée sans contrainte → ALV direct sur HRP
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    local vel  = hrp.AssemblyLinearVelocity
+    local spd  = Vector3.new(vel.X, 0, vel.Z).Magnitude
+    if hum and spd > hum.WalkSpeed + 5 then return "ALV Lerp", true end
+    return "Default", false
+end
+
+-- ── Heartbeat live ──────────────────────────────────────────
+local _detectFrame = 0
+local _methCache   = "—"
+local _activeCache = false
+
+RunService.Heartbeat:Connect(function()
+    local char = LP.Character; if not char then return end
+    local hrp  = char:FindFirstChild("HumanoidRootPart"); if not hrp then return end
+    local hum  = char:FindFirstChildOfClass("Humanoid"); if not hum then return end
 
     -- Vitesse XZ
     local vel = hrp.AssemblyLinearVelocity
     local spd = Vector3.new(vel.X, 0, vel.Z).Magnitude
-    if spd > 1 then
-        movingF   = movingF + 1
-        totalSpd  = totalSpd + spd
-        if spd > maxSpd then maxSpd = spd end
+    speedNum.Text = string.format("%.1f", spd)
+
+    -- WS + dépassement
+    local ws   = hum.WalkSpeed
+    local over = spd - ws
+    wsLbl.Text = "WS " .. string.format("%.0f", ws)
+    if over > 1 then
+        overLbl.Text       = "+" .. string.format("%.1f", over)
+        overLbl.TextColor3 = C_GREEN
+    else
+        overLbl.Text       = string.format("%.1f", math.max(0, over))
+        overLbl.TextColor3 = C_DIM
     end
 
-    -- ALV spike (set direct brutal)
-    local dv = (vel - lastVel).Magnitude
-    if dv > 8 then alvSpikes = alvSpikes + 1 end
-    lastVel = vel
-
-    -- CFrame téléport
-    local pos = hrp.Position
-    if (pos - lastPos).Magnitude > 4 then cfTele = cfTele + 1 end
-    lastPos = pos
-
-    -- WalkSpeed
-    local ws = hum.WalkSpeed
-    if ws ~= lastWS then
-        table.insert(wsChanges, string.format("t%.1f: %.1f->%.1f", elapsed, lastWS, ws))
-        lastWS = ws
+    -- Méthode (re-scan toutes les 10 frames ~6×/s)
+    _detectFrame = _detectFrame + 1
+    if _detectFrame >= 10 then
+        _detectFrame = 0
+        _methCache, _activeCache = detectMethod(char, hrp)
     end
-
-    -- PlatformStand (désactive physique humanoid)
-    local ps = hum.PlatformStand
-    if ps ~= lastPS then psChanges = psChanges + 1; lastPS = ps end
-
-    -- Sit (autre trick physique)
-    local si = hum.Sit
-    if si ~= lastSit then sitChanges = sitChanges + 1; lastSit = si end
-
-    -- Fin de collecte
-    if elapsed >= DURATION then
-        _hbConn:Disconnect()
-        _stop()
-
-        -- Scan instances finales
-        local hrpInst, charInst = {}, {}
-        for _, v in ipairs(hrp:GetChildren()) do
-            local s = string.format("[%s] %s", v.ClassName, v.Name)
-            pcall(function()
-                if v:IsA("BodyVelocity")   then s = s .. " MF="..tostring(v.MaxForce).." V="..tostring(v.Velocity) end
-                if v:IsA("LinearVelocity") then s = s .. " MF="..tostring(v.MaxForce) end
-                if v:IsA("VectorForce")    then s = s .. " F="..tostring(v.Force) end
-                if v:IsA("BodyForce")      then s = s .. " F="..tostring(v.Force) end
-                if v:IsA("AlignPosition")  then s = s .. " MF="..tostring(v.MaxForce) end
-            end)
-            table.insert(hrpInst, s)
-        end
-        for _, v in ipairs(char:GetDescendants()) do
-            if v:IsA("BodyMover") or v:IsA("Constraint") then
-                table.insert(charInst, string.format("[%s] %s in:%s", v.ClassName, v.Name, v.Parent.Name))
-            end
-        end
-
-        -- Verdict
-        local methods = {}
-        local bv, lv, vf, bf, ap = false, false, false, false, false
-        for _, v in ipairs(char:GetDescendants()) do
-            if v:IsA("BodyVelocity")   then bv = true end
-            if v:IsA("LinearVelocity") then lv = true end
-            if v:IsA("VectorForce")    then vf = true end
-            if v:IsA("BodyForce")      then bf = true end
-            if v:IsA("AlignPosition")  then ap = true end
-        end
-        if bv then table.insert(methods, "BodyVelocity") end
-        if lv then table.insert(methods, "LinearVelocity") end
-        if vf then table.insert(methods, "VectorForce") end
-        if bf then table.insert(methods, "BodyForce") end
-        if ap then table.insert(methods, "AlignPosition") end
-        if #wsChanges > 0 then table.insert(methods, "WalkSpeed override") end
-        if cfTele > 2     then table.insert(methods, "CFrame teleport") end
-        if psChanges > 0  then table.insert(methods, "PlatformStand trick") end
-        if sitChanges > 0 then table.insert(methods, "Sit trick") end
-        if alvSpikes > 10 and not bv and not lv then
-            table.insert(methods, "AssemblyLinearVelocity direct")
-        end
-
-        -- Rapport
-        local avg = movingF > 0 and (totalSpd / movingF) or 0
-        print("========== SpeedDiag v4 ==========")
-        print("Frames       : " .. frames)
-        print("Spd max XZ   : " .. string.format("%.1f", maxSpd))
-        print("Spd moy XZ   : " .. string.format("%.1f", avg))
-        print("WalkSpeed fin: " .. hum.WalkSpeed)
-        print("WS changes   : " .. #wsChanges)
-        for _, l in ipairs(wsChanges)  do print("  " .. l) end
-        print("CFrame tele  : " .. cfTele)
-        print("ALV spikes   : " .. alvSpikes)
-        print("PlatformStand: " .. psChanges .. "x")
-        print("Sit changes  : " .. sitChanges .. "x")
-        print("--- HRP instances fin ---")
-        if #hrpInst == 0 then print("  (vide)") end
-        for _, l in ipairs(hrpInst)   do print("  " .. l) end
-        print("--- HRP runtime log ---")
-        if #hrpLog == 0 then print("  (rien)") end
-        for _, l in ipairs(hrpLog)    do print("  " .. l) end
-        print("--- Movers/Constraints char ---")
-        if #charInst == 0 then print("  (aucun)") end
-        for _, l in ipairs(charInst)  do print("  " .. l) end
-        print("--- MÉTHODE ---")
-        if #methods == 0 then
-            print("  Inconnue (relance en bougeant)")
-        else
-            for _, m in ipairs(methods) do print("  >> " .. m) end
-        end
-        print("==================================")
-    end
+    methVal.Text       = _methCache
+    methVal.TextColor3 = _activeCache and C_MOON or C_DIM
 end)
