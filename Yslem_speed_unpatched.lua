@@ -277,7 +277,7 @@ local stealBox, stealRow = mkInput(98, "Steal Spd", stealSpeed,   function(n) st
 
 -- ── Sélecteur de méthode ────────────────────────────────────
 local METHODS = { "ALV Lerp", "ALV Snap", "LinearVelocity", "VectorForce", "BodyPosition", "AlignPos", "ALV+VF" }
-local methIdx  = 1
+local methIdx  = 2
 
 local methRow = Instance.new("Frame", spW)
 methRow.Size = UDim2.new(1,-16,0,24); methRow.Position = UDim2.new(0,8,0,130)
@@ -342,6 +342,8 @@ local _ap          = nil
 local _ap_att0     = nil
 local _ap_att1     = nil
 local _ap_ghost    = nil
+local _proxy       = nil
+local _proxy_weld  = nil
 local _stealing    = false
 
 local function getHumHrp()
@@ -389,6 +391,25 @@ local function ensureVF(hrp)
     vf.Force       = Vector3.zero
     _vf_att = att; _vf = vf
     return vf
+end
+
+local function cleanProxy()
+    if _proxy then pcall(function() _proxy:Destroy() end); _proxy = nil end
+    _proxy_weld = nil
+end
+
+local function ensureProxy(hrp)
+    local char = hrp.Parent
+    if _proxy and _proxy.Parent == char then return _proxy end
+    cleanProxy()
+    local p = Instance.new("Part")
+    p.Name = "_YS_PX"; p.Size = Vector3.new(1,1,1)
+    p.Transparency = 1; p.CanCollide = false; p.Massless = true
+    p.Parent = char
+    local w = Instance.new("Weld", p)
+    w.Part0 = hrp; w.Part1 = p; w.C0 = CFrame.new()
+    _proxy_weld = w; _proxy = p
+    return p
 end
 
 local function cleanBP()
@@ -511,11 +532,20 @@ local function toggleBoost()
                 )
             elseif methIdx == 2 then
                 local n = 1 + (math.random() - 0.5) * 0.04
-                hrp.AssemblyLinearVelocity = Vector3.new(
-                    dir.X * effective * n,
-                    hrp.AssemblyLinearVelocity.Y,
-                    dir.Z * effective * n
-                )
+                if _stealing then
+                    local px = ensureProxy(hrp)
+                    px.AssemblyLinearVelocity = Vector3.new(
+                        dir.X * effective * n,
+                        hrp.AssemblyLinearVelocity.Y,
+                        dir.Z * effective * n
+                    )
+                else
+                    hrp.AssemblyLinearVelocity = Vector3.new(
+                        dir.X * effective * n,
+                        hrp.AssemblyLinearVelocity.Y,
+                        dir.Z * effective * n
+                    )
+                end
             elseif methIdx == 3 then
                 local lv = ensureLV(hrp)
                 lv.VectorVelocity = Vector3.new(dir.X * effective, 0, dir.Z * effective)
@@ -572,7 +602,7 @@ methBtnL.MouseButton1Click:Connect(function() _switchMeth(-1) end)
 methBtnR.MouseButton1Click:Connect(function() _switchMeth(1)  end)
 
 local function onCharacterAdded(char)
-    cleanLV(); cleanVF(); cleanBP(); cleanAP()
+    cleanLV(); cleanVF(); cleanBP(); cleanAP(); cleanProxy()
     for _, name in ipairs(ACCESSORIES_TO_REMOVE) do
         local p = char:FindFirstChild(name); if p then p:Destroy() end
     end
