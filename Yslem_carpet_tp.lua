@@ -85,7 +85,7 @@ end
 _G["_YS_CTP"] = gui
 
 -- ── Widget ──────────────────────────────────────────────────
-local FULL_H, COL_H = 148, 26
+local FULL_H, COL_H = 122, 26
 local ctW = Instance.new("Frame", gui)
 ctW.Name = "CarpetTPWidget"
 ctW.Size = UDim2.new(0, 150, 0, FULL_H)
@@ -164,30 +164,9 @@ tgtName.TextColor3 = C_DIM; tgtName.Font = Enum.Font.GothamBold; tgtName.TextSiz
 tgtName.TextXAlignment = Enum.TextXAlignment.Right; tgtName.ZIndex = 4
 tgtName.TextTruncate = Enum.TextTruncate.AtEnd
 
--- ── Tool name row ────────────────────────────────────────────
-local toolRow = Instance.new("Frame", ctW)
-toolRow.Size = UDim2.new(1,-16,0,22); toolRow.Position = UDim2.new(0,8,0,60)
-toolRow.BackgroundTransparency = 1; toolRow.ZIndex = 3
-
-local toolLbl = Instance.new("TextLabel", toolRow)
-toolLbl.Size = UDim2.new(0.32,0,1,0); toolLbl.Position = UDim2.new(0,0,0,0)
-toolLbl.BackgroundTransparency = 1; toolLbl.Text = "Tool:"
-toolLbl.TextColor3 = C_WHITE; toolLbl.Font = Enum.Font.GothamBold; toolLbl.TextSize = 11
-toolLbl.TextXAlignment = Enum.TextXAlignment.Left; toolLbl.ZIndex = 4
-addLivingTextGradient(toolLbl)
-
-local toolNameBox = Instance.new("TextBox", toolRow)
-toolNameBox.Size = UDim2.new(0.68,-4,1,0); toolNameBox.Position = UDim2.new(0.32,4,0,0)
-toolNameBox.BackgroundColor3 = Color3.fromRGB(8,14,38); toolNameBox.BackgroundTransparency = 0.3
-toolNameBox.BorderSizePixel = 0; toolNameBox.Text = "Carpet"
-toolNameBox.TextColor3 = C_SILVER; toolNameBox.Font = Enum.Font.GothamBold; toolNameBox.TextSize = 10
-toolNameBox.TextXAlignment = Enum.TextXAlignment.Center; toolNameBox.ZIndex = 4
-toolNameBox.ClearTextOnFocus = false
-addCorner(toolNameBox, 5); addLivingStroke(toolNameBox, 1)
-
 -- ── Nav row ─────────────────────────────────────────────────
 local navRow = Instance.new("Frame", ctW)
-navRow.Size = UDim2.new(1,-16,0,22); navRow.Position = UDim2.new(0,8,0,86)
+navRow.Size = UDim2.new(1,-16,0,22); navRow.Position = UDim2.new(0,8,0,62)
 navRow.BackgroundTransparency = 1; navRow.ZIndex = 3
 
 local prevBtn = Instance.new("TextButton", navRow)
@@ -212,7 +191,7 @@ navLbl.TextXAlignment = Enum.TextXAlignment.Center; navLbl.ZIndex = 4
 
 -- ── TP button ───────────────────────────────────────────────
 local tpBtn = Instance.new("TextButton", ctW)
-tpBtn.Size = UDim2.new(1,-16,0,28); tpBtn.Position = UDim2.new(0,8,0,114)
+tpBtn.Size = UDim2.new(1,-16,0,28); tpBtn.Position = UDim2.new(0,8,0,90)
 tpBtn.BackgroundColor3 = C_ON_BG; tpBtn.BackgroundTransparency = 0.2
 tpBtn.BorderSizePixel = 0; tpBtn.Text = "TP  [E]"
 tpBtn.TextColor3 = C_WHITE; tpBtn.Font = Enum.Font.GothamBlack; tpBtn.TextSize = 12
@@ -222,7 +201,7 @@ addLivingTextGradient(tpBtn)
 
 -- ── Minimize ────────────────────────────────────────────────
 local _collapsed = false
-local _bodyFrames = { tgtRow, toolRow, navRow, tpBtn }
+local _bodyFrames = { tgtRow, navRow, tpBtn }
 minBtn.MouseButton1Click:Connect(function()
     _collapsed = not _collapsed
     ctW.Size = UDim2.new(0, 150, 0, _collapsed and COL_H or FULL_H)
@@ -232,15 +211,9 @@ end)
 
 -- ── Logic ───────────────────────────────────────────────────
 local DUEL_DIST       = 3.5
-local _targetIdx      = 0    -- 0 = nearest, 1+ = pinned index
+local _targetIdx      = 0
 local _lastCarpetName = nil
 
--- Reset cached tool name when the TextBox changes
-toolNameBox:GetPropertyChangedSignal("Text"):Connect(function()
-    _lastCarpetName = nil
-end)
-
--- Build set of player characters to exclude
 local function playerCharSet()
     local s = {}
     for _, p in ipairs(Players:GetPlayers()) do
@@ -249,7 +222,6 @@ local function playerCharSet()
     return s
 end
 
--- Scan workspace for all brainrot animals (models with Humanoid, not players)
 local function getAnimalList()
     local char  = LP.Character
     local myHrp = char and char:FindFirstChild("HumanoidRootPart")
@@ -289,14 +261,12 @@ local function updateNavLbl()
 end
 
 local function findCarpet()
-    local char    = LP.Character
-    local bp      = LP:FindFirstChild("Backpack")
-    local keyword = toolNameBox.Text:lower()
-    if keyword == "" then keyword = "carpet" end
+    local char = LP.Character
+    local bp   = LP:FindFirstChild("Backpack")
     local function isMatch(t)
         if not t:IsA("Tool") then return false end
         if _lastCarpetName and t.Name == _lastCarpetName then return true end
-        return t.Name:lower():find(keyword, 1, true) ~= nil
+        return t.Name:lower():find("carpet") ~= nil
     end
     if char then
         for _, t in ipairs(char:GetChildren()) do
@@ -319,7 +289,6 @@ local function doTP()
     local hrp  = char:FindFirstChild("HumanoidRootPart"); if not hrp then return end
     local tHrp = entry.hrp
 
-    -- Dest: in front of animal facing it
     local fwd = Vector3.new(tHrp.CFrame.LookVector.X, 0, tHrp.CFrame.LookVector.Z)
     if fwd.Magnitude > 0.01 then fwd = fwd.Unit else fwd = Vector3.new(0, 0, 1) end
     local destPos = Vector3.new(
@@ -329,82 +298,53 @@ local function doTP()
     )
     local destCF = CFrame.new(destPos)
 
-    -- Equip carpet
     local carpet, inBP = findCarpet()
-
-    -- Diagnostics: carpet search result
-    if carpet then
-        print("[CarpetTP] Carpet found:", carpet.Name, "| inBackpack:", inBP)
-    else
-        print("[CarpetTP] WARNING: No carpet tool found (keyword:", toolNameBox.Text, ")")
-    end
-
     if carpet and inBP then
         carpet.Parent = char
         task.wait()
     end
 
-    -- Diagnostics: list all remotes in carpet
     local fired = false
     if carpet then
-        local remotes = {}
-        for _, v in ipairs(carpet:GetDescendants()) do
-            if v:IsA("RemoteEvent") or v:IsA("RemoteFunction") then
-                table.insert(remotes, v.Name .. " [" .. v.ClassName .. "]")
-            end
-        end
-        if #remotes > 0 then
-            print("[CarpetTP] Remotes in tool:", table.concat(remotes, ", "))
-        else
-            print("[CarpetTP] No RemoteEvent/RemoteFunction found in tool descendants")
-        end
-
-        -- Approach 1: Try all RemoteEvents with multiple arg formats
-        for _, v in ipairs(carpet:GetDescendants()) do
-            if v:IsA("RemoteEvent") and not fired then
-                local ok
-                ok = pcall(function() v:FireServer(destPos) end)
-                if ok then print("[CarpetTP] Approach 1a success: FireServer(destPos) on", v.Name); fired = true; break end
-                ok = pcall(function() v:FireServer(destCF) end)
-                if ok then print("[CarpetTP] Approach 1b success: FireServer(CFrame) on", v.Name); fired = true; break end
-                ok = pcall(function() v:FireServer(destPos, LP.Character) end)
-                if ok then print("[CarpetTP] Approach 1c success: FireServer(destPos, char) on", v.Name); fired = true; break end
-            end
-            if v:IsA("RemoteFunction") and not fired then
-                local ok
-                ok = pcall(function() v:InvokeServer(destPos) end)
-                if ok then print("[CarpetTP] Approach 1d success: InvokeServer(destPos) on", v.Name); fired = true; break end
-                ok = pcall(function() v:InvokeServer(destCF) end)
-                if ok then print("[CarpetTP] Approach 1e success: InvokeServer(CFrame) on", v.Name); fired = true; break end
-                ok = pcall(function() v:InvokeServer(destPos, LP.Character) end)
-                if ok then print("[CarpetTP] Approach 1f success: InvokeServer(destPos, char) on", v.Name); fired = true; break end
-            end
-        end
-
-        -- Approach 2: Simulate mouse click (tool:Activate with mouse hit set)
-        if not fired then
+        -- hookmetamethod: intercept Mouse.Hit reads so the carpet LocalScript gets destCF
+        if not fired and hookmetamethod and newcclosure then
+            local mouse = LP:GetMouse()
+            local orig
             local ok = pcall(function()
-                local mouse = LP:GetMouse()
-                mouse.Hit = destCF
-                carpet:Activate()
-            end)
-            if ok then
-                print("[CarpetTP] Approach 2 success: tool:Activate() with mouse.Hit set")
+                orig = hookmetamethod(mouse, "__index", newcclosure(function(self, k)
+                    if k == "Hit" then return destCF end
+                    return orig(self, k)
+                end))
+                firesignal(carpet.Activated)
                 fired = true
-            else
-                print("[CarpetTP] Approach 2 failed: tool:Activate()")
+            end)
+            if orig then pcall(function() hookmetamethod(mouse, "__index", orig) end) end
+        end
+
+        -- firesignal only (no hookmetamethod available)
+        if not fired and firesignal then
+            pcall(function()
+                firesignal(carpet.Activated)
+                fired = true
+            end)
+        end
+
+        -- direct RemoteEvent fire
+        if not fired then
+            for _, v in ipairs(carpet:GetDescendants()) do
+                if v:IsA("RemoteEvent") and not fired then
+                    pcall(function() v:FireServer(destCF) end)
+                    fired = true
+                end
             end
         end
     end
 
-    -- Approach 3: Direct CFrame fallback (server will rubber-band, but worth trying)
+    -- fallback: direct CFrame (may rubber-band without carpet)
     if not fired then
-        print("[CarpetTP] Approach 3: direct hrp.CFrame fallback (may rubber-band)")
         hrp.CFrame = destCF
-        fired = true
     end
 
-    -- Face animal
     task.delay(0.06, function()
         if hrp and hrp.Parent then
             hrp.CFrame = CFrame.lookAt(
@@ -414,7 +354,6 @@ local function doTP()
         end
     end)
 
-    -- Return carpet
     if carpet and inBP then
         task.delay(0.25, function() pcall(function() carpet.Parent = LP.Backpack end) end)
     end
@@ -452,5 +391,3 @@ UIS.InputBegan:Connect(function(input, gpe)
     if gpe then return end
     if input.KeyCode == Enum.KeyCode.E then doTP() end
 end)
-
-print("[Yslem CarpetTP] OK — [E] pour TP")
