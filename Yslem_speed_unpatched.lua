@@ -276,7 +276,7 @@ local speedBox, speedRow = mkInput(64, "Speed",     currentSpeed, function(n) cu
 local stealBox, stealRow = mkInput(98, "Steal Spd", stealSpeed,   function(n) stealSpeed   = n end)
 
 -- ── Sélecteur de méthode ────────────────────────────────────
-local METHODS = { "ALV Lerp", "LinearVelocity", "VectorForce" }
+local METHODS = { "ALV Lerp", "ALV Snap", "LinearVelocity", "VectorForce", "BodyForce" }
 local methIdx  = 1
 
 local methRow = Instance.new("Frame", spW)
@@ -337,6 +337,7 @@ local _lv          = nil
 local _lv_att      = nil
 local _vf          = nil
 local _vf_att      = nil
+local _bf          = nil
 local _stealing    = false
 
 local function getHumHrp()
@@ -386,6 +387,20 @@ local function ensureVF(hrp)
     return vf
 end
 
+local function cleanBF()
+    if _bf then pcall(function() _bf:Destroy() end); _bf = nil end
+end
+
+local function ensureBF(hrp)
+    if _bf and _bf.Parent == hrp then return _bf end
+    cleanBF()
+    local bf    = Instance.new("BodyForce", hrp)
+    bf.Name     = "_YS_BF"
+    bf.Force    = Vector3.zero
+    _bf = bf
+    return bf
+end
+
 local _ownerWatchConn = nil
 local function startOwnerWatch(hrp)
     if _ownerWatchConn then pcall(function() _ownerWatchConn:Disconnect() end) end
@@ -400,8 +415,9 @@ local function applyBoost()
 end
 
 local function _cleanupMethod(idx)
-    if idx == 2 then cleanLV() end
-    if idx == 3 then cleanVF() end
+    if idx == 3 then cleanLV() end
+    if idx == 4 then cleanVF() end
+    if idx == 5 then cleanBF() end
 end
 
 local function removeBoost()
@@ -437,8 +453,9 @@ local function toggleBoost()
             local dir = hum.MoveDirection
             if dir.Magnitude < 0.1 then
                 speedRamp = math.max(speedRamp - dt * 6, 0)
-                if methIdx == 2 and _lv then _lv.VectorVelocity = Vector3.zero end
-                if methIdx == 3 and _vf then _vf.Force = Vector3.zero end
+                if methIdx == 3 and _lv then _lv.VectorVelocity = Vector3.zero end
+                if methIdx == 4 and _vf then _vf.Force = Vector3.zero end
+                if methIdx == 5 and _bf then _bf.Force = Vector3.zero end
                 return
             end
 
@@ -459,13 +476,29 @@ local function toggleBoost()
                     vel.Z + (dir.Z * effective * n - vel.Z) * a
                 )
             elseif methIdx == 2 then
+                local n = 1 + (math.random() - 0.5) * 0.04
+                hrp.AssemblyLinearVelocity = Vector3.new(
+                    dir.X * effective * n,
+                    hrp.AssemblyLinearVelocity.Y,
+                    dir.Z * effective * n
+                )
+            elseif methIdx == 3 then
                 local lv = ensureLV(hrp)
                 lv.VectorVelocity = Vector3.new(dir.X * effective, 0, dir.Z * effective)
-            elseif methIdx == 3 then
+            elseif methIdx == 4 then
                 local vf  = ensureVF(hrp)
                 local vel = hrp.AssemblyLinearVelocity
                 local kP  = 600
                 vf.Force  = Vector3.new(
+                    (dir.X * effective - vel.X) * kP,
+                    0,
+                    (dir.Z * effective - vel.Z) * kP
+                )
+            elseif methIdx == 5 then
+                local bf  = ensureBF(hrp)
+                local vel = hrp.AssemblyLinearVelocity
+                local kP  = 600
+                bf.Force  = Vector3.new(
                     (dir.X * effective - vel.X) * kP,
                     0,
                     (dir.Z * effective - vel.Z) * kP
@@ -491,7 +524,7 @@ methBtnL.MouseButton1Click:Connect(function() _switchMeth(-1) end)
 methBtnR.MouseButton1Click:Connect(function() _switchMeth(1)  end)
 
 local function onCharacterAdded(char)
-    cleanLV(); cleanVF()
+    cleanLV(); cleanVF(); cleanBF()
     for _, name in ipairs(ACCESSORIES_TO_REMOVE) do
         local p = char:FindFirstChild(name); if p then p:Destroy() end
     end
