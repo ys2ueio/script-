@@ -1,176 +1,222 @@
 -- ============================================================
---  SpeedDiag  |  Analyse la méthode de speed d'un script tiers
---  Durée : 8 secondes de surveillance, puis rapport complet
+--  SpeedDiag v2  |  Analyse exhaustive des méthodes de speed
+--  Lance pendant que l'autre script tourne + que tu bouges
 -- ============================================================
+task.spawn(function()
+
 local Players    = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local LP         = Players.LocalPlayer
-local char       = LP.Character or LP.CharacterAdded:Wait()
-local hum        = char:FindFirstChildOfClass("Humanoid")
-local hrp        = char:FindFirstChild("HumanoidRootPart")
+local char       = LP.Character
+if not char then char = LP.CharacterAdded:Wait() end
+local hum = char:FindFirstChildOfClass("Humanoid")
+local hrp = char:FindFirstChild("HumanoidRootPart")
+if not hum or not hrp then warn("[SpeedDiag] Humanoid/HRP introuvable"); return end
 
-local OUT = {}
-local function log(s) table.insert(OUT, s) end
-local function fmt(v) return string.format("%.4f", v) end
+local DURATION = 8
+warn("[SpeedDiag] Démarrage " .. DURATION .. "s — bouge maintenant")
 
--- ── 1. Snapshot initial ──────────────────────────────────────
-log("=== SpeedDiag START ===")
-log("WalkSpeed initial : " .. tostring(hum.WalkSpeed))
-log("JumpPower initial : " .. tostring(hum.JumpPower))
-log("UseJumpPower      : " .. tostring(hum.UseJumpPower))
+-- ── Snapshot initial ─────────────────────────────────────────
+local initWS  = hum.WalkSpeed
+local initJP  = hum.JumpPower
+local initHH  = hum.HipHeight
+local initPS  = hum.PlatformStand
 
--- ── 2. Enfants HRP (instances physiques) ────────────────────
-log("\n-- HRP children --")
-for _, v in ipairs(hrp:GetChildren()) do
-    log(string.format("  [%s] %s", v.ClassName, v.Name))
-    if v:IsA("BodyVelocity") then
-        log(string.format("    MaxForce=%s  Velocity=%s", tostring(v.MaxForce), tostring(v.Velocity)))
-    elseif v:IsA("LinearVelocity") then
-        log(string.format("    MaxForce=%s  VectorVelocity=%s", tostring(v.MaxForce), tostring(v.VectorVelocity)))
-    elseif v:IsA("VectorForce") or v:IsA("BodyForce") then
-        log(string.format("    Force=%s", tostring(v.Force)))
-    elseif v:IsA("AlignPosition") then
-        log(string.format("    MaxForce=%s  MaxVelocity=%s", tostring(v.MaxForce), tostring(v.MaxVelocity)))
-    elseif v:IsA("Attachment") then
-        log(string.format("    (attachment present)"))
-    end
-end
+-- ── Compteurs / accumulateurs ────────────────────────────────
+local frames        = 0
+local movingFrames  = 0
+local maxXZSpeed    = 0
+local totalXZSpeed  = 0
+local wsChanges     = 0
+local lastWS        = initWS
+local cfTeleports   = 0
+local lastPos       = hrp.Position
+local alvSpikes     = 0  -- AssemblyLinearVelocity sets directs détectés
+local lastVel       = hrp.AssemblyLinearVelocity
+local psChanges     = 0
+local lastPS        = initPS
+local hhChanges     = 0
+local lastHH        = initHH
+local jpChanges     = 0
+local lastJP        = initJP
+local bodyVelSeen   = {}
+local linVelSeen    = {}
+local vecForceSeen  = {}
+local bodyForceSeen = {}
+local alignPosSeen  = {}
+local otherMoverSeen= {}
+local hrpChildLog   = {}
 
--- Contraintes sur le character entier
-log("\n-- Constraints in character --")
-for _, v in ipairs(char:GetDescendants()) do
-    if v:IsA("Constraint") or v:IsA("BodyMover") then
-        log(string.format("  [%s] %s  parent=%s", v.ClassName, v.Name, v.Parent.Name))
-    end
-end
-
--- ── 3. Surveillance sur 8 secondes ──────────────────────────
-local samples        = {}
-local wsChanges      = {}
-local cframeChanges  = 0
-local velChanges     = 0
-local lastWS         = hum.WalkSpeed
-local lastCF         = hrp.CFrame
-local lastVel        = hrp.AssemblyLinearVelocity
-local hrpChildAdded  = {}
-local hrpChildRemoved= {}
-
--- Détecte ajout/suppression d'instances dans HRP pendant l'exécution
+-- ── Surveille ChildAdded/Removed sur HRP ────────────────────
 local addConn = hrp.ChildAdded:Connect(function(v)
-    table.insert(hrpChildAdded, string.format("[+] %s '%s'", v.ClassName, v.Name))
+    local entry = string.format("[+%.2fs] %s '%s'", tick(), v.ClassName, v.Name)
+    table.insert(hrpChildLog, entry)
 end)
 local remConn = hrp.ChildRemoved:Connect(function(v)
-    table.insert(hrpChildRemoved, string.format("[-] %s '%s'", v.ClassName, v.Name))
+    local entry = string.format("[-%.2fs] %s '%s'", tick(), v.ClassName, v.Name)
+    table.insert(hrpChildLog, entry)
 end)
 
--- Détecte changements WalkSpeed
-local wsConn = hum:GetPropertyChangedSignal("WalkSpeed"):Connect(function()
-    local ws = hum.WalkSpeed
-    if ws ~= lastWS then
-        table.insert(wsChanges, string.format("  WS %s -> %s", fmt(lastWS), fmt(ws)))
-        lastWS = ws
+-- ── Boucle de sampling (Heartbeat) ──────────────────────────
+local conn
+local t0 = tick()
+conn = RunService.Heartbeat:Connect(function()
+    if tick() - t0 >= DURATION then
+        conn:Disconnect()
+        addConn:Disconnect()
+        remConn:Disconnect()
+        return
     end
-end)
 
--- Heartbeat : échantillonne vélocité + CFrame
-local t0   = tick()
-local hbConn = RunService.Heartbeat:Connect(function()
-    local now = tick() - t0
+    frames = frames + 1
+
+    -- Vélocité XZ
     local vel = hrp.AssemblyLinearVelocity
-    local cf  = hrp.CFrame
-    local spd = Vector3.new(vel.X, 0, vel.Z).Magnitude
+    local xzSpd = Vector3.new(vel.X, 0, vel.Z).Magnitude
+    if xzSpd > 1 then
+        movingFrames  = movingFrames + 1
+        totalXZSpeed  = totalXZSpeed + xzSpd
+        if xzSpd > maxXZSpeed then maxXZSpeed = xzSpd end
+    end
 
-    -- Détecte si CFrame a été téléporté (delta > 2 studs en 1 frame)
-    local cfDelta = (cf.Position - lastCF.Position).Magnitude
-    if cfDelta > 2 then cframeChanges = cframeChanges + 1 end
-
-    -- Détecte si AssemblyLinearVelocity change brutalement (set direct)
+    -- Spike ALV (set direct : delta élevé en 1 frame sans force)
     local velDelta = (vel - lastVel).Magnitude
-    if velDelta > 10 then velChanges = velChanges + 1 end
-
-    table.insert(samples, { t = now, spd = spd, ws = hum.WalkSpeed, vy = vel.Y })
-    lastCF  = cf
+    if velDelta > 8 then alvSpikes = alvSpikes + 1 end
     lastVel = vel
+
+    -- WalkSpeed polling
+    local ws = hum.WalkSpeed
+    if ws ~= lastWS then wsChanges = wsChanges + 1; lastWS = ws end
+
+    -- JumpPower polling
+    local jp = hum.JumpPower
+    if jp ~= lastJP then jpChanges = jpChanges + 1; lastJP = jp end
+
+    -- HipHeight polling (affecte hauteur = trick de hitbox/speed indirecte)
+    local hh = hum.HipHeight
+    if hh ~= lastHH then hhChanges = hhChanges + 1; lastHH = hh end
+
+    -- PlatformStand polling (désactive la physique du Humanoid)
+    local ps = hum.PlatformStand
+    if ps ~= lastPS then psChanges = psChanges + 1; lastPS = ps end
+
+    -- CFrame téléportation (delta position > 3 studs en 1 frame)
+    local pos = hrp.Position
+    local posDelta = (pos - lastPos).Magnitude
+    if posDelta > 3 then cfTeleports = cfTeleports + 1 end
+    lastPos = pos
+
+    -- Scan instances HRP chaque 10 frames
+    if frames % 10 == 0 then
+        for _, v in ipairs(hrp:GetChildren()) do
+            local cn = v.ClassName
+            if cn == "BodyVelocity"   then bodyVelSeen[v]    = v end
+            if cn == "LinearVelocity" then linVelSeen[v]     = v end
+            if cn == "VectorForce"    then vecForceSeen[v]   = v end
+            if cn == "BodyForce"      then bodyForceSeen[v]  = v end
+            if cn == "AlignPosition"  then alignPosSeen[v]   = v end
+            if v:IsA("BodyMover") or v:IsA("Constraint") then
+                if cn ~= "BodyVelocity" and cn ~= "LinearVelocity"
+                and cn ~= "VectorForce" and cn ~= "BodyForce"
+                and cn ~= "AlignPosition" then
+                    otherMoverSeen[cn] = true
+                end
+            end
+        end
+    end
 end)
 
--- Attend 8 secondes
-task.wait(8)
+-- Attend fin de la boucle
+task.wait(DURATION + 0.1)
 
--- Déconnecte tout
-hbConn:Disconnect(); wsConn:Disconnect(); addConn:Disconnect(); remConn:Disconnect()
-
--- ── 4. Analyse des samples ───────────────────────────────────
-local maxSpd, totalSpd, moving = 0, 0, 0
-for _, s in ipairs(samples) do
-    if s.spd > 2 then
-        moving   = moving + 1
-        totalSpd = totalSpd + s.spd
-        if s.spd > maxSpd then maxSpd = s.spd end
-    end
-end
-local avgSpd = moving > 0 and (totalSpd / moving) or 0
-
--- ── 5. HRP children à la fin ─────────────────────────────────
-log("\n-- HRP children END --")
-for _, v in ipairs(hrp:GetChildren()) do
-    log(string.format("  [%s] %s", v.ClassName, v.Name))
-    if v:IsA("BodyVelocity") then
-        log(string.format("    MaxForce=%s  Velocity=%s", tostring(v.MaxForce), tostring(v.Velocity)))
-    elseif v:IsA("LinearVelocity") then
-        log(string.format("    MaxForce=%s  VectorVelocity=%s", tostring(v.MaxForce), tostring(v.VectorVelocity)))
+-- ── Scan final character entier ──────────────────────────────
+local charMoversFinal = {}
+for _, v in ipairs(char:GetDescendants()) do
+    if v:IsA("BodyMover") or v:IsA("Constraint") then
+        table.insert(charMoversFinal, string.format("  [%s] '%s' dans %s", v.ClassName, v.Name, v.Parent.Name))
     end
 end
 
--- ── 6. Rapport final ─────────────────────────────────────────
-log("\n=== RAPPORT (8s) ===")
-log("Vitesse XZ max    : " .. fmt(maxSpd) .. " studs/s")
-log("Vitesse XZ moy    : " .. fmt(avgSpd) .. " studs/s")
-log("WalkSpeed final   : " .. tostring(hum.WalkSpeed))
-log("CFrame teleports  : " .. tostring(cframeChanges) .. "x  (>2 studs/frame)")
-log("ALV spikes        : " .. tostring(velChanges)    .. "x  (delta >10 direct set)")
+local avgXZ = movingFrames > 0 and (totalXZSpeed / movingFrames) or 0
 
-if #wsChanges == 0 then
-    log("WalkSpeed changes : aucun  → WalkSpeed jamais modifié")
+-- ── Rapport ──────────────────────────────────────────────────
+local R = {}
+local function r(s) table.insert(R, s) end
+
+r("╔══════════════════════════════════════╗")
+r("║        SpeedDiag v2 — RAPPORT       ║")
+r("╚══════════════════════════════════════╝")
+r(string.format("Frames capturées   : %d  (%.1fs)", frames, DURATION))
+r(string.format("Vitesse XZ max     : %.1f studs/s", maxXZSpeed))
+r(string.format("Vitesse XZ moy     : %.1f studs/s", avgXZ))
+r("")
+r("── Changements détectés ──")
+r(string.format("WalkSpeed changes  : %d  (init=%.1f, final=%.1f)", wsChanges, initWS, hum.WalkSpeed))
+r(string.format("JumpPower changes  : %d  (init=%.1f, final=%.1f)", jpChanges, initJP, hum.JumpPower))
+r(string.format("HipHeight changes  : %d  (init=%.4f, final=%.4f)", hhChanges, initHH, hum.HipHeight))
+r(string.format("PlatformStand chg  : %d  (init=%s, final=%s)", psChanges, tostring(initPS), tostring(hum.PlatformStand)))
+r(string.format("CFrame teleports   : %d  (>3 studs/frame)", cfTeleports))
+r(string.format("ALV spikes directs : %d  (delta >8 en 1 frame)", alvSpikes))
+r("")
+r("── Instances physiques dans HRP ──")
+local found = false
+if next(bodyVelSeen)    then r("  BodyVelocity      : OUI");  found = true end
+if next(linVelSeen)     then r("  LinearVelocity    : OUI");  found = true
+    for v in pairs(linVelSeen) do
+        pcall(function() r(string.format("    MaxForce=%.0f  Mode=%s", v.MaxForce, tostring(v.VelocityConstraintMode))) end)
+    end
+end
+if next(vecForceSeen)   then r("  VectorForce       : OUI");  found = true end
+if next(bodyForceSeen)  then r("  BodyForce         : OUI");  found = true end
+if next(alignPosSeen)   then r("  AlignPosition     : OUI");  found = true end
+for cn in pairs(otherMoverSeen) do r("  Autre mover       : " .. cn); found = true end
+if not found then r("  Aucune instance physique dans HRP") end
+
+if #charMoversFinal > 0 then
+    r("")
+    r("── Movers/Constraints dans le character ──")
+    for _, l in ipairs(charMoversFinal) do r(l) end
+end
+
+if #hrpChildLog > 0 then
+    r("")
+    r("── Instances créées/supprimées runtime ──")
+    for _, l in ipairs(hrpChildLog) do r("  " .. l) end
 else
-    log("WalkSpeed changes : " .. #wsChanges .. "x")
-    for _, l in ipairs(wsChanges) do log(l) end
+    r("")
+    r("── Runtime HRP : aucun ajout/suppression détecté")
 end
 
-if #hrpChildAdded > 0 then
-    log("\nInstances créées dans HRP :")
-    for _, l in ipairs(hrpChildAdded) do log("  " .. l) end
+r("")
+r("══════════════════════════════════════")
+r("  VERDICT")
+r("══════════════════════════════════════")
+
+local methods = {}
+if next(bodyVelSeen)                           then table.insert(methods, "BodyVelocity (force legacy)") end
+if next(linVelSeen)                            then table.insert(methods, "LinearVelocity (constraint)") end
+if next(vecForceSeen)                          then table.insert(methods, "VectorForce") end
+if next(bodyForceSeen)                         then table.insert(methods, "BodyForce") end
+if next(alignPosSeen)                          then table.insert(methods, "AlignPosition") end
+if wsChanges > 0                               then table.insert(methods, "WalkSpeed override") end
+if cfTeleports > 2                             then table.insert(methods, "CFrame teleportation") end
+if psChanges > 0                               then table.insert(methods, "PlatformStand trick") end
+if alvSpikes > 10 and wsChanges == 0
+   and not next(bodyVelSeen)
+   and not next(linVelSeen)                    then table.insert(methods, "AssemblyLinearVelocity direct") end
+
+if #methods == 0 then
+    r("  Méthode non identifiée.")
+    r("  → Soit le script n'était pas actif, soit méthode exotique.")
+    r("  → Relance en bougeant activement pendant les 8s.")
 else
-    log("\nAucune instance créée dans HRP  → pas de BodyVelocity/LinearVelocity runtime")
-end
-if #hrpChildRemoved > 0 then
-    log("Instances supprimées de HRP :")
-    for _, l in ipairs(hrpChildRemoved) do log("  " .. l) end
+    r("  Méthodes détectées :")
+    for _, m in ipairs(methods) do r("  ✓ " .. m) end
 end
 
--- ── 7. Verdict ───────────────────────────────────────────────
-log("\n=== VERDICT ===")
-local bodyVelPresent = false
-local linVelPresent  = false
-for _, v in ipairs(hrp:GetChildren()) do
-    if v:IsA("BodyVelocity")  then bodyVelPresent = true end
-    if v:IsA("LinearVelocity") then linVelPresent  = true end
-end
+r("══════════════════════════════════════")
 
-if bodyVelPresent then
-    log("METHOD : BodyVelocity (legacy force-based)")
-elseif linVelPresent then
-    log("METHOD : LinearVelocity (constraint, new API)")
-elseif cframeChanges > 5 then
-    log("METHOD : CFrame direct (teleportation)")
-elseif #wsChanges > 0 and velChanges < 5 then
-    log("METHOD : WalkSpeed override uniquement")
-elseif velChanges > 20 and #wsChanges == 0 then
-    log("METHOD : AssemblyLinearVelocity direct (set chaque frame, WalkSpeed intact)")
-elseif #wsChanges > 0 and velChanges > 20 then
-    log("METHOD : WalkSpeed + AssemblyLinearVelocity combinés")
-else
-    log("METHOD : indéterminée — lance le script pendant que tu bouges")
-end
+-- Print ligne par ligne pour éviter les truncations executor
+for _, line in ipairs(R) do warn(line) end
 
--- ── 8. Print ─────────────────────────────────────────────────
-print(table.concat(OUT, "\n"))
+end) -- task.spawn
