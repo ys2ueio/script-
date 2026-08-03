@@ -276,7 +276,7 @@ local speedBox, speedRow = mkInput(64, "Speed",     currentSpeed, function(n) cu
 local stealBox, stealRow = mkInput(98, "Steal Spd", stealSpeed,   function(n) stealSpeed   = n end)
 
 -- ── Sélecteur de méthode ────────────────────────────────────
-local METHODS = { "ALV Lerp", "ALV Snap", "LinearVelocity", "VectorForce", "BodyForce" }
+local METHODS = { "ALV Lerp", "ALV Snap", "LinearVelocity", "VectorForce", "BodyPosition", "AlignPos", "ALV+VF" }
 local methIdx  = 1
 
 local methRow = Instance.new("Frame", spW)
@@ -337,7 +337,11 @@ local _lv          = nil
 local _lv_att      = nil
 local _vf          = nil
 local _vf_att      = nil
-local _bf          = nil
+local _bp          = nil
+local _ap          = nil
+local _ap_att0     = nil
+local _ap_att1     = nil
+local _ap_ghost    = nil
 local _stealing    = false
 
 local function getHumHrp()
@@ -387,18 +391,44 @@ local function ensureVF(hrp)
     return vf
 end
 
-local function cleanBF()
-    if _bf then pcall(function() _bf:Destroy() end); _bf = nil end
+local function cleanBP()
+    if _bp then pcall(function() _bp:Destroy() end); _bp = nil end
 end
 
-local function ensureBF(hrp)
-    if _bf and _bf.Parent == hrp then return _bf end
-    cleanBF()
-    local bf    = Instance.new("BodyForce", hrp)
-    bf.Name     = "_YS_BF"
-    bf.Force    = Vector3.zero
-    _bf = bf
-    return bf
+local function ensureBP(hrp)
+    if _bp and _bp.Parent == hrp then return _bp end
+    cleanBP()
+    local bp      = Instance.new("BodyPosition", hrp)
+    bp.Name       = "_YS_BP"
+    bp.MaxForce   = Vector3.new(1e9, 0, 1e9)
+    bp.P          = 5e4
+    bp.D          = 1000
+    bp.Position   = hrp.Position
+    _bp = bp
+    return bp
+end
+
+local function cleanAP()
+    if _ap       then pcall(function() _ap:Destroy()       end); _ap       = nil end
+    if _ap_att0  then pcall(function() _ap_att0:Destroy()  end); _ap_att0  = nil end
+    if _ap_att1  then pcall(function() _ap_att1:Destroy()  end); _ap_att1  = nil end
+    if _ap_ghost then pcall(function() _ap_ghost:Destroy() end); _ap_ghost = nil end
+end
+
+local function ensureAP(hrp)
+    if _ap and _ap.Parent == hrp then return end
+    cleanAP()
+    local ghost = Instance.new("Part")
+    ghost.Name = "_YS_G"; ghost.Size = Vector3.new(0.1, 0.1, 0.1)
+    ghost.Anchored = true; ghost.CanCollide = false; ghost.Transparency = 1
+    ghost.CFrame = hrp.CFrame; ghost.Parent = workspace
+    local att0 = Instance.new("Attachment", hrp);   att0.Name = "_YS_AP0"
+    local att1 = Instance.new("Attachment", ghost); att1.Name = "_YS_AP1"
+    local ap = Instance.new("AlignPosition", hrp)
+    ap.Name = "_YS_AP"; ap.Attachment0 = att0; ap.Attachment1 = att1
+    ap.MaxForce = 1e9; ap.MaxVelocity = 200
+    ap.Responsiveness = 200; ap.RigidityEnabled = false
+    _ap_ghost = ghost; _ap_att0 = att0; _ap_att1 = att1; _ap = ap
 end
 
 local _ownerWatchConn = nil
@@ -417,7 +447,9 @@ end
 local function _cleanupMethod(idx)
     if idx == 3 then cleanLV() end
     if idx == 4 then cleanVF() end
-    if idx == 5 then cleanBF() end
+    if idx == 5 then cleanBP() end
+    if idx == 6 then cleanAP() end
+    if idx == 7 then cleanVF() end
 end
 
 local function removeBoost()
@@ -453,9 +485,11 @@ local function toggleBoost()
             local dir = hum.MoveDirection
             if dir.Magnitude < 0.1 then
                 speedRamp = math.max(speedRamp - dt * 6, 0)
-                if methIdx == 3 and _lv then _lv.VectorVelocity = Vector3.zero end
-                if methIdx == 4 and _vf then _vf.Force = Vector3.zero end
-                if methIdx == 5 and _bf then _bf.Force = Vector3.zero end
+                if methIdx == 3 and _lv    then _lv.VectorVelocity = Vector3.zero end
+                if methIdx == 4 and _vf    then _vf.Force = Vector3.zero end
+                if methIdx == 5 and _bp    then _bp.Position = hrp.Position end
+                if methIdx == 6 and _ap    then _ap.MaxVelocity = 0 end
+                if methIdx == 7 and _vf    then _vf.Force = Vector3.zero end
                 return
             end
 
@@ -495,13 +529,27 @@ local function toggleBoost()
                     (dir.Z * effective - vel.Z) * kP
                 )
             elseif methIdx == 5 then
-                local bf  = ensureBF(hrp)
+                local bp = ensureBP(hrp)
+                bp.Position = hrp.Position + dir * (effective * dt)
+            elseif methIdx == 6 then
+                ensureAP(hrp)
+                if _ap      then _ap.MaxVelocity = effective end
+                if _ap_ghost then _ap_ghost.CFrame = CFrame.new(hrp.Position + dir * 500) end
+            elseif methIdx == 7 then
                 local vel = hrp.AssemblyLinearVelocity
-                local kP  = 600
-                bf.Force  = Vector3.new(
-                    (dir.X * effective - vel.X) * kP,
+                local n   = 1 + (math.random() - 0.5) * 0.012
+                local a   = math.min(dt * 20, 1)
+                hrp.AssemblyLinearVelocity = Vector3.new(
+                    vel.X + (dir.X * effective * n - vel.X) * a,
+                    vel.Y,
+                    vel.Z + (dir.Z * effective * n - vel.Z) * a
+                )
+                local vf  = ensureVF(hrp)
+                local vel2 = hrp.AssemblyLinearVelocity
+                vf.Force  = Vector3.new(
+                    (dir.X * effective - vel2.X) * 300,
                     0,
-                    (dir.Z * effective - vel.Z) * kP
+                    (dir.Z * effective - vel2.Z) * 300
                 )
             end
         end
@@ -524,7 +572,7 @@ methBtnL.MouseButton1Click:Connect(function() _switchMeth(-1) end)
 methBtnR.MouseButton1Click:Connect(function() _switchMeth(1)  end)
 
 local function onCharacterAdded(char)
-    cleanLV(); cleanVF(); cleanBF()
+    cleanLV(); cleanVF(); cleanBP(); cleanAP()
     for _, name in ipairs(ACCESSORIES_TO_REMOVE) do
         local p = char:FindFirstChild(name); if p then p:Destroy() end
     end
