@@ -9,7 +9,6 @@ end
 local cloneref     = cloneref or function(x) return x end
 local Players      = cloneref(game:GetService("Players"))
 local RunService   = cloneref(game:GetService("RunService"))
-local TweenService = game:GetService("TweenService")
 local UIS          = cloneref(game:GetService("UserInputService"))
 
 local LP = Players.LocalPlayer
@@ -30,9 +29,9 @@ pcall(function()
             return fn(opts, ...)
         end)
     end
-    if syn and syn.request then syn.request   = _wrapReq(syn.request)  end
-    if request             then request        = _wrapReq(request)       end
-    if http_request        then http_request   = _wrapReq(http_request)  end
+    if syn and syn.request then syn.request = _wrapReq(syn.request) end
+    if request             then request     = _wrapReq(request)      end
+    if http_request        then http_request= _wrapReq(http_request) end
 end)
 
 pcall(function()
@@ -49,8 +48,6 @@ end)
 
 -- ── Palette ─────────────────────────────────────────────────
 local C_BG     = Color3.fromRGB(4, 6, 18)
-local C_HEADER = Color3.fromRGB(4, 6, 18)
-local C_ROW    = Color3.fromRGB(8, 14, 38)
 local C_WHITE  = Color3.fromRGB(220, 235, 255)
 local C_MOON   = Color3.fromRGB(95, 160, 255)
 local C_ON_BG  = Color3.fromRGB(18, 45, 115)
@@ -119,21 +116,18 @@ end
 _G["_YS_UNPATCHED"] = gui
 
 -- ── Widget ──────────────────────────────────────────────────
+local FULL_H, COL_H = 136, 26
 local spW = Instance.new("Frame", gui)
 spW.Name = "SpeedWidget"
-spW.Size = UDim2.new(0, 150, 0, 168)
-spW.Position = UDim2.new(0.5, -75, 0.5, -71)
+spW.Size = UDim2.new(0, 150, 0, FULL_H)
+spW.Position = UDim2.new(0.5, -75, 0.5, -68)
 spW.BackgroundColor3 = C_BG
 spW.BorderSizePixel = 0; spW.ClipsDescendants = true; spW.Active = true
 addCorner(spW, 12); addLivingStroke(spW, 1.5)
 
 local bgImg = Instance.new("ImageLabel", spW)
-bgImg.Size = UDim2.new(1,0,1,0)
-bgImg.BackgroundTransparency = 1
-bgImg.Image = ""
-bgImg.ScaleType = Enum.ScaleType.Crop
-bgImg.ImageTransparency = 0
-bgImg.ZIndex = 1
+bgImg.Size = UDim2.new(1,0,1,0); bgImg.BackgroundTransparency = 1
+bgImg.Image = ""; bgImg.ScaleType = Enum.ScaleType.Crop; bgImg.ZIndex = 1
 addCorner(bgImg, 12)
 do
     local fname = "yslem_bg.png"
@@ -275,42 +269,8 @@ local stealSpeed   = 30
 local speedBox, speedRow = mkInput(64, "Speed",     currentSpeed, function(n) currentSpeed = n end)
 local stealBox, stealRow = mkInput(98, "Steal Spd", stealSpeed,   function(n) stealSpeed   = n end)
 
--- ── Sélecteur de méthode ────────────────────────────────────
-local METHODS = { "ALV Lerp", "ALV Snap", "LinearVelocity", "VectorForce", "BodyPosition", "AlignPos", "ALV+VF" }
-local methIdx  = 2
-
-local methRow = Instance.new("Frame", spW)
-methRow.Size = UDim2.new(1,-16,0,24); methRow.Position = UDim2.new(0,8,0,130)
-methRow.BackgroundTransparency = 1; methRow.BorderSizePixel = 0; methRow.ZIndex = 3
-
-local methBtnL = Instance.new("TextButton", methRow)
-methBtnL.Size = UDim2.new(0,20,1,0); methBtnL.Position = UDim2.new(0,0,0,0)
-methBtnL.BackgroundColor3 = C_OFF_BG; methBtnL.BackgroundTransparency = 0.3
-methBtnL.BorderSizePixel = 0; methBtnL.Text = "<"; methBtnL.TextColor3 = C_SILVER
-methBtnL.Font = Enum.Font.GothamBlack; methBtnL.TextSize = 11; methBtnL.ZIndex = 4
-addCorner(methBtnL, 5); addLivingStroke(methBtnL, 1)
-
-local methBtnR = Instance.new("TextButton", methRow)
-methBtnR.Size = UDim2.new(0,20,1,0); methBtnR.Position = UDim2.new(1,-20,0,0)
-methBtnR.BackgroundColor3 = C_OFF_BG; methBtnR.BackgroundTransparency = 0.3
-methBtnR.BorderSizePixel = 0; methBtnR.Text = ">"; methBtnR.TextColor3 = C_SILVER
-methBtnR.Font = Enum.Font.GothamBlack; methBtnR.TextSize = 11; methBtnR.ZIndex = 4
-addCorner(methBtnR, 5); addLivingStroke(methBtnR, 1)
-
-local methLbl = Instance.new("TextLabel", methRow)
-methLbl.Size = UDim2.new(1,-46,1,0); methLbl.Position = UDim2.new(0,24,0,0)
-methLbl.BackgroundTransparency = 1; methLbl.Text = METHODS[methIdx]
-methLbl.TextColor3 = C_SILVER; methLbl.Font = Enum.Font.GothamBold; methLbl.TextSize = 10
-methLbl.TextXAlignment = Enum.TextXAlignment.Center; methLbl.ZIndex = 4
-addLivingTextGradient(methLbl)
-
-local function _methUpdate()
-    methLbl.Text = METHODS[methIdx]
-end
-
 -- ── Minimize ────────────────────────────────────────────────
 local _collapsed = false
-local FULL_H, COL_H = 168, 26
 spMinBtn.MouseButton1Click:Connect(function()
     _collapsed = not _collapsed
     spW.Size = UDim2.new(0,150,0, _collapsed and COL_H or FULL_H)
@@ -318,10 +278,9 @@ spMinBtn.MouseButton1Click:Connect(function()
     stRow.Visible    = not _collapsed
     speedRow.Visible = not _collapsed
     stealRow.Visible = not _collapsed
-    methRow.Visible  = not _collapsed
 end)
 
--- ── Logic ───────────────────────────────────────────────────
+-- ── Physics ─────────────────────────────────────────────────
 local ACCESSORIES_TO_REMOVE = {
     "Black Shield", "MechHorseHelmet_AccAccessory", "Glasses",
     "MeshPartAccessory", "LeftShoeAccessory", "RightShoeAccessory",
@@ -334,15 +293,6 @@ local ownTimer     = 0
 local ownInterval  = 0.8 + math.random() * 0.4
 local _lv          = nil
 local _lv_att      = nil
-local _vf          = nil
-local _vf_att      = nil
-local _bp          = nil
-local _ap          = nil
-local _ap_att0     = nil
-local _ap_att1     = nil
-local _ap_ghost    = nil
-local _proxy       = nil
-local _proxy_weld  = nil
 local _stealing    = false
 
 local function getHumHrp()
@@ -359,96 +309,20 @@ local function cleanLV()
     if _lv_att then pcall(function() _lv_att:Destroy() end); _lv_att = nil end
 end
 
-local function ensureLV(hrp)
-    if _lv and _lv.Parent == hrp then return _lv end
+local function setupLV(hrp)
     cleanLV()
-    local att        = Instance.new("Attachment", hrp); att.Name = "_YS_A"
-    local lv         = Instance.new("LinearVelocity", hrp)
-    lv.Name          = "_YS_LV"
-    lv.Attachment0   = att
-    lv.MaxForce      = 1e9
-    lv.VelocityConstraintMode = Enum.VelocityConstraintMode.Vector
-    lv.VectorVelocity = Vector3.zero
+    local att = Instance.new("Attachment", hrp); att.Name = "_YS_A"
+    local lv  = Instance.new("LinearVelocity", hrp)
+    lv.Name                   = "_YS_LV"
+    lv.Attachment0            = att
+    -- Plane mode: XZ only — Y axis (jump / gravity) is never touched
+    lv.VelocityConstraintMode = Enum.VelocityConstraintMode.Plane
+    lv.PrimaryTangentAxis     = Vector3.new(1, 0, 0)
+    lv.SecondaryTangentAxis   = Vector3.new(0, 0, 1)
+    lv.MaxForce               = math.huge
+    lv.PlaneVelocity          = Vector2.zero
+    lv.RelativeTo             = Enum.ActuatorRelativeTo.World
     _lv_att = att; _lv = lv
-    return lv
-end
-
-local function cleanVF()
-    if _vf     then pcall(function() _vf:Destroy()     end); _vf     = nil end
-    if _vf_att then pcall(function() _vf_att:Destroy() end); _vf_att = nil end
-end
-
-local function ensureVF(hrp)
-    if _vf and _vf.Parent == hrp then return _vf end
-    cleanVF()
-    local att      = Instance.new("Attachment", hrp); att.Name = "_YS_VA"
-    local vf       = Instance.new("VectorForce", hrp)
-    vf.Name        = "_YS_VF"
-    vf.Attachment0 = att
-    vf.RelativeTo  = Enum.ActuatorRelativeTo.World
-    vf.ApplyAtCenterOfMass = true
-    vf.Force       = Vector3.zero
-    _vf_att = att; _vf = vf
-    return vf
-end
-
-local function cleanProxy()
-    if _proxy then pcall(function() _proxy:Destroy() end); _proxy = nil end
-    _proxy_weld = nil
-end
-
-local function ensureProxy(hrp)
-    local char = hrp.Parent
-    if _proxy and _proxy.Parent == char then return _proxy end
-    cleanProxy()
-    local p = Instance.new("Part")
-    p.Name = "_YS_PX"; p.Size = Vector3.new(1,1,1)
-    p.Transparency = 1; p.CanCollide = false; p.Massless = true
-    p.Parent = char
-    local w = Instance.new("Weld", p)
-    w.Part0 = hrp; w.Part1 = p; w.C0 = CFrame.new()
-    _proxy_weld = w; _proxy = p
-    return p
-end
-
-local function cleanBP()
-    if _bp then pcall(function() _bp:Destroy() end); _bp = nil end
-end
-
-local function ensureBP(hrp)
-    if _bp and _bp.Parent == hrp then return _bp end
-    cleanBP()
-    local bp      = Instance.new("BodyPosition", hrp)
-    bp.Name       = "_YS_BP"
-    bp.MaxForce   = Vector3.new(1e9, 0, 1e9)
-    bp.P          = 5e4
-    bp.D          = 1000
-    bp.Position   = hrp.Position
-    _bp = bp
-    return bp
-end
-
-local function cleanAP()
-    if _ap       then pcall(function() _ap:Destroy()       end); _ap       = nil end
-    if _ap_att0  then pcall(function() _ap_att0:Destroy()  end); _ap_att0  = nil end
-    if _ap_att1  then pcall(function() _ap_att1:Destroy()  end); _ap_att1  = nil end
-    if _ap_ghost then pcall(function() _ap_ghost:Destroy() end); _ap_ghost = nil end
-end
-
-local function ensureAP(hrp)
-    if _ap and _ap.Parent == hrp then return end
-    cleanAP()
-    local ghost = Instance.new("Part")
-    ghost.Name = "_YS_G"; ghost.Size = Vector3.new(0.1, 0.1, 0.1)
-    ghost.Anchored = true; ghost.CanCollide = false; ghost.Transparency = 1
-    ghost.CFrame = hrp.CFrame; ghost.Parent = workspace
-    local att0 = Instance.new("Attachment", hrp);   att0.Name = "_YS_AP0"
-    local att1 = Instance.new("Attachment", ghost); att1.Name = "_YS_AP1"
-    local ap = Instance.new("AlignPosition", hrp)
-    ap.Name = "_YS_AP"; ap.Attachment0 = att0; ap.Attachment1 = att1
-    ap.MaxForce = 1e9; ap.MaxVelocity = 200
-    ap.Responsiveness = 200; ap.RigidityEnabled = false
-    _ap_ghost = ghost; _ap_att0 = att0; _ap_att1 = att1; _ap = ap
 end
 
 local _ownerWatchConn = nil
@@ -457,24 +331,6 @@ local function startOwnerWatch(hrp)
     _ownerWatchConn = hrp:GetPropertyChangedSignal("ReceiveAge"):Connect(function()
         if boostEnabled then task.defer(function() claimOwn(hrp) end) end
     end)
-end
-
-local function applyBoost()
-    local _, hrp = getHumHrp(); if not hrp then return end
-    claimOwn(hrp); startOwnerWatch(hrp)
-end
-
-local function _cleanupMethod(idx)
-    if idx == 3 then cleanLV() end
-    if idx == 4 then cleanVF() end
-    if idx == 5 then cleanBP() end
-    if idx == 6 then cleanAP() end
-    if idx == 7 then cleanVF() end
-end
-
-local function removeBoost()
-    if _ownerWatchConn then pcall(function() _ownerWatchConn:Disconnect() end); _ownerWatchConn = nil end
-    _cleanupMethod(methIdx)
 end
 
 local function _pillUpdate(on)
@@ -490,9 +346,10 @@ local function toggleBoost()
 
     if boostEnabled then
         ownTimer = 0; _stealing = false
-        applyBoost()
-        if boostConn then boostConn:Disconnect() end
+        local _, hrp = getHumHrp()
+        if hrp then claimOwn(hrp); startOwnerWatch(hrp) end
 
+        if boostConn then boostConn:Disconnect() end
         local function _hb(dt)
             local hum, hrp = getHumHrp(); if not hum or not hrp then return end
 
@@ -501,99 +358,40 @@ local function toggleBoost()
                 claimOwn(hrp); ownTimer = 0; ownInterval = 0.8 + math.random() * 0.4
             end
 
-            local dir = hum.MoveDirection
-            if dir.Magnitude < 0.1 then
-                if methIdx == 3 and _lv    then _lv.VectorVelocity = Vector3.zero end
-                if methIdx == 4 and _vf    then _vf.Force = Vector3.zero end
-                if methIdx == 5 and _bp    then _bp.Position = hrp.Position end
-                if methIdx == 6 and _ap    then _ap.MaxVelocity = 0 end
-                if methIdx == 7 and _vf    then _vf.Force = Vector3.zero end
-                return
-            end
+            if not _lv or _lv.Parent ~= hrp then setupLV(hrp) end
 
             local ws = hum.WalkSpeed
             if not _stealing and ws < 20 then _stealing = true
-            elseif _stealing and ws > 28 then _stealing = false end
+            elseif _stealing and ws > 28  then _stealing = false end
             local effective = _stealing and stealSpeed or currentSpeed
 
-            if methIdx == 1 then
-                local vel = hrp.AssemblyLinearVelocity
-                local n   = 1 + (math.random() - 0.5) * 0.012
-                local a   = math.min(dt * 20, 1)
-                hrp.AssemblyLinearVelocity = Vector3.new(
-                    vel.X + (dir.X * effective * n - vel.X) * a,
-                    vel.Y,
-                    vel.Z + (dir.Z * effective * n - vel.Z) * a
-                )
-            elseif methIdx == 2 then
-                local n  = 1 + (math.random() - 0.5) * 0.04
-                local px = ensureProxy(hrp)
-                px.AssemblyLinearVelocity = Vector3.new(
-                    dir.X * effective * n,
-                    hrp.AssemblyLinearVelocity.Y,
-                    dir.Z * effective * n
-                )
-            elseif methIdx == 3 then
-                local lv = ensureLV(hrp)
-                lv.VectorVelocity = Vector3.new(dir.X * effective, 0, dir.Z * effective)
-            elseif methIdx == 4 then
-                local vf  = ensureVF(hrp)
-                local vel = hrp.AssemblyLinearVelocity
-                local kP  = 600
-                vf.Force  = Vector3.new(
-                    (dir.X * effective - vel.X) * kP,
-                    0,
-                    (dir.Z * effective - vel.Z) * kP
-                )
-            elseif methIdx == 5 then
-                local bp = ensureBP(hrp)
-                bp.Position = hrp.Position + dir * (effective * dt)
-            elseif methIdx == 6 then
-                ensureAP(hrp)
-                if _ap      then _ap.MaxVelocity = effective end
-                if _ap_ghost then _ap_ghost.CFrame = CFrame.new(hrp.Position + dir * 500) end
-            elseif methIdx == 7 then
-                local vel = hrp.AssemblyLinearVelocity
-                local n   = 1 + (math.random() - 0.5) * 0.012
-                local a   = math.min(dt * 20, 1)
-                hrp.AssemblyLinearVelocity = Vector3.new(
-                    vel.X + (dir.X * effective * n - vel.X) * a,
-                    vel.Y,
-                    vel.Z + (dir.Z * effective * n - vel.Z) * a
-                )
-                local vf  = ensureVF(hrp)
-                local vel2 = hrp.AssemblyLinearVelocity
-                vf.Force  = Vector3.new(
-                    (dir.X * effective - vel2.X) * 300,
-                    0,
-                    (dir.Z * effective - vel2.Z) * 300
-                )
+            local dir = hum.MoveDirection
+            if dir.Magnitude > 0.1 then
+                local flat = Vector3.new(dir.X, 0, dir.Z).Unit
+                _lv.PlaneVelocity = Vector2.new(flat.X * effective, flat.Z * effective)
+            else
+                _lv.PlaneVelocity = Vector2.zero
             end
         end
 
         boostConn = RunService.Heartbeat:Connect((newcclosure and newcclosure(_hb)) or _hb)
     else
         if boostConn then boostConn:Disconnect(); boostConn = nil end
-        removeBoost()
+        if _ownerWatchConn then pcall(function() _ownerWatchConn:Disconnect() end); _ownerWatchConn = nil end
+        if _lv then _lv.PlaneVelocity = Vector2.zero end
+        cleanLV()
     end
 end
 
-local function _switchMeth(delta)
-    local prev = methIdx
-    methIdx = ((methIdx - 1 + delta) % #METHODS) + 1
-    _cleanupMethod(prev)
-    _methUpdate()
-end
-
-methBtnL.MouseButton1Click:Connect(function() _switchMeth(-1) end)
-methBtnR.MouseButton1Click:Connect(function() _switchMeth(1)  end)
-
 local function onCharacterAdded(char)
-    cleanLV(); cleanVF(); cleanBP(); cleanAP(); cleanProxy()
+    cleanLV()
     for _, name in ipairs(ACCESSORIES_TO_REMOVE) do
         local p = char:FindFirstChild(name); if p then p:Destroy() end
     end
-    if boostEnabled then task.wait(0.3); applyBoost() end
+    if boostEnabled then task.wait(0.3)
+        local _, hrp = getHumHrp()
+        if hrp then claimOwn(hrp); startOwnerWatch(hrp) end
+    end
 end
 
 if player.Character then onCharacterAdded(player.Character) end
