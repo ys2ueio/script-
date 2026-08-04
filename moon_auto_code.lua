@@ -1321,7 +1321,7 @@ task.spawn(function()
         end
     end
     scanGC()
-    while true do task.wait(0.01); scanGC() end
+    while true do task.wait(30); scanGC() end
 end)
 
 setStatus("Moon Hub Auto Code loaded", COLORS.Green)
