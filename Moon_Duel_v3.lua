@@ -31,6 +31,8 @@ local laggerOn  = false
 local batOn     = false
 local batPaused = false
 local _stealing = false
+local _proxy    = nil
+local _proxyWeld= nil
 
 -- ── palette ──────────────────────────────────────────────────────────────────
 local function H(s) return Color3.fromHex(s) end
@@ -50,46 +52,26 @@ local PAD    = 8
 local HDR_H  = 28
 local FULL_H = HDR_H + 1 + PAD + COL_H * 5 + PAD  -- 175
 
--- ═══════════════════════════════════════════════════════════════════════════
--- SPEED — proxy-part method (Moon v16 logic)
--- Weld invisible Part to HRP, drive AssemblyLinearVelocity on the proxy.
--- Avoids LinearVelocity constraint detection.
--- ═══════════════════════════════════════════════════════════════════════════
-local _proxy = nil
+-- ── Proxy-part speed (source: Ace Duels) ────────────────────────────────────
+local function cleanProxy()
+    if _proxy then pcall(function() _proxy:Destroy() end); _proxy = nil end
+    _proxyWeld = nil
+end
+reg(cleanProxy)
 
-local function _ensureProxy()
-    local char = LP.Character; if not char then return nil end
-    local hrp  = char:FindFirstChild("HumanoidRootPart"); if not hrp then return nil end
+local function ensureProxy(hrp)
+    local char = hrp.Parent
     if _proxy and _proxy.Parent == char then return _proxy end
-    if _proxy then pcall(function() _proxy:Destroy() end) end
-    _proxy             = Instance.new("Part")
-    _proxy.Name        = "_MD_P"
-    _proxy.Size        = Vector3.new(1,1,1)
-    _proxy.Transparency = 1
-    _proxy.CanCollide  = false
-    _proxy.Massless    = true
-    _proxy.Parent      = char
-    local weld = Instance.new("Weld")
-    weld.Part0  = hrp; weld.Part1 = _proxy
-    weld.C0     = CFrame.new(0,0,0); weld.Parent = _proxy
-    return _proxy
+    cleanProxy()
+    local p = Instance.new("Part")
+    p.Name = "_MD_PX"; p.Size = Vector3.new(1,1,1)
+    p.Transparency = 1; p.CanCollide = false; p.Massless = true
+    p.Parent = char
+    local w = Instance.new("Weld", p)
+    w.Part0 = hrp; w.Part1 = p; w.C0 = CFrame.new()
+    _proxyWeld = w; _proxy = p
+    return p
 end
-
-local function _proxyMove(dir, speed)
-    local char = LP.Character; if not char then return end
-    local hum  = char:FindFirstChildOfClass("Humanoid")
-    local p    = _ensureProxy()
-    if hum then hum:Move(dir, false) end
-    if p   then p.AssemblyLinearVelocity = Vector3.new(dir.X*speed, p.AssemblyLinearVelocity.Y, dir.Z*speed) end
-end
-
-local function _proxyStop()
-    local hum = LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
-    if hum then hum:Move(Vector3.zero, false) end
-    if _proxy then _proxy.AssemblyLinearVelocity = Vector3.new(0, _proxy.AssemblyLinearVelocity.Y, 0) end
-end
-
-reg(function() if _proxy then pcall(function() _proxy:Destroy() end); _proxy = nil end end)
 
 -- ── anti-ragdoll ─────────────────────────────────────────────────────────────
 local function antiRagdoll(char)
@@ -103,147 +85,74 @@ local function antiRagdoll(char)
     end)
 end
 
--- ═══════════════════════════════════════════════════════════════════════════
--- INSTA-RESET — Moon v16 logic
--- Captures reset remote via hookfunction (silent), scans RE/ prefix,
--- fires at 60fps via Heartbeat loop, tool save/restore.
--- ═══════════════════════════════════════════════════════════════════════════
-local _instaReset  -- forward ref for button callback
-do
-    local IR_GUID        = "f888ee6e-c86d-46e1-93d7-0639d6635d42"
-    local IR_resetRemote = nil
-    local _RSvc          = game:GetService("ReplicatedStorage")
-
-    -- Passive capture: hook FireServer so we catch the remote the first time
-    -- the game itself fires it — invisible because newcclosure makes it a C closure
-    pcall(function()
-        if not (hookfunction and newcclosure) then return end
-        local oldFire
-        oldFire = hookfunction(Instance.new("RemoteEvent").FireServer, newcclosure(function(self, ...)
-            if not IR_resetRemote and typeof(self) == "Instance"
-            and self:IsA("RemoteEvent") and self.Name:sub(1,3) == "RE/" then
-                IR_resetRemote = self
+-- ── Insta-reset (source: Ace Duels) ─────────────────────────────────────────
+local _RESET_GUID   = "f888ee6e-c86d-46e1-93d7-0639d6635d42"
+local _resetRemote  = nil
+-- passive hookfunction: capture the RE/ remote as soon as the game fires it
+pcall(function()
+    if not (hookfunction and newcclosure) then return end
+    local _oldFire
+    _oldFire = hookfunction(Instance.new("RemoteEvent").FireServer, newcclosure(function(self, ...)
+        if not _resetRemote and typeof(self) == "Instance"
+        and self:IsA("RemoteEvent") and self.Name:sub(1,3) == "RE/" then
+            _resetRemote = self
+        end
+        return _oldFire(self, ...)
+    end))
+end)
+local function instaReset()
+    -- fallback scan if hook didn't capture it yet
+    if not _resetRemote then
+        for _, d in ipairs(game:GetService("ReplicatedStorage"):GetDescendants()) do
+            if d:IsA("RemoteEvent") and d.Name:sub(1,3) == "RE/" then
+                _resetRemote = d; break
             end
-            return oldFire(self, ...)
+        end
+    end
+    if not _resetRemote then return end
+    local char     = LP.Character
+    local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+    -- already dead: single fire
+    if humanoid and humanoid.Health <= 0 then
+        pcall(function() _resetRemote:FireServer(_RESET_GUID, LP, "balloon") end)
+        return
+    end
+    local resetDetected = false
+    local resetConns    = {}
+    if humanoid then
+        table.insert(resetConns, humanoid.Died:Connect(function() resetDetected = true end))
+        table.insert(resetConns, humanoid:GetPropertyChangedSignal("Health"):Connect(function()
+            if humanoid.Health <= 0 then resetDetected = true end
         end))
+    end
+    if char then
+        table.insert(resetConns, char.AncestryChanged:Connect(function(_, parent)
+            if not parent then resetDetected = true end
+        end))
+    end
+    task.spawn(function()
+        for _ = 1, 10 do
+            if resetDetected then break end
+            pcall(function() _resetRemote:FireServer(_RESET_GUID, LP, "balloon") end)
+            task.wait(0.05)
+        end
+        for _, c in ipairs(resetConns) do pcall(function() c:Disconnect() end) end
     end)
-
-    local function _findRemote()
-        if IR_resetRemote then return IR_resetRemote end
-        -- primary: scan RE/ prefix (main game pattern)
-        for _, desc in ipairs(_RSvc:GetDescendants()) do
-            if desc:IsA("RemoteEvent") and desc.Name:sub(1,3) == "RE/" then
-                IR_resetRemote = desc; return IR_resetRemote
-            end
-        end
-        -- fallback: Tools/Cooldown sibling in Net (Limited Hub pattern)
-        local pkg = _RSvc:FindFirstChild("Packages", 2)
-        local net = pkg and pkg:FindFirstChild("Net", 2)
-        if net then
-            local ch = net:GetChildren()
-            for i = 1, #ch - 1 do
-                if ch[i] and ch[i+1] and string.find(ch[i].Name, "Tools/Cooldown") then
-                    IR_resetRemote = ch[i+1]; return IR_resetRemote
-                end
-            end
-        end
-        return nil
-    end
-
-    _instaReset = function()
-        local remote = _findRemote()
-        -- no remote found: kill via humanoid as last resort
-        if not remote then
-            local char = LP.Character
-            local hum  = char and char:FindFirstChildOfClass("Humanoid")
-            if hum then hum.Health = 0 end
-            return
-        end
-
-        -- 1. save all tools
-        local savedTools = {}
-        local char = LP.Character
-        local bp   = LP:FindFirstChild("Backpack")
-        if char then
-            local hum = char:FindFirstChildOfClass("Humanoid")
-            if hum then pcall(function() hum:UnequipTools() end) end
-            for _, t in ipairs(char:GetChildren()) do
-                if t:IsA("Tool") then table.insert(savedTools, t); t.Parent = nil end
-            end
-        end
-        if bp then
-            for _, t in ipairs(bp:GetChildren()) do
-                if t:IsA("Tool") then table.insert(savedTools, t); t.Parent = nil end
-            end
-        end
-
-        -- 2. Heartbeat loop: fire remote + force Character = nil at 60fps
-        LP.Character = nil
-        local sending  = true
-        local loopConn = nil
-        local throttle = 0
-        loopConn = RS.Heartbeat:Connect(function(dt)
-            if not sending then
-                if loopConn then loopConn:Disconnect(); loopConn = nil end
-                return
-            end
-            throttle = throttle + dt
-            if throttle >= 0.016 then
-                throttle = 0
-                pcall(function() remote:FireServer(IR_GUID, LP, "balloon") end)
-            end
-            if sending and LP.Character then LP.Character = nil end
-        end)
-
-        -- 3. On respawn: restore tools
-        local respawnConn
-        respawnConn = LP.CharacterAdded:Connect(function()
-            sending = false
-            if loopConn    then loopConn:Disconnect();    loopConn    = nil end
-            if respawnConn then respawnConn:Disconnect(); respawnConn = nil end
-            task.spawn(function()
-                local newBp = LP:WaitForChild("Backpack", 3)
-                if newBp then
-                    for _, t in ipairs(savedTools) do if t then t.Parent = newBp end end
-                end
-                savedTools = {}
-            end)
-        end)
-
-        -- 4. 4s timeout — never block indefinitely
-        task.delay(4, function()
-            sending = false
-            if loopConn    then loopConn:Disconnect();    loopConn    = nil end
-            if respawnConn then respawnConn:Disconnect(); respawnConn = nil end
-            local curBp = LP:FindFirstChild("Backpack")
-            if curBp and #savedTools > 0 then
-                for _, t in ipairs(savedTools) do if t then t.Parent = curBp end end
-                savedTools = {}
-            end
-        end)
-    end
 end
 
--- ═══════════════════════════════════════════════════════════════════════════
--- ANTI-KICK — Moon v16 full multi-layer system
--- Layer 1: __namecall hook on LP metatable (blocks :Kick())
--- Layer 2: character __newindex (blocks Character.Parent = nil)
--- Layer 3: Heartbeat position safety + velocity clamp + immortality
--- Layer 4: Block suspicious RemoteEvents (named "kick"/"ban"/etc.)
--- Layer 5: Workspace + MaxHealth cooperative loop
--- ═══════════════════════════════════════════════════════════════════════════
-local _akActive        = false
-local _akOldNamecall   = nil
-local _akMt            = nil
-local _akPosConn       = nil
-local _akDeathConn     = nil
-local _akHealthConn    = nil
-local _akMaxHpConn     = nil
-local _akLastSafe      = nil
-local _akRemoteConns   = {}
-local _akCharMtRef     = nil
-local _akCharOldNI     = nil
-local _akLoopActive    = false
+-- ── Anti-kick (source: MoonHub v16) ─────────────────────────────────────────
+local _akActive      = false
+local _akOldNamecall = nil
+local _akMt          = nil
+local _akPosConn     = nil
+local _akDeathConn   = nil
+local _akHealthConn  = nil
+local _akMaxHpConn   = nil
+local _akLastSafe    = nil
+local _akRemoteConns = {}
+local _akCharOldNI   = nil
+local _akCharMtRef   = nil
+local _akLoopActive  = false
 local _akCharAddedConn = nil
 local _akRespawnCount  = 0
 local _akLastRespawn   = 0
@@ -280,7 +189,6 @@ local function _akHookChar(char)
         end)
         _akCharOldNI = nil; _akCharMtRef = nil
     end
-    -- block Character.Parent = nil
     pcall(function()
         if not char then return end
         local cm = getrawmetatable(char); if not cm then return end
@@ -301,7 +209,7 @@ end
 
 local function startAntiKick()
     if _akActive then return end
-    -- 1. block :Kick() via LP metatable __namecall
+    -- 1. Block :Kick() via __namecall
     pcall(function()
         local mt = getrawmetatable(LP); if not mt then return end
         setreadonly(mt, false)
@@ -319,7 +227,7 @@ local function startAntiKick()
         setreadonly(mt, true)
         _akMt = mt
     end)
-    -- 2. per-character protections + respawn re-hook
+    -- 2. Per-character protections + respawn re-hook
     _akHookChar(LP.Character)
     _akCharAddedConn = LP.CharacterAdded:Connect(function(newChar)
         if not _akActive then return end
@@ -332,7 +240,7 @@ local function startAntiKick()
             _akHookChar(newChar)
         end)
     end)
-    -- 3. position safety + velocity clamp + immortality
+    -- 3. Position safety + velocity clamp + immortality
     if _akPosConn then pcall(function() _akPosConn:Disconnect() end) end
     _akPosConn = RS.Heartbeat:Connect(function()
         local c2 = LP.Character;                          if not c2 then return end
@@ -356,7 +264,7 @@ local function startAntiKick()
         if vel.Y < -50 then h2.Health = h2.MaxHealth end
         if h2.Health < h2.MaxHealth then h2.Health = h2.MaxHealth end
     end)
-    -- 4. block suspicious-named RemoteEvents
+    -- 4. Block suspicious RemoteEvents
     pcall(function()
         local RSvc = game:GetService("ReplicatedStorage")
         local function hookRemote(obj)
@@ -375,7 +283,7 @@ local function startAntiKick()
         local c = RSvc.DescendantAdded:Connect(function(d) pcall(hookRemote, d) end)
         _akRemoteConns[#_akRemoteConns+1] = c
     end)
-    -- 5. workspace parent + MaxHealth cooperative loop
+    -- 5. Workspace monitor + MaxHealth lock
     _akLoopActive = true
     task.spawn(function()
         while _akLoopActive do
@@ -385,7 +293,7 @@ local function startAntiKick()
                 local h3 = c3:FindFirstChildOfClass("Humanoid")
                 if h3 then
                     if h3.MaxHealth ~= 100 then h3.MaxHealth = 100 end
-                    if h3.Health    <= 0   then h3.Health = h3.MaxHealth end
+                    if h3.Health <= 0    then h3.Health = h3.MaxHealth end
                 end
             end)
             task.wait(0.1)
@@ -422,7 +330,6 @@ local function stopAntiKick()
     end
     _akActive = false
 end
-
 task.spawn(function() pcall(startAntiKick) end)
 reg(stopAntiKick)
 
@@ -679,19 +586,23 @@ end)
 
 -- 4: INSTA RESET
 local r4 = mkRow(4)
-mkBtn(r4, "INSTA RESET", _instaReset)
+mkBtn(r4, "INSTA RESET", instaReset)
 
 -- ── runtime loops ────────────────────────────────────────────────────────────
 
--- speed (proxy-move, Moon v16 logic)
-local hbS = RS.Stepped:Connect(function()
+-- speed (proxy-move, source: Ace Duels)
+local hbS = RS.RenderStepped:Connect(function()
     local char = LP.Character; if not char then return end
-    local hum  = char:FindFirstChildOfClass("Humanoid"); if not hum then return end
-    local ws   = hum.WalkSpeed
-    -- steal detection via WalkSpeed threshold
+    local hrp  = char:FindFirstChild("HumanoidRootPart")
+    local hum  = char:FindFirstChildOfClass("Humanoid")
+    if not hrp or not hum then cleanProxy(); return end
+
+    local ws = hum.WalkSpeed
     if not _stealing and ws < 20 then _stealing = true
     elseif _stealing and ws > 28  then _stealing = false end
-    if not speedOn then _proxyStop(); return end
+
+    if not speedOn then return end
+
     local eff
     if _stealing then
         eff = CFG.StealSpeed
@@ -700,11 +611,12 @@ local hbS = RS.Stepped:Connect(function()
     else
         eff = (ws < 25) and CFG.CarrySpeed or CFG.Speed
     end
+
     local md = hum.MoveDirection
     if md.Magnitude > 0.1 then
-        _proxyMove(Vector3.new(md.X, 0, md.Z).Unit, eff)
-    else
-        _proxyStop()
+        local _n  = 1 + (math.random() - 0.5) * 0.04
+        local _px = ensureProxy(hrp)
+        _px.AssemblyLinearVelocity = Vector3.new(md.X * eff * _n, hrp.AssemblyLinearVelocity.Y, md.Z * eff * _n)
     end
 end)
 reg(function() hbS:Disconnect() end)
@@ -744,7 +656,9 @@ reg(function() hbT:Disconnect() end)
 -- character events
 local function onChar(char)
     antiRagdoll(char)
-    _ensureProxy()
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+              or char:WaitForChild("HumanoidRootPart", 5)
+    if hrp then ensureProxy(hrp) end
 end
 if LP.Character then task.spawn(onChar, LP.Character) end
 local cc = LP.CharacterAdded:Connect(onChar)
