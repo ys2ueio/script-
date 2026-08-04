@@ -1214,8 +1214,7 @@ local function onAceAnnouncement(...)
     if captured == "" or _seen[captured] then return end
     _seen[captured] = true
     task.delay(1.25, function() _seen[captured] = nil end)
-    task.wait(0.0002) -- 0.2 ms post-scan
-    appendToBox(captured)
+    appendToBox(captured) -- instant, no yield
 end
 
 -- ================================================================
