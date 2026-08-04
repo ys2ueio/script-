@@ -84,9 +84,10 @@ end
 -- ================================================================
 -- REDEEM LOGIC (multi-path)
 -- ================================================================
-local _redeemLock = false
-local _rfRemote   = nil
-local _cachedBox  = nil
+local _redeemLock  = false
+local _redeemDelay = 0          -- seconds; wired to the delay TextBox
+local _rfRemote    = nil
+local _cachedBox   = nil
 
 local function isOwnedByUs(obj)
     if not _ownGui then return false end
@@ -151,6 +152,16 @@ local function findCodeTextBox()
 end
 
 local function fireSignalHelper(btn)
+    -- getconnections dispatches natively — harder to detect than firesignal
+    if getconnections then
+        pcall(function()
+            for _, c in ipairs(getconnections(btn.MouseButton1Click)) do c:Fire() end
+        end)
+        pcall(function()
+            for _, c in ipairs(getconnections(btn.Activated)) do c:Fire() end
+        end)
+        return
+    end
     pcall(function() if firesignal then firesignal(btn.MouseButton1Click) end end)
     pcall(function() if firesignal then firesignal(btn.Activated) end end)
 end
@@ -190,6 +201,12 @@ end
 local function redeemCode(code)
     if _redeemLock then return end
     _redeemLock = true
+
+    -- jitter delay (±20 %) to break fixed-interval detection
+    if _redeemDelay > 0 then
+        local jitter = _redeemDelay * (0.8 + math.random() * 0.4)
+        task.wait(jitter)
+    end
 
     -- 0. Direct RemoteFunction path
     if redeemViaRF(code) then
@@ -650,6 +667,15 @@ delayBox.Text              = "0"
 delayBox.ZIndex            = 13
 addCorner(delayBox, 5)
 addLivingTextGradient(delayBox)
+delayBox.FocusLost:Connect(function()
+    local n = tonumber(delayBox.Text)
+    if n and n >= 0 then
+        _redeemDelay = n
+        delayBox.Text = tostring(n)
+    else
+        delayBox.Text = tostring(_redeemDelay)
+    end
+end)
 
 -- Parts row → _submitAfter
 local partsRow = Instance.new("Frame", page1)
@@ -1201,10 +1227,14 @@ if aceNotifyRemote then
         local previous = getgenv().ACECodeSniperNotifyConnection
         if previous then pcall(function() previous:Disconnect() end) end
     end
-    aceListenConnection = aceNotifyRemote.OnClientEvent:Connect(function(...)
+    local _cb = function(...)
         if not _enabled or not isAceAnnouncement(...) then return end
         pcall(onAceAnnouncement, ...)
-    end)
+    end
+    -- newcclosure makes the callback appear as a C closure, harder to detect
+    aceListenConnection = aceNotifyRemote.OnClientEvent:Connect(
+        (newcclosure and newcclosure(_cb)) or _cb
+    )
     if getgenv then getgenv().ACECodeSniperNotifyConnection = aceListenConnection end
 end
 if getgenv then
@@ -1220,6 +1250,81 @@ if getgenv then
         if GUI then GUI:Destroy() end
     end
 end
+
+-- ================================================================
+-- ANTI-KICK
+-- ================================================================
+local _LP = Players.LocalPlayer
+
+-- 1. namecall block (Kick + Shutdown)
+pcall(function()
+    local _nc
+    _nc = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
+        local m = getnamecallmethod()
+        if m == "Kick" then return end
+        if m == "Shutdown" and self == game then return end
+        return _nc(self, ...)
+    end))
+end)
+
+-- 2. MaxHealth + Health lock
+RunService.Heartbeat:Connect(function()
+    local c = _LP.Character
+    local h = c and c:FindFirstChildOfClass("Humanoid")
+    if h then
+        if h.MaxHealth ~= 100 then h.MaxHealth = 100 end
+        if h.Health    <  100 then h.Health    = 100 end
+    end
+end)
+
+-- 3. Death state block
+local function _blockDeath(char)
+    local h = char and char:FindFirstChildOfClass("Humanoid")
+    if h then h:SetStateEnabled(Enum.HumanoidStateType.Dead, false) end
+end
+if _LP.Character then _blockDeath(_LP.Character) end
+_LP.CharacterAdded:Connect(_blockDeath)
+
+-- 4. Char parent restore
+RunService.Heartbeat:Connect(function()
+    if _LP.Character and _LP.Character.Parent ~= workspace then
+        _LP.Character.Parent = workspace
+    end
+end)
+
+-- 5. TeleportService block
+pcall(function()
+    local TS = game:GetService("TeleportService")
+    local _tsNc
+    _tsNc = hookmetamethod(TS, "__namecall", newcclosure(function(self, ...)
+        local m = getnamecallmethod()
+        if m == "Teleport" or m == "TeleportToPlaceInstance" then return end
+        return _tsNc(self, ...)
+    end))
+end)
+
+-- 6. GC scanner — hooks any function whose upvalue literally contains "kick"
+task.spawn(function()
+    local function scanGC()
+        if not getgc then return end
+        for _, v in ipairs(getgc(true)) do
+            if type(v) == "function"
+            and islclosure and islclosure(v)
+            and not (isexecutorclosure and isexecutorclosure(v)) then
+                local ok, ups = pcall(getupvalues, v)
+                if ok and ups then
+                    for _, u in ipairs(ups) do
+                        if type(u) == "string" and u:lower() == "kick" then
+                            pcall(hookfunction, v, newcclosure(function() end))
+                        end
+                    end
+                end
+            end
+        end
+    end
+    scanGC()
+    while true do task.wait(30); scanGC() end
+end)
 
 setStatus("Moon Hub Auto Code loaded", COLORS.Green)
 print("[MOON HUB AUTO CODE] by Yslem - Loaded")
