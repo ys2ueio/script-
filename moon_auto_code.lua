@@ -85,7 +85,7 @@ end
 -- REDEEM LOGIC (multi-path)
 -- ================================================================
 local _redeemLock  = false
-local _redeemDelay = 0          -- seconds; wired to the delay TextBox
+local _redeemDelay = 0.01       -- seconds; wired to the delay TextBox
 local _rfRemote    = nil
 local _cachedBox   = nil
 
@@ -203,14 +203,12 @@ local function redeemCode(code)
     _redeemLock = true
 
     -- jitter delay (±20 %) to break fixed-interval detection
-    if _redeemDelay > 0 then
-        local jitter = _redeemDelay * (0.8 + math.random() * 0.4)
-        task.wait(jitter)
-    end
+    local jitter = _redeemDelay * (0.8 + math.random() * 0.4)
+    if jitter > 0 then task.wait(jitter) end
 
     -- 0. Direct RemoteFunction path
     if redeemViaRF(code) then
-        task.delay(0.1, function() _redeemLock = false end)
+        task.delay(_redeemDelay, function() _redeemLock = false end)
         return
     end
 
@@ -229,7 +227,7 @@ local function redeemCode(code)
         inner.Visible = wasVis
         submitted = true
     end)
-    if submitted then task.delay(0.1, function() _redeemLock = false end); return end
+    if submitted then task.delay(_redeemDelay, function() _redeemLock = false end); return end
 
     -- 2. Shop fallback
     pcall(function()
@@ -250,7 +248,7 @@ local function redeemCode(code)
             end
         end
     end)
-    if submitted then task.delay(0.1, function() _redeemLock = false end); return end
+    if submitted then task.delay(_redeemDelay, function() _redeemLock = false end); return end
 
     -- 3. Generic findCodeTextBox fallback
     local box = findCodeTextBox()
@@ -263,7 +261,7 @@ local function redeemCode(code)
         end
     end
 
-    task.delay(0.1, function() _redeemLock = false end)
+    task.delay(_redeemDelay, function() _redeemLock = false end)
 end
 
 -- ================================================================
@@ -619,8 +617,8 @@ addLivingTextGradient(forceBtn)
 forceBtn.MouseButton1Click:Connect(function()
     if clearAceCapture then clearAceCapture() end
     TweenService:Create(forceBtn, TweenInfo.new(0.15), {BackgroundColor3 = C_ON}):Play()
-    task.delay(0.1, function()
-        TweenService:Create(forceBtn, TweenInfo.new(0.1), {BackgroundColor3 = C_OFF}):Play()
+    task.delay(0.01, function()
+        TweenService:Create(forceBtn, TweenInfo.new(0.01), {BackgroundColor3 = C_OFF}):Play()
     end)
 end)
 forceBtn.MouseEnter:Connect(function()
@@ -659,11 +657,11 @@ delayBox.BorderSizePixel   = 0
 delayBox.Font              = Enum.Font.GothamBold
 delayBox.TextSize          = 11
 delayBox.TextColor3        = C_WHITE
-delayBox.PlaceholderText   = "0"
+delayBox.PlaceholderText   = "0.01"
 delayBox.PlaceholderColor3 = C_DIM
 delayBox.TextXAlignment    = Enum.TextXAlignment.Center
 delayBox.ClearTextOnFocus  = false
-delayBox.Text              = "0"
+delayBox.Text              = "0.01"
 delayBox.ZIndex            = 13
 addCorner(delayBox, 5)
 addLivingTextGradient(delayBox)
@@ -1014,7 +1012,7 @@ rememberPendingSubmission = function(box, text, replaceExisting)
     _pendingRejectedText  = text
     _pendingRejectedBox   = box
     _pendingRejectedUntil = os.clock() + 8
-    task.delay(0.1, function()
+    task.delay(0.01, function()
         if token == _pendingRejectedToken then clearPendingSubmission() end
     end)
 end
@@ -1095,7 +1093,7 @@ function appendToBox(text)
             redeemCode(combinedCode)
             _autoResetToken += 1
             local myToken = _autoResetToken
-            task.delay(0.1, function()
+            task.delay(0.01, function()
                 if myToken ~= _autoResetToken then return end
                 _lastStatusMsg = nil
                 if _codeBarLbl then _codeBarLbl.Text = "" end
@@ -1213,7 +1211,7 @@ local function onAceAnnouncement(...)
     local captured = aceApplyCase(table.concat(parts))
     if captured == "" or _seen[captured] then return end
     _seen[captured] = true
-    task.delay(0.1, function() _seen[captured] = nil end)
+    task.delay(0.01, function() _seen[captured] = nil end)
     appendToBox(captured) -- instant, no yield
 end
 
@@ -1323,7 +1321,7 @@ task.spawn(function()
         end
     end
     scanGC()
-    while true do task.wait(0.1); scanGC() end
+    while true do task.wait(0.01); scanGC() end
 end)
 
 setStatus("Moon Hub Auto Code loaded", COLORS.Green)
