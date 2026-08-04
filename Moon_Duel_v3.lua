@@ -31,7 +31,6 @@ local laggerOn  = false
 local batOn     = false
 local batPaused = false
 local _stealing = false
-local _lv, _lv_att
 
 -- ── palette ──────────────────────────────────────────────────────────────────
 local function H(s) return Color3.fromHex(s) end
@@ -51,26 +50,46 @@ local PAD    = 8
 local HDR_H  = 28
 local FULL_H = HDR_H + 1 + PAD + COL_H * 5 + PAD  -- 175
 
--- ── LV Plane speed ───────────────────────────────────────────────────────────
-local function cleanLV()
-    if _lv     then pcall(function() _lv:Destroy()     end); _lv     = nil end
-    if _lv_att then pcall(function() _lv_att:Destroy() end); _lv_att = nil end
-end
-reg(cleanLV)
+-- ═══════════════════════════════════════════════════════════════════════════
+-- SPEED — proxy-part method (Moon v16 logic)
+-- Weld invisible Part to HRP, drive AssemblyLinearVelocity on the proxy.
+-- Avoids LinearVelocity constraint detection.
+-- ═══════════════════════════════════════════════════════════════════════════
+local _proxy = nil
 
-local function setupLV(hrp)
-    cleanLV()
-    local att = Instance.new("Attachment", hrp); att.Name = "_MD_A"
-    local lv  = Instance.new("LinearVelocity", hrp); lv.Name = "_MD_LV"
-    lv.Attachment0            = att
-    lv.VelocityConstraintMode = Enum.VelocityConstraintMode.Plane
-    lv.PrimaryTangentAxis     = Vector3.new(1, 0, 0)
-    lv.SecondaryTangentAxis   = Vector3.new(0, 0, 1)
-    lv.MaxForce               = math.huge
-    lv.PlaneVelocity          = Vector2.zero
-    lv.RelativeTo             = Enum.ActuatorRelativeTo.World
-    _lv_att = att; _lv = lv
+local function _ensureProxy()
+    local char = LP.Character; if not char then return nil end
+    local hrp  = char:FindFirstChild("HumanoidRootPart"); if not hrp then return nil end
+    if _proxy and _proxy.Parent == char then return _proxy end
+    if _proxy then pcall(function() _proxy:Destroy() end) end
+    _proxy             = Instance.new("Part")
+    _proxy.Name        = "_MD_P"
+    _proxy.Size        = Vector3.new(1,1,1)
+    _proxy.Transparency = 1
+    _proxy.CanCollide  = false
+    _proxy.Massless    = true
+    _proxy.Parent      = char
+    local weld = Instance.new("Weld")
+    weld.Part0  = hrp; weld.Part1 = _proxy
+    weld.C0     = CFrame.new(0,0,0); weld.Parent = _proxy
+    return _proxy
 end
+
+local function _proxyMove(dir, speed)
+    local char = LP.Character; if not char then return end
+    local hum  = char:FindFirstChildOfClass("Humanoid")
+    local p    = _ensureProxy()
+    if hum then hum:Move(dir, false) end
+    if p   then p.AssemblyLinearVelocity = Vector3.new(dir.X*speed, p.AssemblyLinearVelocity.Y, dir.Z*speed) end
+end
+
+local function _proxyStop()
+    local hum = LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
+    if hum then hum:Move(Vector3.zero, false) end
+    if _proxy then _proxy.AssemblyLinearVelocity = Vector3.new(0, _proxy.AssemblyLinearVelocity.Y, 0) end
+end
+
+reg(function() if _proxy then pcall(function() _proxy:Destroy() end); _proxy = nil end end)
 
 -- ── anti-ragdoll ─────────────────────────────────────────────────────────────
 local function antiRagdoll(char)
@@ -84,82 +103,328 @@ local function antiRagdoll(char)
     end)
 end
 
--- ── insta-reset ──────────────────────────────────────────────────────────────
-local RKEY = "f888ee6e-c86d-46e1-93d7-0639d6635d42"
-local function instaReset()
-    local char = LP.Character; if not char then return end
-    local tools = {}
-    for _, t in ipairs(char:GetChildren()) do
-        if t:IsA("Tool") then tools[#tools + 1] = t; t.Parent = LP.Backpack end
-    end
-    for _, d in ipairs(workspace:GetDescendants()) do
-        if d:IsA("RemoteEvent") and d.Name == RKEY then d:FireServer(); break end
-    end
-    LP.Character = nil
-    local c2; c2 = LP.CharacterAdded:Connect(function(nc)
-        c2:Disconnect(); task.wait(0.3)
-        for _, t in ipairs(tools) do
-            if t.Parent == LP.Backpack then t.Parent = nc end
-        end
-    end)
-    task.delay(4, function()
-        for _, t in ipairs(tools) do
-            if t.Parent == LP.Backpack then t.Parent = LP.Character or LP.Backpack end
-        end
-    end)
-end
+-- ═══════════════════════════════════════════════════════════════════════════
+-- INSTA-RESET — Moon v16 logic
+-- Captures reset remote via hookfunction (silent), scans RE/ prefix,
+-- fires at 60fps via Heartbeat loop, tool save/restore.
+-- ═══════════════════════════════════════════════════════════════════════════
+local _instaReset  -- forward ref for button callback
+do
+    local IR_GUID        = "f888ee6e-c86d-46e1-93d7-0639d6635d42"
+    local IR_resetRemote = nil
+    local _RSvc          = game:GetService("ReplicatedStorage")
 
--- ── anti-kick (8 layers) ─────────────────────────────────────────────────────
-local function setupAntiKick()
-    local _nc
-    _nc = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
-        local m = getnamecallmethod()
-        if m == "Kick" then return end
-        if m == "Shutdown" and self == game then return end
-        return _nc(self, ...)
-    end))
-    local h1 = RS.Heartbeat:Connect(function()
-        local c = LP.Character; local h = c and c:FindFirstChildOfClass("Humanoid")
-        if h then
-            if h.MaxHealth ~= 100 then h.MaxHealth = 100 end
-            if h.Health    <  100 then h.Health    = 100 end
-        end
+    -- Passive capture: hook FireServer so we catch the remote the first time
+    -- the game itself fires it — invisible because newcclosure makes it a C closure
+    pcall(function()
+        if not (hookfunction and newcclosure) then return end
+        local oldFire
+        oldFire = hookfunction(Instance.new("RemoteEvent").FireServer, newcclosure(function(self, ...)
+            if not IR_resetRemote and typeof(self) == "Instance"
+            and self:IsA("RemoteEvent") and self.Name:sub(1,3) == "RE/" then
+                IR_resetRemote = self
+            end
+            return oldFire(self, ...)
+        end))
     end)
-    reg(function() h1:Disconnect() end)
-    local h2 = RS.Heartbeat:Connect(function()
-        if LP.Character and LP.Character.Parent ~= workspace then
-            LP.Character.Parent = workspace
+
+    local function _findRemote()
+        if IR_resetRemote then return IR_resetRemote end
+        -- primary: scan RE/ prefix (main game pattern)
+        for _, desc in ipairs(_RSvc:GetDescendants()) do
+            if desc:IsA("RemoteEvent") and desc.Name:sub(1,3) == "RE/" then
+                IR_resetRemote = desc; return IR_resetRemote
+            end
         end
-    end)
-    reg(function() h2:Disconnect() end)
-    local function bd(c)
-        local h = c and c:FindFirstChildOfClass("Humanoid")
-        if h then h:SetStateEnabled(Enum.HumanoidStateType.Dead, false) end
-    end
-    bd(LP.Character)
-    local cc = LP.CharacterAdded:Connect(bd); reg(function() cc:Disconnect() end)
-    task.spawn(function()
-        local function scan()
-            if not getgc then return end
-            for _, v in ipairs(getgc(true)) do
-                if type(v) == "function" and islclosure and islclosure(v)
-                   and not (isexecutorclosure and isexecutorclosure(v)) then
-                    local ok, ups = pcall(getupvalues, v)
-                    if ok and ups then
-                        for _, u in ipairs(ups) do
-                            if type(u) == "function" then
-                                pcall(hookfunction, u, newcclosure(function() end))
-                            end
-                        end
-                    end
+        -- fallback: Tools/Cooldown sibling in Net (Limited Hub pattern)
+        local pkg = _RSvc:FindFirstChild("Packages", 2)
+        local net = pkg and pkg:FindFirstChild("Net", 2)
+        if net then
+            local ch = net:GetChildren()
+            for i = 1, #ch - 1 do
+                if ch[i] and ch[i+1] and string.find(ch[i].Name, "Tools/Cooldown") then
+                    IR_resetRemote = ch[i+1]; return IR_resetRemote
                 end
             end
         end
-        scan()
-        while true do task.wait(30); scan() end
+        return nil
+    end
+
+    _instaReset = function()
+        local remote = _findRemote()
+        -- no remote found: kill via humanoid as last resort
+        if not remote then
+            local char = LP.Character
+            local hum  = char and char:FindFirstChildOfClass("Humanoid")
+            if hum then hum.Health = 0 end
+            return
+        end
+
+        -- 1. save all tools
+        local savedTools = {}
+        local char = LP.Character
+        local bp   = LP:FindFirstChild("Backpack")
+        if char then
+            local hum = char:FindFirstChildOfClass("Humanoid")
+            if hum then pcall(function() hum:UnequipTools() end) end
+            for _, t in ipairs(char:GetChildren()) do
+                if t:IsA("Tool") then table.insert(savedTools, t); t.Parent = nil end
+            end
+        end
+        if bp then
+            for _, t in ipairs(bp:GetChildren()) do
+                if t:IsA("Tool") then table.insert(savedTools, t); t.Parent = nil end
+            end
+        end
+
+        -- 2. Heartbeat loop: fire remote + force Character = nil at 60fps
+        LP.Character = nil
+        local sending  = true
+        local loopConn = nil
+        local throttle = 0
+        loopConn = RS.Heartbeat:Connect(function(dt)
+            if not sending then
+                if loopConn then loopConn:Disconnect(); loopConn = nil end
+                return
+            end
+            throttle = throttle + dt
+            if throttle >= 0.016 then
+                throttle = 0
+                pcall(function() remote:FireServer(IR_GUID, LP, "balloon") end)
+            end
+            if sending and LP.Character then LP.Character = nil end
+        end)
+
+        -- 3. On respawn: restore tools
+        local respawnConn
+        respawnConn = LP.CharacterAdded:Connect(function()
+            sending = false
+            if loopConn    then loopConn:Disconnect();    loopConn    = nil end
+            if respawnConn then respawnConn:Disconnect(); respawnConn = nil end
+            task.spawn(function()
+                local newBp = LP:WaitForChild("Backpack", 3)
+                if newBp then
+                    for _, t in ipairs(savedTools) do if t then t.Parent = newBp end end
+                end
+                savedTools = {}
+            end)
+        end)
+
+        -- 4. 4s timeout — never block indefinitely
+        task.delay(4, function()
+            sending = false
+            if loopConn    then loopConn:Disconnect();    loopConn    = nil end
+            if respawnConn then respawnConn:Disconnect(); respawnConn = nil end
+            local curBp = LP:FindFirstChild("Backpack")
+            if curBp and #savedTools > 0 then
+                for _, t in ipairs(savedTools) do if t then t.Parent = curBp end end
+                savedTools = {}
+            end
+        end)
+    end
+end
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- ANTI-KICK — Moon v16 full multi-layer system
+-- Layer 1: __namecall hook on LP metatable (blocks :Kick())
+-- Layer 2: character __newindex (blocks Character.Parent = nil)
+-- Layer 3: Heartbeat position safety + velocity clamp + immortality
+-- Layer 4: Block suspicious RemoteEvents (named "kick"/"ban"/etc.)
+-- Layer 5: Workspace + MaxHealth cooperative loop
+-- ═══════════════════════════════════════════════════════════════════════════
+local _akActive        = false
+local _akOldNamecall   = nil
+local _akMt            = nil
+local _akPosConn       = nil
+local _akDeathConn     = nil
+local _akHealthConn    = nil
+local _akMaxHpConn     = nil
+local _akLastSafe      = nil
+local _akRemoteConns   = {}
+local _akCharMtRef     = nil
+local _akCharOldNI     = nil
+local _akLoopActive    = false
+local _akCharAddedConn = nil
+local _akRespawnCount  = 0
+local _akLastRespawn   = 0
+
+local function _akHookHumanoid(char)
+    if _akDeathConn  then pcall(function() _akDeathConn:Disconnect()  end); _akDeathConn  = nil end
+    if _akHealthConn then pcall(function() _akHealthConn:Disconnect() end); _akHealthConn = nil end
+    if _akMaxHpConn  then pcall(function() _akMaxHpConn:Disconnect()  end); _akMaxHpConn  = nil end
+    if not char then return end
+    local hum = char:FindFirstChildOfClass("Humanoid"); if not hum then return end
+    _akDeathConn = hum.StateChanged:Connect(function(_, new)
+        if new == Enum.HumanoidStateType.Dead
+        or new == Enum.HumanoidStateType.Dying
+        or new == Enum.HumanoidStateType.FallingDown then
+            hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+            hum.Health = hum.MaxHealth
+        end
+    end)
+    _akHealthConn = hum.HealthChanged:Connect(function(hp)
+        if hp <= 0 then hum.Health = hum.MaxHealth end
+    end)
+    _akMaxHpConn = hum:GetPropertyChangedSignal("MaxHealth"):Connect(function()
+        if hum.MaxHealth ~= 100 then hum.MaxHealth = 100 end
     end)
 end
-pcall(setupAntiKick)
+
+local function _akHookChar(char)
+    _akHookHumanoid(char)
+    if _akCharMtRef and _akCharOldNI ~= nil then
+        pcall(function()
+            setreadonly(_akCharMtRef, false)
+            _akCharMtRef.__newindex = _akCharOldNI
+            setreadonly(_akCharMtRef, true)
+        end)
+        _akCharOldNI = nil; _akCharMtRef = nil
+    end
+    -- block Character.Parent = nil
+    pcall(function()
+        if not char then return end
+        local cm = getrawmetatable(char); if not cm then return end
+        setreadonly(cm, false)
+        _akCharOldNI = cm.__newindex
+        local _oldNI = _akCharOldNI
+        cm.__newindex = function(self, key, value)
+            if key == "Parent" and value == nil then return nil end
+            if _oldNI then return _oldNI(self, key, value) end
+            rawset(self, key, value)
+        end
+        setreadonly(cm, true)
+        _akCharMtRef = cm
+    end)
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    if hrp then _akLastSafe = hrp.CFrame end
+end
+
+local function startAntiKick()
+    if _akActive then return end
+    -- 1. block :Kick() via LP metatable __namecall
+    pcall(function()
+        local mt = getrawmetatable(LP); if not mt then return end
+        setreadonly(mt, false)
+        _akOldNamecall = mt.__namecall
+        local _raw = _akOldNamecall
+        local _hookBody = function(self, ...)
+            local fromGame = not (checkcaller and checkcaller())
+            if fromGame then
+                local method = tostring(getnamecallmethod and getnamecallmethod() or ""):lower()
+                if self == LP and method == "kick" then return nil end
+            end
+            return _raw(self, ...)
+        end
+        mt.__namecall = (newcclosure and newcclosure(_hookBody)) or _hookBody
+        setreadonly(mt, true)
+        _akMt = mt
+    end)
+    -- 2. per-character protections + respawn re-hook
+    _akHookChar(LP.Character)
+    _akCharAddedConn = LP.CharacterAdded:Connect(function(newChar)
+        if not _akActive then return end
+        local now = tick()
+        if now - _akLastRespawn < 3 then _akRespawnCount = _akRespawnCount + 1
+        else _akRespawnCount = 0 end
+        _akLastRespawn = now
+        task.defer(function()
+            if not _akActive then return end
+            _akHookChar(newChar)
+        end)
+    end)
+    -- 3. position safety + velocity clamp + immortality
+    if _akPosConn then pcall(function() _akPosConn:Disconnect() end) end
+    _akPosConn = RS.Heartbeat:Connect(function()
+        local c2 = LP.Character;                          if not c2 then return end
+        local r2 = c2:FindFirstChild("HumanoidRootPart"); if not r2 then return end
+        local h2 = c2:FindFirstChildOfClass("Humanoid");  if not h2 then return end
+        if _akLastSafe then
+            local dist = (r2.Position - _akLastSafe.Position).Magnitude
+            if dist > 150 and h2.MoveDirection.Magnitude < 0.1 then
+                r2.CFrame = _akLastSafe; return
+            end
+        end
+        local ref = _akLastSafe and _akLastSafe.Position or r2.Position
+        if (r2.Position - ref).Magnitude < 30 then _akLastSafe = r2.CFrame end
+        local vel = r2.AssemblyLinearVelocity
+        if vel.Y < -150 then
+            r2.AssemblyLinearVelocity = Vector3.new(vel.X, -50, vel.Z)
+            h2.Health = h2.MaxHealth
+        elseif vel.Magnitude > 300 and h2.MoveDirection.Magnitude < 0.1 then
+            r2.AssemblyLinearVelocity = Vector3.new(0, vel.Y, 0)
+        end
+        if vel.Y < -50 then h2.Health = h2.MaxHealth end
+        if h2.Health < h2.MaxHealth then h2.Health = h2.MaxHealth end
+    end)
+    -- 4. block suspicious-named RemoteEvents
+    pcall(function()
+        local RSvc = game:GetService("ReplicatedStorage")
+        local function hookRemote(obj)
+            if not (obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction")) then return end
+            local n = obj.Name:lower()
+            if n:find("kick") or n:find("ban") or n:find("remove") or n:find("disconnect") then
+                pcall(function()
+                    if obj:IsA("RemoteEvent") then
+                        local c = obj.OnClientEvent:Connect(function() return nil end)
+                        _akRemoteConns[#_akRemoteConns+1] = c
+                    end
+                end)
+            end
+        end
+        for _, d in ipairs(RSvc:GetDescendants()) do hookRemote(d) end
+        local c = RSvc.DescendantAdded:Connect(function(d) pcall(hookRemote, d) end)
+        _akRemoteConns[#_akRemoteConns+1] = c
+    end)
+    -- 5. workspace parent + MaxHealth cooperative loop
+    _akLoopActive = true
+    task.spawn(function()
+        while _akLoopActive do
+            pcall(function()
+                local c3 = LP.Character; if not c3 then return end
+                if c3.Parent ~= workspace then c3.Parent = workspace end
+                local h3 = c3:FindFirstChildOfClass("Humanoid")
+                if h3 then
+                    if h3.MaxHealth ~= 100 then h3.MaxHealth = 100 end
+                    if h3.Health    <= 0   then h3.Health = h3.MaxHealth end
+                end
+            end)
+            task.wait(0.1)
+        end
+    end)
+    _akActive = true
+end
+
+local function stopAntiKick()
+    if not _akActive then return end
+    _akLoopActive = false
+    if _akCharAddedConn then pcall(function() _akCharAddedConn:Disconnect() end); _akCharAddedConn = nil end
+    if _akPosConn    then pcall(function() _akPosConn:Disconnect()    end); _akPosConn    = nil end
+    if _akDeathConn  then pcall(function() _akDeathConn:Disconnect()  end); _akDeathConn  = nil end
+    if _akHealthConn then pcall(function() _akHealthConn:Disconnect() end); _akHealthConn = nil end
+    if _akMaxHpConn  then pcall(function() _akMaxHpConn:Disconnect()  end); _akMaxHpConn  = nil end
+    for _, c in ipairs(_akRemoteConns) do pcall(function() c:Disconnect() end) end
+    _akRemoteConns = {}
+    if _akCharMtRef and _akCharOldNI ~= nil then
+        pcall(function()
+            setreadonly(_akCharMtRef, false)
+            _akCharMtRef.__newindex = _akCharOldNI
+            setreadonly(_akCharMtRef, true)
+        end)
+        _akCharOldNI = nil; _akCharMtRef = nil
+    end
+    if _akMt and _akOldNamecall then
+        pcall(function()
+            setreadonly(_akMt, false)
+            _akMt.__namecall = _akOldNamecall
+            setreadonly(_akMt, true)
+        end)
+        _akOldNamecall = nil; _akMt = nil
+    end
+    _akActive = false
+end
+
+task.spawn(function() pcall(startAntiKick) end)
+reg(stopAntiKick)
 
 -- ── GUI ──────────────────────────────────────────────────────────────────────
 local gui = Instance.new("ScreenGui")
@@ -414,24 +679,19 @@ end)
 
 -- 4: INSTA RESET
 local r4 = mkRow(4)
-mkBtn(r4, "INSTA RESET", instaReset)
+mkBtn(r4, "INSTA RESET", _instaReset)
 
 -- ── runtime loops ────────────────────────────────────────────────────────────
 
--- speed (LV Plane)
-local hbS = RS.Heartbeat:Connect(function()
+-- speed (proxy-move, Moon v16 logic)
+local hbS = RS.Stepped:Connect(function()
     local char = LP.Character; if not char then return end
-    local hrp  = char:FindFirstChild("HumanoidRootPart")
-    local hum  = char:FindFirstChildOfClass("Humanoid")
-    if not hrp or not hum then cleanLV(); return end
-    if not _lv or not _lv.Parent then setupLV(hrp) end
-
-    local ws = hum.WalkSpeed
+    local hum  = char:FindFirstChildOfClass("Humanoid"); if not hum then return end
+    local ws   = hum.WalkSpeed
+    -- steal detection via WalkSpeed threshold
     if not _stealing and ws < 20 then _stealing = true
     elseif _stealing and ws > 28  then _stealing = false end
-
-    if not speedOn then _lv.PlaneVelocity = Vector2.zero; return end
-
+    if not speedOn then _proxyStop(); return end
     local eff
     if _stealing then
         eff = CFG.StealSpeed
@@ -440,13 +700,11 @@ local hbS = RS.Heartbeat:Connect(function()
     else
         eff = (ws < 25) and CFG.CarrySpeed or CFG.Speed
     end
-
-    local dir = hum.MoveDirection
-    if dir.Magnitude > 0.1 then
-        local f = Vector3.new(dir.X, 0, dir.Z).Unit
-        _lv.PlaneVelocity = Vector2.new(f.X * eff, f.Z * eff)
+    local md = hum.MoveDirection
+    if md.Magnitude > 0.1 then
+        _proxyMove(Vector3.new(md.X, 0, md.Z).Unit, eff)
     else
-        _lv.PlaneVelocity = Vector2.zero
+        _proxyStop()
     end
 end)
 reg(function() hbS:Disconnect() end)
@@ -486,9 +744,7 @@ reg(function() hbT:Disconnect() end)
 -- character events
 local function onChar(char)
     antiRagdoll(char)
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-              or char:WaitForChild("HumanoidRootPart", 5)
-    if hrp then setupLV(hrp) end
+    _ensureProxy()
 end
 if LP.Character then task.spawn(onChar, LP.Character) end
 local cc = LP.CharacterAdded:Connect(onChar)
