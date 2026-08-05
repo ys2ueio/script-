@@ -2531,6 +2531,27 @@ local _activeDrag = nil
 local _MH_positions = {}         -- registry of draggable frames keyed by posId
 _GH.positions = _MH_positions
 
+-- Keeps a dragged position's absolute top-left corner inside the viewport —
+-- without this, dragging any window (the moon icon included) far enough
+-- toward an edge could push it fully off-screen with no way to grab it
+-- back. Only ever adjusts the Offset component, at whatever Scale the
+-- frame already had — same convention the drag delta above already uses.
+local function _clampToScreen(frame, pos)
+	local cam = workspace.CurrentCamera
+	if not cam then return pos end
+	local vp = cam.ViewportSize
+	if vp.X <= 0 or vp.Y <= 0 then return pos end
+	local absSize = frame.AbsoluteSize
+	local anchor  = frame.AnchorPoint
+	local topLeftX = pos.X.Scale * vp.X + pos.X.Offset - anchor.X * absSize.X
+	local topLeftY = pos.Y.Scale * vp.Y + pos.Y.Offset - anchor.Y * absSize.Y
+	local clampedX = math.clamp(topLeftX, 0, math.max(0, vp.X - absSize.X))
+	local clampedY = math.clamp(topLeftY, 0, math.max(0, vp.Y - absSize.Y))
+	local offX = clampedX - pos.X.Scale * vp.X + anchor.X * absSize.X
+	local offY = clampedY - pos.Y.Scale * vp.Y + anchor.Y * absSize.Y
+	return UDim2.new(pos.X.Scale, offX, pos.Y.Scale, offY)
+end
+
 UIS.InputChanged:Connect(function(inp)
 	if not _activeDrag then return end
 	if inp ~= _activeDrag.dragInput then return end
@@ -2538,7 +2559,8 @@ UIS.InputChanged:Connect(function(inp)
 	local dx = inp.Position.X - _activeDrag.dragStart.X
 	local dy = inp.Position.Y - _activeDrag.dragStart.Y
 	local sp = _activeDrag.startPos
-	_activeDrag.frame.Position = UDim2.new(sp.X.Scale, sp.X.Offset+dx, sp.Y.Scale, sp.Y.Offset+dy)
+	local newPos = UDim2.new(sp.X.Scale, sp.X.Offset+dx, sp.Y.Scale, sp.Y.Offset+dy)
+	_activeDrag.frame.Position = _clampToScreen(_activeDrag.frame, newPos)
 end)
 
 local function makeDraggable(frame, handle, posId)
@@ -3023,7 +3045,7 @@ local miniBtn = Instance.new("TextButton", gui)
 -- the 0.78 vertical offset clears the dock zone from the first report
 -- (roughly the upper-middle third) without dropping into the bottom
 -- money-counter row. Still fully draggable afterward either way.
-local MINI_BTN_DEFAULT_POS = UDim2.new(0,20,0.78,-28)
+local MINI_BTN_DEFAULT_POS = UDim2.new(0,20,0.72,-28)
 miniBtn.Size = UDim2.new(0,56,0,56); miniBtn.Position = MINI_BTN_DEFAULT_POS
 miniBtn.BackgroundTransparency = 1; miniBtn.Text = ""; miniBtn.AutoButtonColor = false
 miniBtn.Visible = false; miniBtn.ZIndex = 50
