@@ -427,11 +427,32 @@ destroyAllMoonHub()
 -- =================================================================
 
 -- Movement engine — Ace proxy-Part method (AssemblyLinearVelocity on a
--- Massless Part welded to HumanoidRootPart). Identical to Ace_duels_modified.
-local _aceProxy     = nil
-local _aceProxyWeld = nil
+-- Massless Part welded to HumanoidRootPart). Identical to Ace_duels_modified,
+-- PLUS network-ownership claiming to cut down server rollback/rubber-band:
+-- without it the server stays physics-authoritative for the character and
+-- periodically snaps it back to its own simulated position, which is what
+-- reads as "rollback" even though the proxy is writing the right velocity
+-- every frame. Claiming ownership makes the CLIENT authoritative instead.
+local _speedBoosterActive = false  -- controlled by the Speed Booster widget
+local _aceProxy      = nil
+local _aceProxyWeld  = nil
+local _ownWatchConn  = nil  -- re-claims if the server ever reassigns owner
+local _ownTimer      = 0
+local _ownInterval   = 0.8 + math.random() * 0.4
+
+local function _claimOwn(hrp2)
+	pcall(function() hrp2:SetNetworkOwner(LP) end)
+end
+
+local function _watchOwn(hrp2)
+	if _ownWatchConn then pcall(function() _ownWatchConn:Disconnect() end) end
+	_ownWatchConn = hrp2:GetPropertyChangedSignal("ReceiveAge"):Connect(function()
+		if _speedBoosterActive then task.defer(function() _claimOwn(hrp2) end) end
+	end)
+end
 
 local function cleanAceProxy()
+	if _ownWatchConn then pcall(function() _ownWatchConn:Disconnect() end); _ownWatchConn = nil end
 	if _aceProxy then pcall(function() _aceProxy:Destroy() end); _aceProxy = nil end
 	_aceProxyWeld = nil
 end
@@ -447,6 +468,8 @@ local function ensureAceProxy(hrp2)
 	local w = Instance.new("Weld", p)
 	w.Part0 = hrp2; w.Part1 = p; w.C0 = CFrame.new()
 	_aceProxyWeld = w; _aceProxy = p
+	_claimOwn(hrp2)
+	_watchOwn(hrp2)
 	return p
 end
 
@@ -498,8 +521,6 @@ local function getCurrentSpeed()
 	end
 end
 
-local _speedBoosterActive = false  -- controlled by the Speed Booster widget
-
 local h, hrp
 local function setupChar(char)
 	h = char:WaitForChild("Humanoid", 5)
@@ -510,8 +531,10 @@ end
 LP.CharacterAdded:Connect(setupChar)
 if LP.Character then setupChar(LP.Character) end
 
--- Ace RenderStepped speed loop — identical behaviour to Ace_duels_modified
-RunService.RenderStepped:Connect(function()
+-- Ace RenderStepped speed loop — identical behaviour to Ace_duels_modified,
+-- plus a periodic ownership re-claim (belt-and-braces alongside the
+-- ReceiveAge watcher above) to keep rollback down over long sessions.
+RunService.RenderStepped:Connect(function(dt)
 	if not _speedBoosterActive then cleanAceProxy(); return end
 	local char = LP.Character; if not char then cleanAceProxy(); return end
 	local hum  = char:FindFirstChildOfClass("Humanoid")
@@ -523,6 +546,10 @@ RunService.RenderStepped:Connect(function()
 		or state == Enum.HumanoidStateType.Ragdoll
 		or state == Enum.HumanoidStateType.FallingDown then
 		cleanAceProxy(); return
+	end
+	_ownTimer = _ownTimer + dt
+	if _ownTimer >= _ownInterval then
+		_claimOwn(hrp2); _ownTimer = 0; _ownInterval = 0.8 + math.random() * 0.4
 	end
 	updateCarryState()
 	local md  = hum.MoveDirection
