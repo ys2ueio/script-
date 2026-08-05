@@ -1126,6 +1126,7 @@ local function _armDoReset()
 	if _armDebounce then return end
 	_armDebounce = true
 	task.spawn(function()
+		if _GH.MH_instareset then pcall(_GH.MH_instareset) end
 		task.wait(3); _armDebounce = false
 	end)
 end
@@ -3386,6 +3387,7 @@ buildPage("Keybind", function()
 		BatTP         = {key=nil, gp=nil},
 		AimV2         = {key=nil, gp=nil},
 		AimV3Kb       = {key=nil, gp=nil},
+		InstantReset  = {key=nil, gp=nil},
 		HideUI        = {key=nil, gp=nil},
 	}
 	_GH.MH_KB = KB
@@ -3522,6 +3524,7 @@ buildPage("Keybind", function()
 	makeKBRow("Bat TP",         KB.BatTP)
 	makeKBRow("Aim V2",         KB.AimV2)
 	makeKBRow("Aim V3",         KB.AimV3Kb)
+	makeKBRow("Instant Reset",  KB.InstantReset)
 	UIB.makeGap(4)
 	UIB.makeSectionLabel("Interface")
 	makeKBRow("Hide / Show UI", KB.HideUI)
@@ -3568,6 +3571,8 @@ buildPage("Keybind", function()
 		elseif match(KB.AimV3Kb)   then
 			-- [FIX #2] AimV3Kb doit déclencher AimV3 (Bat TP), pas AB (Aimbot V1)
 			if AimV3.active then AimV3.stop() else AimV3.start() end
+		elseif match(KB.InstantReset) then
+			if _GH.MH_instareset then _GH.MH_instareset() end
 		elseif match(KB.HideUI) then
 			if mainOuter.Visible then hideGui() else showGui() end
 		end
@@ -4062,7 +4067,7 @@ end
 -- 8 packed right below it in a tight 2-wide grid (4 rows).
 local _FLOAT_GRID_ORDER = {
 	"aimbot","aimv2","dropbr","autoleft",
-	"autoright","tpdown","battp",
+	"autoright","tpdown","battp","instareset",
 }
 local function _floatGridIndex(id)
 	for i, fid in ipairs(_FLOAT_GRID_ORDER) do
@@ -4227,6 +4232,68 @@ _floatDefs.battp = {
 	isActive = function() return AimV3.active end,
 }
 
+
+-- ===================================================================
+-- BURST RESET — v4gg 0.1s method (physics conflict → server respawn)
+-- ===================================================================
+do
+	local _brResetting = false
+
+	local function triggerBurstReset()
+		local char = LP.Character
+		local root = char and char:FindFirstChild("HumanoidRootPart")
+		local hum  = char and char:FindFirstChildOfClass("Humanoid")
+		if not root or not hum or _brResetting then return end
+		_brResetting = true
+
+		-- Hook temporaire : WalkSpeed=16 pour passer les checks serveur pendant le burst
+		local mt     = getrawmetatable(game)
+		local oldIdx = mt.__index
+		pcall(function() setreadonly(mt, false) end)
+		mt.__index = newcclosure(function(s, k)
+			if k == "WalkSpeed" and _brResetting then return 16 end
+			return oldIdx(s, k)
+		end)
+		pcall(function() setreadonly(mt, true) end)
+
+		-- Burst 0.15s : vélocité extrême + health=0 → conflit physique → respawn serveur
+		local conn
+		local startT = tick()
+		conn = RunService.Heartbeat:Connect(function()
+			if tick() - startT > 0.15 or not char.Parent then
+				conn:Disconnect()
+				return
+			end
+			pcall(function()
+				root:SetNetworkOwner(LP)
+				root.AssemblyLinearVelocity = Vector3.new(1e7, 1e7, 1e7)
+				hum.Health = 0
+			end)
+		end)
+
+		-- Nettoyage après respawn (timeout 5s si ça échoue)
+		task.spawn(function()
+			local done = false
+			local c = LP.CharacterAdded:Connect(function() done = true end)
+			local t0 = tick()
+			repeat task.wait(0.1) until done or (tick() - t0 > 5)
+			c:Disconnect()
+			_brResetting = false
+			pcall(function() setreadonly(mt, false) end)
+			mt.__index = oldIdx
+			pcall(function() setreadonly(mt, true) end)
+		end)
+	end
+
+	_GH.MH_instareset = triggerBurstReset
+
+	_floatDefs.instareset = {
+		label    = "INSTANT
+RESET",
+		onClick  = triggerBurstReset,
+		momentary = true,
+	}
+end
 
 _floatDefs.aimv2 = {
 	label = "AIM V2",
@@ -4517,6 +4584,7 @@ local function MH_save()
 					BatTP         = ks(kb.BatTP),
 					AimV2         = ks(kb.AimV2),
 					AimV3Kb       = ks(kb.AimV3Kb),
+					InstantReset  = ks(kb.InstantReset),
 					HideUI        = ks(kb.HideUI),
 				},
 			}
@@ -4685,6 +4753,7 @@ buildPage("Buttons", function()
 		{id="autoright",   name="Auto Right"},
 		{id="tpdown",      name="TP Down"},
 		{id="battp",       name="Bat TP"},
+		{id="instareset",  name="Instant Reset"},
 	}
 	for _, entry in ipairs(FLOAT_LABELS) do
 		_floatRowSetters[entry.id] = UIB.makeToggleRow(entry.name, false, function(on)
