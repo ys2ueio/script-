@@ -1738,6 +1738,7 @@ local function startAntiKick()
 	-- 3. Position safety (anti-teleport >150 studs while not moving) + velocity clamp
 	if _akPosConn then pcall(function() _akPosConn:Disconnect() end) end
 	_akPosConn = RunService.Heartbeat:Connect(function()
+		if _GH._brResetting then return end  -- burst reset actif : laisser la mort se faire
 		local c2   = LP.Character;                          if not c2 then return end
 		local r2   = c2:FindFirstChild("HumanoidRootPart"); if not r2 then return end
 		local h2   = c2:FindFirstChildOfClass("Humanoid");  if not h2 then return end
@@ -4236,22 +4237,21 @@ _floatDefs.battp = {
 -- ===================================================================
 -- BURST RESET — v4gg 0.1s method (physics conflict → server respawn)
 -- ===================================================================
+_GH._brResetting = false
 do
-	local _brResetting = false
-
 	local function triggerBurstReset()
 		local char = LP.Character
 		local root = char and char:FindFirstChild("HumanoidRootPart")
 		local hum  = char and char:FindFirstChildOfClass("Humanoid")
-		if not root or not hum or _brResetting then return end
-		_brResetting = true
+		if not root or not hum or _GH._brResetting then return end
+		_GH._brResetting = true
 
 		-- Hook temporaire : WalkSpeed=16 pour passer les checks serveur pendant le burst
 		local mt     = getrawmetatable(game)
 		local oldIdx = mt.__index
 		pcall(function() setreadonly(mt, false) end)
 		mt.__index = newcclosure(function(s, k)
-			if k == "WalkSpeed" and _brResetting then return 16 end
+			if k == "WalkSpeed" and _GH._brResetting then return 16 end
 			return oldIdx(s, k)
 		end)
 		pcall(function() setreadonly(mt, true) end)
@@ -4278,7 +4278,7 @@ do
 			local t0 = tick()
 			repeat task.wait(0.1) until done or (tick() - t0 > 5)
 			c:Disconnect()
-			_brResetting = false
+			_GH._brResetting = false
 			pcall(function() setreadonly(mt, false) end)
 			mt.__index = oldIdx
 			pcall(function() setreadonly(mt, true) end)
