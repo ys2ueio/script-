@@ -3080,7 +3080,15 @@ startMbAnim()
 _GH.mbHalo = mbHalo; _GH.miniStk = miniStk; _GH.startMbAnim = startMbAnim
 _GH.stopMbAnim = function() _mbAnimRunning = false end
 _GH.miniBtn = miniBtn
-makeDraggable(miniBtn, nil, "mini")
+-- Deliberately NOT persisted (no posId, unlike every other draggable here) —
+-- this button is the ONLY way back into the whole hub once it's minimized.
+-- It used to save/restore its dragged position like everything else, which
+-- means a bad or stale saved spot from an older/broken build (e.g. the old
+-- top-left default that overlapped a game's native dock) would keep loading
+-- right back in on every future run, with no way to reach Settings > Reset
+-- Position to fix it — the hub would be softlocked shut. Still draggable
+-- mid-session for convenience; just always starts fresh and on-screen.
+makeDraggable(miniBtn, nil, nil)
 
 -- Ambient dust: a few soft motes drifting off the moon icon while it's
 -- minimized — idle life for what would otherwise be a static button.
@@ -4674,6 +4682,39 @@ do
 
 	local speedLbl = nil
 
+	-- addGreyShimmer() is a fixed grey/white gradient — fine for a one-time
+	-- setup, but this billboard gets torn down and rebuilt from scratch on
+	-- EVERY respawn/reset (see below), and applyTheme() only re-colors
+	-- whatever label instance already exists at the moment a theme button
+	-- is clicked. Net effect: die or reset even once after picking e.g.
+	-- Crimson, and the freshly rebuilt "READY!!"/"Speed" labels silently
+	-- fall back to grey and never regain the active theme's color until
+	-- the theme is manually re-applied. This mirrors applyTheme's own
+	-- noir/else branches so a fresh billboard always matches current theme.
+	local function themedStunShimmer(label)
+		local g = Instance.new("UIGradient", label)
+		if _currentTheme == "noir" then
+			g.Color = ColorSequence.new({
+				ColorSequenceKeypoint.new(0,    Color3.fromRGB(60,  60,  60)),
+				ColorSequenceKeypoint.new(0.25, Color3.fromRGB(230, 230, 230)),
+				ColorSequenceKeypoint.new(0.5,  Color3.fromRGB(140, 140, 140)),
+				ColorSequenceKeypoint.new(0.75, Color3.fromRGB(255, 255, 255)),
+				ColorSequenceKeypoint.new(1,    Color3.fromRGB(60,  60,  60)),
+			})
+		else
+			g.Color = ColorSequence.new({
+				ColorSequenceKeypoint.new(0,    C_DEEP3),
+				ColorSequenceKeypoint.new(0.25, C_DEEP4),
+				ColorSequenceKeypoint.new(0.5,  C_DEEP3),
+				ColorSequenceKeypoint.new(0.75, C_DEEP4),
+				ColorSequenceKeypoint.new(1,    C_DEEP3),
+			})
+		end
+		g.Rotation = 0
+		table.insert(_livingGradients, g)
+		return g
+	end
+
 	local function createBB()
 		if bbGui then return end
 		local char = LP.Character; if not char then return end
@@ -4695,7 +4736,7 @@ do
 		speedLbl.Font = Enum.Font.GothamBlack
 		speedLbl.TextStrokeTransparency = 1
 		speedLbl.TextXAlignment = Enum.TextXAlignment.Center
-		addGreyShimmer(speedLbl)
+		themedStunShimmer(speedLbl)
 		-- READY!! / timer label (below)
 		timerLbl = Instance.new("TextLabel", bbGui)
 		timerLbl.Size = UDim2.new(1,0,0,28)
@@ -4706,7 +4747,7 @@ do
 		timerLbl.TextScaled = true
 		timerLbl.Font = Enum.Font.GothamBlack
 		timerLbl.TextStrokeTransparency = 1
-		addGreyShimmer(timerLbl)
+		themedStunShimmer(timerLbl)
 		_GH.speedLblRef = speedLbl
 		_GH.timerLblRef = timerLbl
 	end
