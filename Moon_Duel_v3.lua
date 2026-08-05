@@ -4233,7 +4233,7 @@ _floatDefs.battp = {
 }
 
 -- ===================================================================
--- INSTA RESET — Ace Duels logic (100%)
+-- INSTA RESET — Ace Duels (copie exacte)
 -- ===================================================================
 _G.AceCursedResetRemote = _G.AceCursedResetRemote or nil
 _G.AceCursedResetGuid   = _G.AceCursedResetGuid   or "f888ee6e-c86d-46e1-93d7-0639d6635d42"
@@ -4260,12 +4260,7 @@ local function _aceInstaReset()
 			end
 		end
 	end
-	if not _G.AceCursedResetRemote then
-		local char = LP.Character
-		local hum  = char and char:FindFirstChildOfClass("Humanoid")
-		if hum then hum.Health = 0 end
-		return
-	end
+	if not _G.AceCursedResetRemote then return end
 	local character = LP.Character
 	local humanoid  = character and character:FindFirstChildOfClass("Humanoid")
 	if humanoid and humanoid.Health <= 0 then
@@ -4285,17 +4280,11 @@ local function _aceInstaReset()
 			if not parent then resetDetected = true end
 		end))
 	end
-	-- Fire une seule fois. Retry unique après 0.4s si le perso est toujours en vie.
-	-- (10 fires rapides = serveur respawn avant resetDetected → clones)
-	pcall(function() _G.AceCursedResetRemote:FireServer(_G.AceCursedResetGuid, LP, "balloon") end)
 	task.spawn(function()
-		task.wait(0.4)
-		if not resetDetected then
-			local c2 = LP.Character
-			local h2 = c2 and c2:FindFirstChildOfClass("Humanoid")
-			if h2 and h2.Health > 0 then
-				pcall(function() _G.AceCursedResetRemote:FireServer(_G.AceCursedResetGuid, LP, "balloon") end)
-			end
+		for _ = 1, 10 do
+			if resetDetected then break end
+			pcall(function() _G.AceCursedResetRemote:FireServer(_G.AceCursedResetGuid, LP, "balloon") end)
+			task.wait(0.05)
 		end
 		for _, conn in ipairs(resetConns) do pcall(function() conn:Disconnect() end) end
 	end)
