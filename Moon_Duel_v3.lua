@@ -435,7 +435,6 @@ destroyAllMoonHub()
 -- every frame. Claiming ownership makes the CLIENT authoritative instead.
 local _speedBoosterActive = false  -- controlled by the Speed Booster widget
 local _aceProxy      = nil
-local _aceProxyWeld  = nil
 local _ownWatchConn  = nil  -- re-claims if the server ever reassigns owner
 local _ownTimer      = 0
 local _ownInterval   = 0.8 + math.random() * 0.4
@@ -454,7 +453,6 @@ end
 local function cleanAceProxy()
 	if _ownWatchConn then pcall(function() _ownWatchConn:Disconnect() end); _ownWatchConn = nil end
 	if _aceProxy then pcall(function() _aceProxy:Destroy() end); _aceProxy = nil end
-	_aceProxyWeld = nil
 end
 
 local function ensureAceProxy(hrp2)
@@ -467,7 +465,7 @@ local function ensureAceProxy(hrp2)
 	p.Parent = char
 	local w = Instance.new("Weld", p)
 	w.Part0 = hrp2; w.Part1 = p; w.C0 = CFrame.new()
-	_aceProxyWeld = w; _aceProxy = p
+	_aceProxy = p
 	_claimOwn(hrp2)
 	_watchOwn(hrp2)
 	return p
@@ -521,11 +519,10 @@ local function getCurrentSpeed()
 	end
 end
 
-local h, hrp
 local function setupChar(char)
-	h = char:WaitForChild("Humanoid", 5)
-	hrp = char:WaitForChild("HumanoidRootPart", 5)
-	if h then h.WalkSpeed = getCurrentSpeed() end
+	local hum = char:WaitForChild("Humanoid", 5)
+	char:WaitForChild("HumanoidRootPart", 5)
+	if hum then hum.WalkSpeed = getCurrentSpeed() end
 	cleanAceProxy()  -- destroy any proxy left from previous life
 end
 LP.CharacterAdded:Connect(setupChar)
@@ -1618,26 +1615,46 @@ end
 -- retiré à la demande — plus de boost continu tant qu'on maintient.
 local IJ = {active=false, conns={}}
 
--- Same rollback fix as the speed engine: without network ownership the
--- server stays physics-authoritative and can snap the jump boost straight
--- back down (root.Velocity write gets overridden by the server's own
--- simulated gravity), which reads as a stuttery/rubber-banded jump.
--- _claimOwn / _watchOwn are the same functions the speed engine defines
--- above — reused here, not duplicated.
-local _ijOwnWatchConn = nil
+-- Same rollback fix as the speed engine, made PROACTIVE this time instead
+-- of reactive: claiming ownership only at the instant a jump fires (the
+-- previous approach) still leaves a race — SetNetworkOwner takes a beat to
+-- actually hand physics authority to the client, and root.Velocity was
+-- being written in that same instant, before the transfer had necessarily
+-- landed. That gap is exactly where a rollback can sneak in on the very
+-- jump that triggered the claim. Now ownership is claimed and kept fresh
+-- continuously the whole time Infinite Jump is active — immediately on
+-- start(), again after every respawn, and re-asserted every 0.8-1.2s and
+-- on any ReceiveAge change — so by the time a jump actually happens the
+-- client has already been physics-authoritative for a while.
+-- Only _claimOwn (stateless pcall wrapper) is reused from the speed
+-- engine above. _watchOwn is NOT reusable here: it owns the speed
+-- engine's shared _ownWatchConn and gates its callback on
+-- _speedBoosterActive, so IJ gets its own independent watcher instead.
+local _ijOwnWatchConn  = nil
+local _ijOwnTimer      = 0
+local _ijOwnInterval   = 0.8 + math.random() * 0.4
+
+local function _ijWatchOwn(root)
+	if _ijOwnWatchConn then pcall(function() _ijOwnWatchConn:Disconnect() end) end
+	_ijOwnWatchConn = root:GetPropertyChangedSignal("ReceiveAge"):Connect(function()
+		if IJ.active then task.defer(function() _claimOwn(root) end) end
+	end)
+end
+
+local function _ijClaimForCurrentChar()
+	local char = LP.Character
+	local root = char and char:FindFirstChild("HumanoidRootPart")
+	if not root then return end
+	_claimOwn(root)
+	_ijWatchOwn(root)
+end
+
 local function _ijApplyBoost(boost)
 	if not IJ.active then return end
 	local char = LP.Character
 	local root = char and char:FindFirstChild("HumanoidRootPart")
 	local hum  = char and char:FindFirstChildOfClass("Humanoid")
 	if not root or not hum or hum.Health <= 0 then return end
-	_claimOwn(root)
-	if not _ijOwnWatchConn or not _ijOwnWatchConn.Connected then
-		if _ijOwnWatchConn then pcall(function() _ijOwnWatchConn:Disconnect() end) end
-		_ijOwnWatchConn = root:GetPropertyChangedSignal("ReceiveAge"):Connect(function()
-			if IJ.active then task.defer(function() _claimOwn(root) end) end
-		end)
-	end
 	root.Velocity = Vector3.new(root.Velocity.X, boost or 50, root.Velocity.Z)
 end
 
@@ -1645,6 +1662,27 @@ function IJ.start()
 	if IJ.conns.jumpReq then return end -- déjà démarré
 	IJ.conns.jumpReq = UIS.JumpRequest:Connect(function()
 		_ijApplyBoost(50)
+	end)
+	-- Claim right away instead of waiting for the first jump
+	_ijClaimForCurrentChar()
+	-- Re-claim on respawn (character physics need a moment to settle,
+	-- same 0.3s delay pattern the speed engine uses)
+	IJ.conns.charAdded = LP.CharacterAdded:Connect(function()
+		task.delay(0.3, function()
+			if IJ.active then _ijClaimForCurrentChar() end
+		end)
+	end)
+	-- Continuous belt-and-braces re-claim while the feature is on
+	_ijOwnTimer = 0
+	IJ.conns.ownLoop = RunService.Heartbeat:Connect(function(dt)
+		if not IJ.active then return end
+		_ijOwnTimer = _ijOwnTimer + dt
+		if _ijOwnTimer >= _ijOwnInterval then
+			local char = LP.Character
+			local root = char and char:FindFirstChild("HumanoidRootPart")
+			if root then _claimOwn(root) end
+			_ijOwnTimer = 0; _ijOwnInterval = 0.8 + math.random() * 0.4
+		end
 	end)
 end
 function IJ.stop()
@@ -1661,7 +1699,6 @@ local setAntiRagdollRowVisual
 local setBatCounterRowVisual
 local setAimbotRowVisual
 local setAimbotV2RowVisual
-local setInfJumpRowVisual
 
 	-- Bat Counter — source bat_counter.txt (RemoteEvent support + "bat" keyword fallback)
 local BatCounter = {active=false, conn=nil}
@@ -3273,7 +3310,7 @@ buildPage("Combat", function()
 		_armState.enabled=on
 		if on then setupAutoResetMedusa(LP.Character) else stopAutoResetMedusa() end
 	end)
-	setInfJumpRowVisual = UIB.makeToggleRow("Infinite Jump",false,function(on)
+	UIB.makeToggleRow("Infinite Jump",false,function(on)
 		IJ.active=on; if on then IJ.start() else IJ.stop() end
 	end)
 	setAutoStealRowVisual=UIB.makeToggleRow("Auto Steal",true,function(on)
