@@ -22,6 +22,12 @@ local C_BORDER  = Color3.fromRGB(40,46,58)
 local C_WHITE   = Color3.fromRGB(255,255,255)
 local C_MOON    = Color3.fromRGB(90,160,255)
 local C_MOON2   = Color3.fromRGB(160,200,255)
+-- Text color for anything drawn on top of a C_MOON-colored active surface
+-- (active tab, ON pill/status text, …). Was hardcoded near-black
+-- everywhere it's used, which is fine while C_MOON stays bright — but
+-- White theme's C_MOON is deliberately dark (see _THEME_DEFS), so those
+-- spots need light text instead. Theme-synced like everything else here.
+local C_MOONTEXT = Color3.fromRGB(0,10,20)
 local C_DIM     = Color3.fromRGB(110,120,140)
 local C_TABIDLE = Color3.fromRGB(160,200,255)
 local C_ON_BG   = Color3.fromRGB(20,45,80)
@@ -47,6 +53,7 @@ local _THEME_DEFS = {
 	default = {
 		panel_bg= Color3.fromRGB(0,0,0),
 		text    = Color3.fromRGB(255,255,255),
+		moon_text= Color3.fromRGB(0,10,20),
 		moon    = Color3.fromRGB(90,160,255),
 		moon2   = Color3.fromRGB(160,200,255),
 		on_bg   = Color3.fromRGB(20,45,80),
@@ -60,6 +67,7 @@ local _THEME_DEFS = {
 	noir = {
 		panel_bg= Color3.fromRGB(0,0,0),
 		text    = Color3.fromRGB(255,255,255),
+		moon_text= Color3.fromRGB(0,10,20),
 		moon    = Color3.fromRGB(205,205,205),
 		moon2   = Color3.fromRGB(175,175,175),
 		on_bg   = Color3.fromRGB(28,28,28),
@@ -73,6 +81,7 @@ local _THEME_DEFS = {
 	crimson = {
 		panel_bg= Color3.fromRGB(0,0,0),
 		text    = Color3.fromRGB(255,255,255),
+		moon_text= Color3.fromRGB(0,10,20),
 		moon    = Color3.fromRGB(230,70,95),
 		moon2   = Color3.fromRGB(255,140,155),
 		on_bg   = Color3.fromRGB(70,15,26),
@@ -92,6 +101,7 @@ local _THEME_DEFS = {
 	white = {
 		panel_bg= Color3.fromRGB(255,255,255),
 		text    = Color3.fromRGB(24,24,30),
+		moon_text= Color3.fromRGB(245,246,252),
 		moon    = Color3.fromRGB(70,82,125),
 		moon2   = Color3.fromRGB(100,112,155),
 		on_bg   = Color3.fromRGB(205,210,238),
@@ -105,6 +115,7 @@ local _THEME_DEFS = {
 	purple = {
 		panel_bg= Color3.fromRGB(0,0,0),
 		text    = Color3.fromRGB(255,255,255),
+		moon_text= Color3.fromRGB(0,10,20),
 		moon    = Color3.fromRGB(170,110,255),
 		moon2   = Color3.fromRGB(205,165,255),
 		on_bg   = Color3.fromRGB(45,20,80),
@@ -134,6 +145,7 @@ local function applyTheme(newName)
 	_currentTheme = newName
 	local new = _THEME_DEFS[newName]
 	C_MOON    = new.moon;   C_MOON2   = new.moon2
+	C_MOONTEXT= new.moon_text
 	C_ON_BG   = new.on_bg; C_BORDER  = new.border
 	C_SILVER  = new.silver; C_SILVER2 = new.silver2
 	C_DIM     = new.dim;   C_TABIDLE = new.moon2
@@ -2603,13 +2615,13 @@ mainOuter.Size = UDim2.new(0,WIN_W,0,WIN_H)
 mainOuter.Position = UDim2.new(0.5,-WIN_W/2,0.5,-137)
 mainOuter.BackgroundTransparency = 1; mainOuter.BorderSizePixel = 0
 mainOuter.ClipsDescendants = true; mainOuter.Active = true
-addCorner(mainOuter, 24); makeDraggable(mainOuter, nil, "main")
+local mainCorner = addCorner(mainOuter, 24); makeDraggable(mainOuter, nil, "main")
 local mainUIScale = Instance.new("UIScale", mainOuter)
 
 local bgImg = Instance.new("Frame", mainOuter)
 bgImg.Name = "BgFill"; bgImg.Size = UDim2.new(1,0,1,0)
 bgImg.BackgroundColor3 = C_BG; bgImg.BorderSizePixel = 0; bgImg.ZIndex = 0
-addCorner(bgImg, 24)
+local bgCorner = addCorner(bgImg, 24)
 
 local mainStroke = addLivingStroke(mainOuter, 2)
 
@@ -2923,7 +2935,7 @@ local function selectTab(name)
 			BackgroundColor3=active and C_MOON or Color3.fromRGB(18,22,30),
 			BackgroundTransparency=active and 0 or 0.5,
 		}):Play()
-		btn.lbl.TextColor3 = active and Color3.fromRGB(0,10,20) or C_TABIDLE
+		btn.lbl.TextColor3 = active and C_MOONTEXT or C_TABIDLE
 	end
 
 	tabFlash.BackgroundTransparency = 0.82
@@ -3089,6 +3101,8 @@ local function hideGui()
 	local savedScale  = mainUIScale.Scale
 	local savedBg     = bgImg.BackgroundTransparency
 	local savedStroke = mainStroke.Transparency
+	local savedMainCorner = mainCorner.CornerRadius
+	local savedBgCorner   = bgCorner.CornerRadius
 
 	-- Whole animation runs inside pcall + a fixed task.wait (NOT
 	-- Tween.Completed:Wait()) so nothing here can hang forever — some
@@ -3110,6 +3124,12 @@ local function hideGui()
 		TweenService:Create(mainUIScale, info, {Scale=0.02}):Play()
 		TweenService:Create(bgImg, info, {BackgroundTransparency=1}):Play()
 		TweenService:Create(mainStroke, info, {Transparency=1}):Play()
+		-- Rounds toward a full circle as it shrinks — without this the
+		-- panel keeps its fixed 24px corner radius the whole way down,
+		-- which reads as a shrinking square instead of melting into the
+		-- round moon icon it's flying toward.
+		TweenService:Create(mainCorner, info, {CornerRadius=UDim.new(0.5,0)}):Play()
+		TweenService:Create(bgCorner, info, {CornerRadius=UDim.new(0.5,0)}):Play()
 		task.wait(dur)
 
 		moonAbsorbFlash()
@@ -3123,6 +3143,8 @@ local function hideGui()
 	mainUIScale.Scale = savedScale
 	bgImg.BackgroundTransparency = savedBg
 	mainStroke.Transparency = savedStroke
+	mainCorner.CornerRadius = savedMainCorner
+	bgCorner.CornerRadius = savedBgCorner
 	_closeAnimPlaying = false
 end
 closeBtn.MouseButton1Click:Connect(hideGui)
@@ -3785,8 +3807,17 @@ buildPage("Keybind", function()
 			if State.autoRightEnabled then startAutoRight() else stopAutoRight() end
 		elseif match(KB.TPDown)    then tpToGround()
 		elseif match(KB.LagNorm)   then
-			State.laggerActive = not State.laggerActive
-			if not State.laggerActive then proxyStop() end
+			-- Actually flips the Speed Booster's own Normal/Lagger tab
+			-- (updates State, the widget's visuals, and re-applies live if
+			-- it's already running) instead of only poking State.laggerActive,
+			-- which never touched the widget or engaged Lagger mode for real.
+			if _GH.speedBoosterSwitchTab then
+				local wantLag = not (_GH.speedBoosterIsLagger and _GH.speedBoosterIsLagger())
+				_GH.speedBoosterSwitchTab(wantLag)
+			else
+				State.laggerActive = not State.laggerActive
+				if not State.laggerActive then proxyStop() end
+			end
 		elseif match(KB.BatTP)     then
 			local on = not AimV3.active
 			if on then AimV3.start() else AimV3.stop() end
@@ -4024,7 +4055,7 @@ local function mkTab(lbl,ord,act)
 	t.BorderSizePixel=0; t.LayoutOrder=ord
 	t.BackgroundColor3=act and C_MOON or C_OFF_BG
 	t.BackgroundTransparency=act and 0.15 or 0.5
-	t.Text=lbl; t.TextColor3=act and Color3.fromRGB(0,10,20) or C_DIM
+	t.Text=lbl; t.TextColor3=act and C_MOONTEXT or C_DIM
 	t.Font=Enum.Font.GothamBold; t.TextSize=10; t.AutoButtonColor=false
 	addCorner(t,6); addLivingTextGradient(t); return t
 end
@@ -4113,7 +4144,7 @@ local function toggleSp()
 	_spActive=not _spActive
 	stPill.BackgroundColor3=_spActive and C_MOON or C_OFF_BG
 	stPillLbl.Text=_spActive and "ON" or "OFF"
-	stPillLbl.TextColor3=_spActive and Color3.fromRGB(0,10,20) or C_DIM
+	stPillLbl.TextColor3=_spActive and C_MOONTEXT or C_DIM
 	if _spActive then startSp() else stopSp() end
 	if _GH.setSpeedBoosterFloatVisual then _GH.setSpeedBoosterFloatVisual(_spActive) end
 end
@@ -4125,14 +4156,19 @@ local function switchTab(lag)
 	if _spActive then startSp() end
 	spTabN.BackgroundColor3=lag and C_OFF_BG or C_MOON
 	spTabN.BackgroundTransparency=lag and 0.5 or 0.15
-	spTabN.TextColor3=lag and C_DIM or Color3.fromRGB(0,10,20)
+	spTabN.TextColor3=lag and C_DIM or C_MOONTEXT
 	spTabL.BackgroundColor3=lag and C_MOON or C_OFF_BG
 	spTabL.BackgroundTransparency=lag and 0.15 or 0.5
-	spTabL.TextColor3=lag and Color3.fromRGB(0,10,20) or C_DIM
+	spTabL.TextColor3=lag and C_MOONTEXT or C_DIM
 	spNorm.Visible=not lag; spLag.Visible=lag
 end
 spTabN.MouseButton1Click:Connect(function() switchTab(false) end)
 spTabL.MouseButton1Click:Connect(function() switchTab(true) end)
+-- Exposed so the "Lag Normal" keybind can actually flip the widget into
+-- Lagger mode (updates State + the widget's own tabs, and re-applies live
+-- if the booster is already running) instead of poking State directly.
+_GH.speedBoosterSwitchTab = switchTab
+_GH.speedBoosterIsLagger  = function() return _spLagger end
 
 -- Collapsed ("-"): NORMAL/LAGGER stay visible and usable, only
 -- Status and the speed fields are hidden.
@@ -4486,6 +4522,14 @@ pcall(function()
 	end
 end)
 function _G.AceCursedInstaReset()
+	-- The forced kill/respawn below ragdolls the character just like a real
+	-- stun would, which would otherwise falsely flash the "READY!!" speed
+	-- billboard into a stun countdown right after a self-reset. Suppressed
+	-- for a short window that comfortably covers the death/respawn/settle
+	-- sequence, well under the 3s a real stun would actually show for.
+	if _GH.setStunSuppressed then _GH.setStunSuppressed(true) end
+	task.delay(1.5, function() if _GH.setStunSuppressed then _GH.setStunSuppressed(false) end end)
+
 	if not _G.AceCursedResetRemote then
 		for _, desc in ipairs(game:GetService("ReplicatedStorage"):GetDescendants()) do
 			if desc:IsA("RemoteEvent") and desc.Name:sub(1,3) == "RE/" then
@@ -4627,8 +4671,15 @@ do
 		end
 	end
 
+	-- Suppressed right after an Instant Reset: the forced kill/respawn
+	-- ragdolls the character exactly like a real stun would, which was
+	-- falsely flashing "READY!!" into a stun countdown (and its red/silver/
+	-- moon2 colors) even though nobody actually hit the player.
+	local _stunSuppressed = false
+	_GH.setStunSuppressed = function(on) _stunSuppressed = on end
+
 	local function onStun()
-		if stunActive then return end
+		if stunActive or _stunSuppressed then return end
 		stunActive = true; stunStartTime = tick(); lastSec = nil
 		createBB(); updateDisplay()
 		if stunConn then stunConn:Disconnect() end
