@@ -2765,19 +2765,36 @@ end
 local tabPages   = {}
 local tabButtons = {}
 
--- CanvasGroup (not Frame): GroupTransparency fades the whole subtree as one
--- flattened image, so the tab-switch crossfade doesn't need to walk/tween
--- every descendant's own transparency.
+-- Plain Frame (NOT CanvasGroup) — GroupTransparency only exists on CanvasGroup
+-- and that instance type renders as a blank/black square on a good chunk of
+-- executors, which is exactly what was breaking the whole menu. The fade
+-- below is done the compatible way: each descendant's own transparency is
+-- cached once at build time, then tweened from 1 -> its resting value on
+-- tab-in. Works identically everywhere Frame/TextLabel/etc. already do.
+local _pageFadeList = {}
 local function buildPage(name, buildFn)
-	local page = Instance.new("CanvasGroup", mainScroll)
+	local page = Instance.new("Frame", mainScroll)
 	page.Name = name; page.Size = UDim2.new(1,0,0,0); page.AutomaticSize = Enum.AutomaticSize.Y
 	page.BackgroundTransparency = 1; page.BorderSizePixel = 0; page.Visible = false
-	page.GroupTransparency = 0
 	local ll = Instance.new("UIListLayout", page)
 	ll.SortOrder = Enum.SortOrder.LayoutOrder; ll.Padding = UDim.new(0,6)
 	tabPages[name] = page; currentPage = page; lo = 0
 	buildFn()
 	currentPage = nil
+
+	local list = {}
+	for _, d in ipairs(page:GetDescendants()) do
+		if d:IsA("GuiObject") then
+			list[#list+1] = {inst=d, prop="BackgroundTransparency", orig=d.BackgroundTransparency}
+		end
+		if d:IsA("TextLabel") or d:IsA("TextButton") or d:IsA("TextBox") then
+			list[#list+1] = {inst=d, prop="TextTransparency", orig=d.TextTransparency}
+		end
+		if d:IsA("ImageLabel") or d:IsA("ImageButton") then
+			list[#list+1] = {inst=d, prop="ImageTransparency", orig=d.ImageTransparency}
+		end
+	end
+	_pageFadeList[page] = list
 	return page
 end
 
@@ -2798,19 +2815,24 @@ local function selectTab(name)
 	end
 
 	if oldPage and oldPage ~= newPage then
-		TweenService:Create(oldPage, TweenInfo.new(0.08), {GroupTransparency=1}):Play()
-		task.delay(0.08, function()
-			-- only hide it if the user hasn't flipped back to this tab meanwhile
-			if oldPage ~= tabPages[_activeTabName] then
-				oldPage.Visible = false
-				oldPage.GroupTransparency = 0
-			end
-		end)
+		oldPage.Visible = false
 	end
 
-	newPage.GroupTransparency = 1
+	-- Fade the incoming page in from invisible to its resting look.
+	local list = _pageFadeList[newPage]
+	if list then
+		for _, e in ipairs(list) do
+			pcall(function() e.inst[e.prop] = 1 end)
+		end
+	end
 	newPage.Visible = true
-	TweenService:Create(newPage, TweenInfo.new(0.12), {GroupTransparency=0}):Play()
+	if list then
+		for _, e in ipairs(list) do
+			pcall(function()
+				TweenService:Create(e.inst, TweenInfo.new(0.14, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {[e.prop]=e.orig}):Play()
+			end)
+		end
+	end
 end
 
 for i, name in ipairs(TABS) do
@@ -2936,26 +2958,34 @@ local function hideGui()
 	local savedBg     = bgImg.BackgroundTransparency
 	local savedStroke = mainStroke.Transparency
 
-	local half = mainOuter.AbsoluteSize
-	mainOuter.AnchorPoint = Vector2.new(0.5,0.5)
-	mainOuter.Position = UDim2.new(savedPos.X.Scale, savedPos.X.Offset + half.X/2, savedPos.Y.Scale, savedPos.Y.Offset + half.Y/2)
+	-- Whole animation runs inside pcall + a fixed task.wait (NOT
+	-- Tween.Completed:Wait()) so nothing here can hang forever — some
+	-- executors never fire Completed reliably, and a stuck Wait() here used
+	-- to leave _closeAnimPlaying stuck true, permanently disabling
+	-- open/close for the rest of the session.
+	pcall(function()
+		local half = mainOuter.AbsoluteSize
+		mainOuter.AnchorPoint = Vector2.new(0.5,0.5)
+		mainOuter.Position = UDim2.new(savedPos.X.Scale, savedPos.X.Offset + half.X/2, savedPos.Y.Scale, savedPos.Y.Offset + half.Y/2)
 
-	local cx = miniBtn.Position.X.Offset + miniBtn.Size.X.Offset/2
-	local cy = miniBtn.Position.Y.Offset + miniBtn.Size.Y.Offset/2
-	local targetPos = UDim2.new(miniBtn.Position.X.Scale, cx, miniBtn.Position.Y.Scale, cy)
+		local cx = miniBtn.Position.X.Offset + miniBtn.Size.X.Offset/2
+		local cy = miniBtn.Position.Y.Offset + miniBtn.Size.Y.Offset/2
+		local targetPos = UDim2.new(miniBtn.Position.X.Scale, cx, miniBtn.Position.Y.Scale, cy)
 
-	local info = TweenInfo.new(0.3, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
-	TweenService:Create(mainOuter, info, {Position=targetPos}):Play()
-	TweenService:Create(mainUIScale, info, {Scale=0.02}):Play()
-	TweenService:Create(bgImg, info, {BackgroundTransparency=1}):Play()
-	local strokeTween = TweenService:Create(mainStroke, info, {Transparency=1})
-	strokeTween:Play()
-	strokeTween.Completed:Wait()
+		local dur = 0.3
+		local info = TweenInfo.new(dur, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
+		TweenService:Create(mainOuter, info, {Position=targetPos}):Play()
+		TweenService:Create(mainUIScale, info, {Scale=0.02}):Play()
+		TweenService:Create(bgImg, info, {BackgroundTransparency=1}):Play()
+		TweenService:Create(mainStroke, info, {Transparency=1}):Play()
+		task.wait(dur)
 
+		moonAbsorbFlash()
+	end)
+
+	-- Always restore the resting layout and clear the guard, even if the
+	-- animation above errored partway — the panel must never get stuck.
 	mainOuter.Visible = false
-	moonAbsorbFlash()
-
-	-- reset to the resting layout so the next open starts from the right place
 	mainOuter.AnchorPoint = savedAnchor
 	mainOuter.Position = savedPos
 	mainUIScale.Scale = savedScale
