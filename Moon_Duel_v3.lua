@@ -804,6 +804,8 @@ local function startAutoLeft()
 		local hrp = char:FindFirstChild("HumanoidRootPart")
 		local hum = char:FindFirstChildOfClass("Humanoid")
 		if not hrp or not hum then return end
+		local st = hum:GetState()
+		if hum.PlatformStand or st==Enum.HumanoidStateType.Physics or st==Enum.HumanoidStateType.Ragdoll or st==Enum.HumanoidStateType.FallingDown then hum:Move(Vector3.zero,false); return end
 		local spd = State.normalSpeed
 		if alPhase == 1 then
 			if (Vector3.new(AP_L1.X, hrp.Position.Y, AP_L1.Z) - hrp.Position).Magnitude < 1 then
@@ -836,6 +838,8 @@ local function startAutoRight()
 		local hrp = char:FindFirstChild("HumanoidRootPart")
 		local hum = char:FindFirstChildOfClass("Humanoid")
 		if not hrp or not hum then return end
+		local st = hum:GetState()
+		if hum.PlatformStand or st==Enum.HumanoidStateType.Physics or st==Enum.HumanoidStateType.Ragdoll or st==Enum.HumanoidStateType.FallingDown then hum:Move(Vector3.zero,false); return end
 		local spd = State.normalSpeed
 		if arPhase == 1 then
 			if (Vector3.new(AP_R1.X, hrp.Position.Y, AP_R1.Z) - hrp.Position).Magnitude < 1 then
