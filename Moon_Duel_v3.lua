@@ -791,6 +791,7 @@ local function stopAutoRight()
 end
 
 local function startAutoLeft()
+	if _GH.SM_tryStart and not _GH.SM_tryStart() then return end
 	if State.autoRightEnabled then stopAutoRight() end
 	if alConn then alConn:Disconnect() end
 	alPhase = 1; State.autoLeftEnabled = true
@@ -822,6 +823,7 @@ local function startAutoLeft()
 end
 
 local function startAutoRight()
+	if _GH.SM_tryStart and not _GH.SM_tryStart() then return end
 	if State.autoLeftEnabled then stopAutoLeft() end
 	if arConn then arConn:Disconnect() end
 	arPhase = 1; State.autoRightEnabled = true
@@ -1210,6 +1212,7 @@ end
 	-- Aimbot (prediction + 0.8 lerp)
 local AB = {active=false, conn=nil, SPEED=AB_SPEED, HEIGHT=3.7}
 function AB.start()
+	if _GH.SM_tryStart and not _GH.SM_tryStart() then return end
 	AB.active=true
 	if AB.conn then AB.conn:Disconnect() end
 	local hum0=LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
@@ -1297,6 +1300,7 @@ local function _av3Nearest(root)
 end
 
 function AimV3.start()
+	if _GH.SM_tryStart and not _GH.SM_tryStart() then return end
 	if AimV3.conn then AimV3.conn:Disconnect() end; AimV3.active=true
 	AimV3.conn=RunService.Heartbeat:Connect(function()
 		if not AimV3.active then return end
@@ -1404,6 +1408,7 @@ local function ABP_nearest(root)
 end
 
 function ABP.start()
+	if _GH.SM_tryStart and not _GH.SM_tryStart() then return end
 	if ABP.conn then ABP.conn:Disconnect() end; ABP.active=true
 	ABP_startUnwalk()
 	ABP.conn=RunService.Heartbeat:Connect(function()
@@ -1622,434 +1627,118 @@ local function stopAntiDie()
 end
 
 -- ===================================================================
--- ANTI-KICK (source: Anti_kick_source_works.txt — fixed recursive spawn
---            + deprecated wait() + MoveVector → MoveDirection)
+-- ANTI-KICK / SAFE MODE — copie exacte de la logique Ace Duels.
+-- Ace n'a AUCUN hook __namecall/Kick(), aucun GC scanner, aucun blocage
+-- HTTP, aucun hook Shutdown/BindToClose : leur "anti-kick" est un
+-- système passif "Safe Mode" qui met en pause les features risquées
+-- (aimbot, auto-left, auto-right) pendant le countdown de duel ou
+-- pendant qu'on tient un brainrot, plutôt que de bloquer activement.
+-- Tout ce qu'Ace n'a pas (hooks metatable, GC scanner, HTTP block,
+-- screen-text watcher) est supprimé, zéro trace.
 -- ===================================================================
-local _akActive      = false
-local _akOldNamecall = nil
-local _akMt          = nil
-local _akPosConn     = nil
-local _akDeathConn   = nil
-local _akHealthConn  = nil  -- HealthChanged event (restore immédiat)
-local _akMaxHpConn   = nil  -- MaxHealth signal (reset seulement si changé)
-local _akLastSafe    = nil
-local _akRemoteConns = {}   -- connections from blockRemoteKicks
-local _akCharOldNI   = nil  -- saved __newindex for blockCharacterDestruction restore
-local _akCharMtRef   = nil  -- character metatable ref
-local _akLoopActive    = false -- controls workspace/maxHealth while loops
-local _akCharAddedConn = nil   -- re-hook humanoid + char protections après respawn
-local _akRespawnCount  = 0     -- rapid-respawn counter (monitorKickAttempts)
-local _akLastRespawn   = 0
+local _smEnabled = false
 
--- Re-bind humanoid events to whichever humanoid is currently alive.
--- Called both at startAntiKick time and on every CharacterAdded.
-local function _akHookHumanoid(char)
-	if _akDeathConn  then pcall(function() _akDeathConn:Disconnect()  end); _akDeathConn  = nil end
-	if _akHealthConn then pcall(function() _akHealthConn:Disconnect() end); _akHealthConn = nil end
-	if _akMaxHpConn  then pcall(function() _akMaxHpConn:Disconnect()  end); _akMaxHpConn  = nil end
-	if not char then return end
-	local hum = char:FindFirstChildOfClass("Humanoid")
-	if not hum then return end
-	_akDeathConn = hum.StateChanged:Connect(function(_, new)
-		if new == Enum.HumanoidStateType.Dead
-		or new == Enum.HumanoidStateType.Dying
-		or new == Enum.HumanoidStateType.FallingDown then
-			hum:ChangeState(Enum.HumanoidStateType.GettingUp)
-			hum.Health = hum.MaxHealth
-		end
+local function _smGetCountdownLabel()
+	local ok, label = pcall(function()
+		return LP.PlayerGui
+			and LP.PlayerGui:FindFirstChild("DuelsMachineTopFrame")
+			and LP.PlayerGui.DuelsMachineTopFrame:FindFirstChild("DuelsMachineTopFrame")
+			and LP.PlayerGui.DuelsMachineTopFrame.DuelsMachineTopFrame:FindFirstChild("Timer")
+			and LP.PlayerGui.DuelsMachineTopFrame.DuelsMachineTopFrame.Timer:FindFirstChild("Label")
 	end)
-	_akHealthConn = hum.HealthChanged:Connect(function(hp)
-		if hp <= 0 then hum.Health = hum.MaxHealth end
-	end)
-	_akMaxHpConn = hum:GetPropertyChangedSignal("MaxHealth"):Connect(function()
-		if hum.MaxHealth ~= 100 then hum.MaxHealth = 100 end
-	end)
+	return (ok and label) or nil
 end
 
--- Full per-character setup: humanoid events + character __newindex + position reset.
-local function _akHookChar(char)
-	_akHookHumanoid(char)
-	-- Restore old __newindex on previous char metatable if any
-	if _akCharMtRef and _akCharOldNI ~= nil then
-		pcall(function()
-			setreadonly(_akCharMtRef, false)
-			_akCharMtRef.__newindex = _akCharOldNI
-			setreadonly(_akCharMtRef, true)
-		end)
-		_akCharOldNI = nil; _akCharMtRef = nil
+local function _smCountdownNumber(text)
+	local t = tostring(text or ""):upper():gsub("^%s+",""):gsub("%s+$","")
+	if t == "GO" or t == "START" or t == "READY" then return true end
+	local n = tonumber(t)
+	return n ~= nil and n >= 0 and n <= 10
+end
+
+local function _smInDuelCountdown()
+	local label = _smGetCountdownLabel()
+	return label and _smCountdownNumber(label.Text) or false
+end
+
+local _smBlockedTools = {
+	bat=true, slap=true, sword=true, gun=true, pistol=true, rifle=true,
+	medusa=true, hammer=true, axe=true, knife=true, katana=true, blade=true, fist=true,
+}
+local function _smIsCarryableTool(tool)
+	if not tool or not tool:IsA("Tool") then return false end
+	local name = tool.Name:lower()
+	for word in pairs(_smBlockedTools) do
+		if name:find(word, 1, true) then return false end
 	end
-	-- Hook new char metatable to block :Destroy() / Parent = nil
-	pcall(function()
-		if not char then return end
-		local cm = getrawmetatable(char); if not cm then return end
-		setreadonly(cm, false)
-		_akCharOldNI = cm.__newindex
-		local _oldNI = _akCharOldNI
-		cm.__newindex = function(self, key, value)
-			if key == "Parent" and value == nil then return nil end
-			if _oldNI then return _oldNI(self, key, value) end
-			rawset(self, key, value)
-		end
-		setreadonly(cm, true)
-		_akCharMtRef = cm
-	end)
-	-- Reset position safety to new spawn point
-	local hrp = char and char:FindFirstChild("HumanoidRootPart")
-	if hrp then _akLastSafe = hrp.CFrame end
+	return true
 end
 
-local function startAntiKick()
-	if _akActive then return end
-	-- 1. Block :Kick() via __namecall
-	pcall(function()
-		local mt = getrawmetatable(LP); if not mt then return end
-		setreadonly(mt, false)
-		_akOldNamecall = mt.__namecall
-		local _raw = _akOldNamecall
-		local _hookBody = function(self, ...)
-			-- only intercept calls coming from game scripts, not from our own code
-			local fromGame = not (checkcaller and checkcaller())
-			if fromGame then
-				local method = tostring(getnamecallmethod and getnamecallmethod() or ""):lower()
-				if self == LP and method == "kick" then return nil end
-			end
-			return _raw(self, ...)
+local function _smHoldingBrainrot()
+	local ok, val = pcall(function() return LP:GetAttribute("Stealing") end)
+	if ok and val == true then return true end
+	local ok2, val2 = pcall(function() return LP:GetAttribute("AntiKick") end)
+	if ok2 and val2 == true then return true end
+	local char = LP.Character
+	if not char then return false end
+	local ok3, val3 = pcall(function() return char:GetAttribute("Stealing") end)
+	if ok3 and val3 == true then return true end
+	if _G.AutoCarrySpeed and type(_G.AutoCarrySpeed.IsCarryingBrainrot) == "function" then
+		local okCarry, carrying = pcall(function() return _G.AutoCarrySpeed.IsCarryingBrainrot(char) end)
+		if okCarry and carrying then return true end
+	end
+	for _, name in ipairs({"Carrying","IsCarrying","Grabbed","Holding","StealHold","HasGrab"}) do
+		local v = char:FindFirstChild(name, true)
+		if v then
+			if v:IsA("BoolValue") and v.Value then return true end
+			if v:IsA("ObjectValue") and v.Value then return true end
+			if v:IsA("StringValue") and v.Value ~= "" then return true end
 		end
-		mt.__namecall = (newcclosure and newcclosure(_hookBody)) or _hookBody
-		setreadonly(mt, true)
-		_akMt = mt
-	end)
-	-- 2. Per-character protections (humanoid events + char __newindex) + respawn re-hook
-	local char0 = LP.Character
-	_akHookChar(char0)
-	-- CharacterAdded: re-apply every time the player respawns (monitorKickAttempts + full re-hook)
-	_akCharAddedConn = LP.CharacterAdded:Connect(function(newChar)
-		if not _akActive then return end
-		-- Rapid-respawn detection: 3+ respawns in <9s → possible kick loop
-		local now = tick()
-		if now - _akLastRespawn < 3 then _akRespawnCount = _akRespawnCount + 1
-		else _akRespawnCount = 0 end
-		_akLastRespawn = now
-		task.defer(function()
-			if not _akActive then return end
-			_akHookChar(newChar)
-		end)
-	end)
-	-- 3. Position safety (anti-teleport >150 studs while not moving) + velocity clamp
-	if _akPosConn then pcall(function() _akPosConn:Disconnect() end) end
-	_akPosConn = RunService.Heartbeat:Connect(function()
-		local c2   = LP.Character;                          if not c2 then return end
-		local r2   = c2:FindFirstChild("HumanoidRootPart"); if not r2 then return end
-		local h2   = c2:FindFirstChildOfClass("Humanoid");  if not h2 then return end
-		-- position lock
-		if _akLastSafe then
-			local dist = (r2.Position - _akLastSafe.Position).Magnitude
-			if dist > 150 and h2.MoveDirection.Magnitude < 0.1 then
-				r2.CFrame = _akLastSafe; return
+	end
+	for _, child in ipairs(char:GetChildren()) do
+		if child:IsA("Model") and child:FindFirstChildWhichIsA("BasePart", true) then
+			local n = child.Name:lower()
+			if n:find("brainrot") or n:find("animal") or n:find("carry") or n:find("grab") or n:find("steal") or n:find("hold") then
+				return true
 			end
 		end
-		local ref = _akLastSafe and _akLastSafe.Position or r2.Position
-		if (r2.Position - ref).Magnitude < 30 then
-			_akLastSafe = r2.CFrame
-		end
-		-- velocity clamp: extreme fall speed → soften; extreme horizontal without input → brake
-		local vel = r2.AssemblyLinearVelocity
-		if vel.Y < -150 then
-			r2.AssemblyLinearVelocity = Vector3.new(vel.X, -50, vel.Z)
-			h2.Health = h2.MaxHealth
-		elseif vel.Magnitude > 300 and h2.MoveDirection.Magnitude < 0.1 then
-			r2.AssemblyLinearVelocity = Vector3.new(0, vel.Y, 0)
-		end
-		-- fall damage prevention: restore health if falling hard
-		if vel.Y < -50 then h2.Health = h2.MaxHealth end
-		-- immortality: unconditional restore every frame
-		if h2.Health < h2.MaxHealth then h2.Health = h2.MaxHealth end
-	end)
-	-- 4. Block OnClientEvent on suspicious-named RemoteEvents in ReplicatedStorage
-	pcall(function()
-		local RS = game:GetService("ReplicatedStorage")
-		local function hookRemote(obj)
-			if not (obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction")) then return end
-			local n = obj.Name:lower()
-			if n:find("kick") or n:find("ban") or n:find("remove") or n:find("disconnect") then
-				pcall(function()
-					if obj:IsA("RemoteEvent") then
-						local c = obj.OnClientEvent:Connect(function() return nil end)
-						_akRemoteConns[#_akRemoteConns+1] = c
-					end
-				end)
-			end
-		end
-		for _, d in ipairs(RS:GetDescendants()) do hookRemote(d) end
-		local c = RS.DescendantAdded:Connect(function(d) pcall(hookRemote, d) end)
-		_akRemoteConns[#_akRemoteConns+1] = c
-	end)
-	-- 5. Workspace monitor + MaxHealth lock — run as cooperative loops
-	_akLoopActive = true
-	task.spawn(function()
-		while _akLoopActive do
-			pcall(function()
-				local c3 = LP.Character; if not c3 then return end
-				if c3.Parent ~= workspace then c3.Parent = workspace end
-				local h3 = c3:FindFirstChildOfClass("Humanoid")
-				if h3 then
-					if h3.MaxHealth ~= 100 then h3.MaxHealth = 100 end
-					if h3.Health <= 0    then h3.Health = h3.MaxHealth end
-				else
-					local nh = Instance.new("Humanoid")
-					nh.Parent = c3
-				end
-			end)
-			task.wait(0.1)
-		end
-	end)
-	_akActive = true
-end
-
-local function stopAntiKick()
-	if not _akActive then return end
-	_akLoopActive = false
-	if _akCharAddedConn then pcall(function() _akCharAddedConn:Disconnect() end); _akCharAddedConn = nil end
-	if _akPosConn    then pcall(function() _akPosConn:Disconnect()    end); _akPosConn    = nil end
-	if _akDeathConn  then pcall(function() _akDeathConn:Disconnect()  end); _akDeathConn  = nil end
-	if _akHealthConn then pcall(function() _akHealthConn:Disconnect() end); _akHealthConn = nil end
-	if _akMaxHpConn  then pcall(function() _akMaxHpConn:Disconnect()  end); _akMaxHpConn  = nil end
-	-- disconnect remote event intercepts
-	for _, c in ipairs(_akRemoteConns) do pcall(function() c:Disconnect() end) end
-	_akRemoteConns = {}
-	-- restore character __newindex
-	if _akCharMtRef and _akCharOldNI ~= nil then
-		pcall(function()
-			setreadonly(_akCharMtRef, false)
-			_akCharMtRef.__newindex = _akCharOldNI
-			setreadonly(_akCharMtRef, true)
-		end)
-		_akCharOldNI = nil; _akCharMtRef = nil
-	end
-	-- restore __namecall
-	if _akMt and _akOldNamecall then
-		pcall(function()
-			setreadonly(_akMt, false)
-			_akMt.__namecall = _akOldNamecall
-			setreadonly(_akMt, true)
-		end)
-		_akOldNamecall = nil; _akMt = nil
-	end
-	_akActive = false
-end
-task.spawn(function() pcall(startAntiKick) end)
-
--- ===================================================================
--- GC SCANNER — block X-15 / X-16 kick signals on any remote
--- ===================================================================
-local _gcScanned = {}
-
-local function _gcHookRemote(remote)
-	pcall(function()
-		local oldFire
-		oldFire = hookfunction(remote.FireServer, newcclosure(function(self, ...)
-			local a1 = select(1, ...) and tostring(select(1, ...)):lower() or ""
-			if a1 == "x-15" or a1 == "x-16" then return task.wait(9e9) end
-			return oldFire(self, ...)
-		end))
-	end)
-end
-
-local function _gcDeepScan(value)
-	if _gcScanned[value] then return end
-	_gcScanned[value] = true
-	if typeof(value) == "Instance" and value:IsA("RemoteEvent") then
-		if not value:IsDescendantOf(game:GetService("ReplicatedStorage")) then
-			_gcHookRemote(value)
-			pcall(function()
-				local _cwOld
-				_cwOld = hookfunction(getrenv().coroutine.wrap, newcclosure(function(...)
-					if not checkcaller() then return task.wait(9e9) end
-					return _cwOld(...)
-				end))
-			end)
-		end
-		return
-	end
-	if typeof(value) == "function" then
-		local ok, up = pcall(getupvalues, value)
-		if ok and up then for _, v in pairs(up) do _gcDeepScan(v) end end
-	end
-	if typeof(value) == "table" then
-		for _, v in pairs(value) do _gcDeepScan(v) end
-	end
-end
-
-if getgc and islclosure and isexecutorclosure then
-	task.spawn(function()
-		pcall(function()
-			for _, obj in next, getgc(true) do
-				if typeof(obj) == "function" and islclosure(obj) and not isexecutorclosure(obj) then
-					_gcDeepScan(obj)
-				end
-			end
-		end)
-	end)
-end
-
--- ===================================================================
--- SCREEN-TEXT ANTI-KICK — countdown "5"→"1" pause auto-steal
--- ===================================================================
-local _akScreenLock  = false
-local _akPending     = {autoSteal = false, armMedusa = false}
-local _akWatchedLbls = {}
-
-local _STKILL_BAD  = {"backpack","inventory","chatmain","bubblechat","overhead","nametag","leaderboard","hudgui"}
-local _STKILL_GOOD = {"global","announce","notif","banner","broadcast","event","popup","sammy","alert","header","news","system","message","center","steal","countdown","timer"}
-
-local function _stClassify(obj)
-	if not obj or not obj.Parent then return false end
-	local n   = (obj.Name or ""):lower()
-	local pn  = ((obj.Parent and obj.Parent.Name) or ""):lower()
-	local gpn = ((obj.Parent and obj.Parent.Parent and obj.Parent.Parent.Name) or ""):lower()
-	for _, b in ipairs(_STKILL_BAD) do
-		if n:find(b,1,true) or pn:find(b,1,true) then return false end
-	end
-	for _, g in ipairs(_STKILL_GOOD) do
-		if n:find(g,1,true) or pn:find(g,1,true) or gpn:find(g,1,true) then return true end
 	end
 	return false
 end
 
-local function _stHandleText(txt)
-	if type(txt) ~= "string" then return end
-	local clean = txt:gsub("<[^>]+>",""):gsub("%s+","")
-	if clean == "5" then
-		_akScreenLock = true
-		if AutoSteal and AutoSteal.Enabled then
-			_akPending.autoSteal = true
-			pcall(stopAutoSteal)
-		end
-		if _armState and _armState.enabled then
-			_akPending.armMedusa = true
-			_armState.enabled = false
-		end
-	elseif clean == "1" then
-		task.delay(0.6, function()
-			_akScreenLock = false
-			if _akPending.autoSteal then
-				_akPending.autoSteal = false
-				if AutoSteal then AutoSteal.Enabled = true; pcall(startAutoSteal) end
-			end
-			if _akPending.armMedusa then
-				_akPending.armMedusa = false
-				if _armState then _armState.enabled = true end
-			end
-		end)
-	end
+local function _smIsLocked()
+	if not _smEnabled then return false end
+	return _smInDuelCountdown() or _smHoldingBrainrot()
 end
 
-local function _stWatchLabel(obj)
-	if _akWatchedLbls[obj] then return end
-	_akWatchedLbls[obj] = true
-	pcall(function() _stHandleText(obj.Text or "") end)
-	obj:GetPropertyChangedSignal("Text"):Connect(function()
-		if _stClassify(obj) then _stHandleText(obj.Text or "") end
-	end)
+local function _smForceStop(reason)
+	local stopped = false
+	if AB.active    then AB.stop();    stopped = true end
+	if ABP.active   then ABP.stop();   stopped = true end
+	if AimV3.active then AimV3.stop(); stopped = true end
+	if State.autoLeftEnabled  then stopAutoLeft();  stopped = true end
+	if State.autoRightEnabled then stopAutoRight(); stopped = true end
+	if stopped and showActionNotification then pcall(function() showActionNotification(reason or "SAFE MODE LOCK") end) end
 end
 
-task.spawn(function()
-	local pg = LP:WaitForChild("PlayerGui", 10)
-	if not pg then return end
-	for _, obj in ipairs(pg:GetDescendants()) do
-		if obj:IsA("TextLabel") and _stClassify(obj) then _stWatchLabel(obj) end
+local function _smTryStart()
+	if _smIsLocked() then
+		_smForceStop("SAFE MODE LOCK")
+		return false
 	end
-	pg.DescendantAdded:Connect(function(obj)
-		task.wait(0.04)
-		if not obj:IsA("TextLabel") then return end
-		if _stClassify(obj) then
-			_stWatchLabel(obj)
-			local t = obj.Text or ""
-			if #t >= 1 then _stHandleText(t) end
-		end
-		obj:GetPropertyChangedSignal("Text"):Connect(function()
-			if _stClassify(obj) then _stHandleText(obj.Text or "") end
-		end)
-	end)
-end)
+	return true
+end
 
-pcall(function()
-	local TCS = game:GetService("TextChatService")
-	if TCS and TCS.MessageReceived then
-		TCS.MessageReceived:Connect(function(msg)
-			if not msg then return end
-			local t = (msg.Text or ""):gsub("<[^>]+>",""):gsub("%s+","")
-			_stHandleText(t)
-		end)
+RunService.Heartbeat:Connect(function()
+	if _smEnabled and _smIsLocked() then
+		_smForceStop("SAFE MODE LOCK")
 	end
 end)
 
--- ===================================================================
--- ANTI-DETECT EXTRA — periodic GC rescan + HTTP block + shutdown hook
--- ===================================================================
-
--- 1. Periodic GC rescan every 30s (catch kick remotes injected dynamically)
-task.spawn(function()
-	while true do
-		task.wait(30)
-		pcall(function()
-			if not (getgc and islclosure and isexecutorclosure) then return end
-			for _, obj in next, getgc(true) do
-				if typeof(obj) == "function" and islclosure(obj) and not isexecutorclosure(obj) then
-					_gcDeepScan(obj)
-				end
-			end
-		end)
-	end
-end)
-
--- 2. Block HTTP reporting (syn.request / request / http_request)
-pcall(function()
-	local _BAD_URL = {"log","report","detect","analytics","telemetry","anticheat","anti_cheat","ban"}
-	local function _wrapReq(fn)
-		if not fn then return fn end
-		return newcclosure(function(opts, ...)
-			if type(opts) == "table" then
-				local url = (opts.Url or opts.url or ""):lower()
-				for _, kw in ipairs(_BAD_URL) do
-					if url:find(kw, 1, true) then return {StatusCode=200,Body="",Success=true} end
-				end
-			end
-			return fn(opts, ...)
-		end)
-	end
-	if syn and syn.request  then syn.request   = _wrapReq(syn.request)  end
-	if request              then request        = _wrapReq(request)       end
-	if http_request         then http_request   = _wrapReq(http_request)  end
-end)
-
--- 3. Block game:Shutdown() and game:BindToClose() via __namecall
-pcall(function()
-	local gmt = getrawmetatable(game); if not gmt then return end
-	setreadonly(gmt, false)
-	local _gOldNC = gmt.__namecall
-	local _gRaw   = _gOldNC
-	gmt.__namecall = newcclosure(function(self, ...)
-		local fromGame = not (checkcaller and checkcaller())
-		if fromGame then
-			local m = tostring(getnamecallmethod and getnamecallmethod() or ""):lower()
-			if m == "shutdown" or m == "bindtoclose" then return end
-		end
-		return _gRaw(self, ...)
-	end)
-	setreadonly(gmt, true)
-end)
-
--- 4. Monitor workspace for character removal and restore instantly
-task.spawn(function()
-	while true do
-		task.wait(0.05)
-		pcall(function()
-			local char = LP.Character; if not char then return end
-			if char.Parent ~= workspace then char.Parent = workspace end
-		end)
-	end
-end)
+_GH.SM_enabled    = function() return _smEnabled end
+_GH.SM_setEnabled = function(on) _smEnabled = on end
+_GH.SM_tryStart   = _smTryStart
+_GH.SM_forceStop  = _smForceStop
 
 local _MH_buildUI
 _MH_buildUI = function()
@@ -2977,6 +2666,9 @@ buildPage("Combat", function()
 	UIB.makeInputRow("Aim Speed",AB.SPEED,function(n) if n>0 and n<=200 then AB.SPEED=n end end)
 	UIB.makeInputRow("Aim Height",AB.HEIGHT,function(n) if n>=0 and n<=30 then AB.HEIGHT=n end end)
 	UIB.makeGap(4); UIB.makeSectionLabel("Defense")
+	UIB.makeToggleRow("Safe Mode",false,function(on)
+		_GH.SM_setEnabled(on)
+	end)
 	setAntiRagdollRowVisual=UIB.makeToggleRow("Anti Ragdoll",false,function(on)
 		State.antiRagdollEnabled=on; if on then startAntiRagdoll() else stopAntiRagdoll() end
 	end)
