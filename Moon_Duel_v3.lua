@@ -427,21 +427,27 @@ destroyAllMoonHub()
 -- =================================================================
 
 -- Movement engine — LinearVelocity constraint (Attachment on HumanoidRootPart)
--- instead of a welded decoy Part + AssemblyLinearVelocity writes. Two reasons
--- this replaced the old proxy-part approach entirely:
---   1) A random-named 1x1x1 Transparency=1 CanCollide=false Massless Part
---      welded straight onto HumanoidRootPart is a textbook signature a lot of
---      anti-cheat GetDescendants() scans specifically look for.
---   2) VelocityConstraintMode.Plane locks the constraint to the XZ plane —
---      it is PHYSICALLY IMPOSSIBLE for it to ever apply a Y-axis force, so
---      jump/gravity/fall-damage stay untouched with no extra guard code
---      needed (the old version had to manually re-read and re-write the
---      existing Y velocity every single write to avoid clobbering it).
-local charLV    = nil   -- LinearVelocity constraint
-local charLVAtt = nil   -- its Attachment, parented to HumanoidRootPart
+-- Ace logic: network ownership claiming + Unit-normalised direction.
+local charLV         = nil   -- LinearVelocity constraint
+local charLVAtt      = nil   -- its Attachment, parented to HumanoidRootPart
+local _ownerWatchConn = nil  -- ReceiveAge watcher for continuous ownership
+local _ownTimer      = 0
+local _ownInterval   = 0.8 + math.random() * 0.4
+
+local function _claimOwn(hrp2)
+	pcall(function() hrp2:SetNetworkOwner(LP) end)
+end
+
+local function _startOwnerWatch(hrp2)
+	if _ownerWatchConn then pcall(function() _ownerWatchConn:Disconnect() end) end
+	_ownerWatchConn = hrp2:GetPropertyChangedSignal("ReceiveAge"):Connect(function()
+		if _speedBoosterActive then task.defer(function() _claimOwn(hrp2) end) end
+	end)
+end
 
 local function destroyLV()
-	if charLV and charLV.Parent then pcall(function() charLV:Destroy() end) end
+	if _ownerWatchConn then pcall(function() _ownerWatchConn:Disconnect() end); _ownerWatchConn = nil end
+	if charLV    and charLV.Parent    then pcall(function() charLV:Destroy()    end) end
 	if charLVAtt and charLVAtt.Parent then pcall(function() charLVAtt:Destroy() end) end
 	charLV, charLVAtt = nil, nil
 end
@@ -458,12 +464,14 @@ local function ensureLV()
 	charLV.Name = _NS .. "LV"
 	charLV.Attachment0 = charLVAtt
 	charLV.VelocityConstraintMode = Enum.VelocityConstraintMode.Plane
-	charLV.PrimaryTangentAxis   = Vector3.new(1,0,0)  -- X
-	charLV.SecondaryTangentAxis = Vector3.new(0,0,1)  -- Z
+	charLV.PrimaryTangentAxis   = Vector3.new(1,0,0)
+	charLV.SecondaryTangentAxis = Vector3.new(0,0,1)
 	charLV.MaxForce      = math.huge
 	charLV.PlaneVelocity = Vector2.zero
 	charLV.RelativeTo    = Enum.ActuatorRelativeTo.World
 	charLV.Parent = hrp2
+	_claimOwn(hrp2)
+	_startOwnerWatch(hrp2)
 	return charLV
 end
 
@@ -472,15 +480,17 @@ local function proxyMove(dir, speed)
 	local hum = char:FindFirstChildOfClass("Humanoid")
 	if hum then hum:Move(dir, false) end
 	local lv = ensureLV()
-	if lv then lv.PlaneVelocity = Vector2.new(dir.X*speed, dir.Z*speed) end
+	if lv then
+		local flat = Vector3.new(dir.X, 0, dir.Z)
+		if flat.Magnitude > 0.01 then flat = flat.Unit end
+		lv.PlaneVelocity = Vector2.new(flat.X * speed, flat.Z * speed)
+	end
 end
 
 -- Fully tears the constraint down (not just zeroes it) — a LinearVelocity
 -- with MaxForce = math.huge left attached at PlaneVelocity zero actively
 -- fights ANY other force with infinite force, including the player's own
--- WASD input. "Stop boosting" must mean "give full native control back",
--- exactly like the reference script's removeBoost()+destroyLV(), or the
--- player stays invisibly locked in place after the very first use.
+-- WASD input. "Stop boosting" must mean "give full native control back".
 local function proxyStop()
 	local hum = LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
 	if hum then hum:Move(Vector3.zero, false) end
@@ -515,23 +525,30 @@ local function getCurrentSpeed()
 	end
 end
 
+local _speedBoosterActive = false  -- controlled by the Speed Booster widget
+
 local h, hrp
 local function setupChar(char)
 	h = char:WaitForChild("Humanoid", 5)
 	hrp = char:WaitForChild("HumanoidRootPart", 5)
 	if h then h.WalkSpeed = getCurrentSpeed() end
-	-- NOTE: deliberately NOT pre-warming ensureLV() here. The constraint
-	-- must only ever exist while a feature is actively driving it — see
-	-- proxyStop's comment. Creating it eagerly on every spawn is what
-	-- locked movement completely: MaxForce=math.huge + PlaneVelocity=zero
-	-- fights the player's own input from the instant they spawn, before
-	-- any hub feature is even touched.
+	-- Ace: clean any stale LV from previous life first
+	destroyLV()
+	-- If speed boost is active, re-claim ownership after a short delay
+	-- (character physics settle before we assert ownership)
+	if _speedBoosterActive then
+		task.delay(0.3, function()
+			local hrp2 = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+			if hrp2 and _speedBoosterActive then
+				_claimOwn(hrp2); _startOwnerWatch(hrp2)
+			end
+		end)
+	end
 end
 LP.CharacterAdded:Connect(setupChar)
 if LP.Character then setupChar(LP.Character) end
 
-local _speedBoosterActive = false  -- controlled by the Speed Booster widget
-RunService.Heartbeat:Connect(function()
+RunService.Heartbeat:Connect(function(dt)
 	if not _speedBoosterActive then destroyLV(); return end
 	local char = LP.Character; if not char then destroyLV(); return end
 	local hum = char:FindFirstChildOfClass("Humanoid")
@@ -546,14 +563,20 @@ RunService.Heartbeat:Connect(function()
 		-- infinite-force constraint fighting ragdoll/fall physics.
 		destroyLV(); return
 	end
+	-- Ace: periodic network ownership re-claim
+	_ownTimer = _ownTimer + dt
+	if _ownTimer >= _ownInterval then
+		_claimOwn(hrp2); _ownTimer = 0; _ownInterval = 0.8 + math.random() * 0.4
+	end
 	updateCarryState()
 	local md = hum.MoveDirection
 	local spd = getCurrentSpeed()
 	if md.Magnitude > 0.1 then
-		local _n = 1 + (math.random() - 0.5) * 0.04
+		local flat = Vector3.new(md.X, 0, md.Z)
+		if flat.Magnitude > 0.01 then flat = flat.Unit end
 		local lv = ensureLV()
 		if lv then
-			lv.PlaneVelocity = Vector2.new(md.X * spd * _n, md.Z * spd * _n)
+			lv.PlaneVelocity = Vector2.new(flat.X * spd, flat.Z * spd)
 		end
 	elseif charLV and charLV.Parent then
 		-- Not pressing a movement key right now: hold at zero rather than
