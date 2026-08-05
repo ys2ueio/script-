@@ -4001,16 +4001,17 @@ stealPctLbl.TextColor3=C_MOON2; stealPctLbl.Font=Enum.Font.GothamBlack; stealPct
 stealPctLbl.TextXAlignment=Enum.TextXAlignment.Right; stealPctLbl.ZIndex=6
 AutoSteal.ProgressFill=stealFill; AutoSteal.ProgressText=stealPctLbl; AutoSteal.Widget=stealWidget; AutoSteal.StatusLabel=stealLabel
 task.spawn(function() task.wait(0.6); if AutoSteal.SetReadyColor then AutoSteal.SetReadyColor("READY") end end)
+local _lastReadyState = "READY"
 local function _setReadyColor(state)
+	if state then _lastReadyState = state end
 	local lbl = AutoSteal.StatusLabel; if not lbl then return end
-	local isReady = (state == "READY")
-	local col = isReady and C_MOON or C_RED
-	lbl.TextColor3 = col
-	-- Change the label's animated gradient
+	local isReady = (_lastReadyState == "READY")
+	lbl.TextColor3 = isReady and C_MOON or C_RED
 	local g = lbl:FindFirstChildOfClass("UIGradient")
 	if g then
-		local c1 = isReady and Color3.fromRGB(20,70,140)  or Color3.fromRGB(120,20,20)
-		local c2 = isReady and Color3.fromRGB(120,180,255) or Color3.fromRGB(255,100,100)
+		-- Utilise C_ON_BG + C_MOON → suit le thème (bleu default, gris noir)
+		local c1 = isReady and C_ON_BG or Color3.fromRGB(120,20,20)
+		local c2 = isReady and C_MOON  or Color3.fromRGB(255,100,100)
 		g.Color = ColorSequence.new({
 			ColorSequenceKeypoint.new(0,    c2),
 			ColorSequenceKeypoint.new(0.25, c1),
@@ -4021,6 +4022,8 @@ local function _setReadyColor(state)
 	end
 end
 AutoSteal.SetReadyColor = _setReadyColor
+-- Re-applique la couleur à chaque changement de thème
+_GH.stealReadyColorFn = function() _setReadyColor(nil) end
 local Stats=game:GetService("Stats")
 local frameCount,lastFpsTime,lastFps,lastPing=0,tick(),60,nil
 local function refreshInfoLabel()
@@ -4230,96 +4233,73 @@ _floatDefs.battp = {
 }
 
 -- ===================================================================
--- INSTA RESET — Limited Hub logic (tool save, char=nil, heartbeat 60fps)
+-- INSTA RESET — Ace Duels logic (100%)
 -- ===================================================================
-do
-	local IR_GUID        = "f888ee6e-c86d-46e1-93d7-0639d6635d42"
-	local IR_resetRemote = nil
-	local _RS            = game:GetService("ReplicatedStorage")
-
-	-- Hook FireServer : capture le remote dès sa première utilisation (newcclosure = invisible)
-	pcall(function()
-		if not (hookfunction and newcclosure) then return end
+_G.AceCursedResetRemote = _G.AceCursedResetRemote or nil
+_G.AceCursedResetGuid   = _G.AceCursedResetGuid   or "f888ee6e-c86d-46e1-93d7-0639d6635d42"
+pcall(function()
+	if not _G.AceCursedResetHooked and hookfunction and newcclosure then
+		_G.AceCursedResetHooked = true
 		local oldFire
 		oldFire = hookfunction(Instance.new("RemoteEvent").FireServer, newcclosure(function(self, ...)
-			if not IR_resetRemote and typeof(self) == "Instance"
+			if not _G.AceCursedResetRemote and typeof(self) == "Instance"
 			and self:IsA("RemoteEvent") and self.Name:sub(1,3) == "RE/" then
-				IR_resetRemote = self
+				_G.AceCursedResetRemote = self
 			end
 			return oldFire(self, ...)
 		end))
-	end)
-
-	local function _findRemote()
-		if IR_resetRemote then return IR_resetRemote end
-		-- scan RE/ prefix (main game pattern)
+	end
+end)
+local function _aceInstaReset()
+	if not _G.AceCursedResetRemote then
+		local _RS = game:GetService("ReplicatedStorage")
 		for _, desc in ipairs(_RS:GetDescendants()) do
 			if desc:IsA("RemoteEvent") and desc.Name:sub(1,3) == "RE/" then
-				IR_resetRemote = desc; return IR_resetRemote
+				_G.AceCursedResetRemote = desc
+				break
 			end
 		end
-		-- scan Tools/Cooldown sibling pattern (Limited Hub fallback)
-		local pkg = _RS:FindFirstChild("Packages", 2)
-		local net = pkg and pkg:FindFirstChild("Net", 2)
-		if net then
-			local ch = net:GetChildren()
-			for i = 1, #ch - 1 do
-				if ch[i] and ch[i+1] and string.find(ch[i].Name, "Tools/Cooldown") then
-					IR_resetRemote = ch[i+1]; return IR_resetRemote
-				end
-			end
-		end
-		return nil
 	end
-
-	local function instareset()
-		local remote = _findRemote()
-		-- fallback : kill via humanoid si aucun remote trouvé
-		if not remote then
-			local char = LP.Character
-			local hum  = char and char:FindFirstChildOfClass("Humanoid")
-			if hum then hum.Health = 0 end
-			return
-		end
-
-		local character = LP.Character
-		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-		if humanoid and humanoid.Health <= 0 then
-			pcall(function() remote:FireServer(IR_GUID, LP, "balloon") end)
-			return
-		end
-
-		local resetDetected = false
-		local resetConns = {}
-		if humanoid then
-			table.insert(resetConns, humanoid.Died:Connect(function() resetDetected = true end))
-			table.insert(resetConns, humanoid:GetPropertyChangedSignal("Health"):Connect(function()
-				if humanoid.Health <= 0 then resetDetected = true end
-			end))
-		end
-		if character then
-			table.insert(resetConns, character.AncestryChanged:Connect(function(_, parent)
-				if not parent then resetDetected = true end
-			end))
-		end
-		task.spawn(function()
-			for _ = 1, 10 do
-				if resetDetected then break end
-				pcall(function() remote:FireServer(IR_GUID, LP, "balloon") end)
-				task.wait(0.05)
-			end
-			for _, c in ipairs(resetConns) do pcall(function() c:Disconnect() end) end
-		end)
+	if not _G.AceCursedResetRemote then
+		local char = LP.Character
+		local hum  = char and char:FindFirstChildOfClass("Humanoid")
+		if hum then hum.Health = 0 end
+		return
 	end
-
-	_GH.MH_instareset = instareset
-
-	_floatDefs.instareset = {
-		label    = "INSTANT\nRESET",
-		onClick  = instareset,
-		momentary = true,
-	}
+	local character = LP.Character
+	local humanoid  = character and character:FindFirstChildOfClass("Humanoid")
+	if humanoid and humanoid.Health <= 0 then
+		pcall(function() _G.AceCursedResetRemote:FireServer(_G.AceCursedResetGuid, LP, "balloon") end)
+		return
+	end
+	local resetDetected = false
+	local resetConns = {}
+	if humanoid then
+		table.insert(resetConns, humanoid.Died:Connect(function() resetDetected = true end))
+		table.insert(resetConns, humanoid:GetPropertyChangedSignal("Health"):Connect(function()
+			if humanoid.Health <= 0 then resetDetected = true end
+		end))
+	end
+	if character then
+		table.insert(resetConns, character.AncestryChanged:Connect(function(_, parent)
+			if not parent then resetDetected = true end
+		end))
+	end
+	task.spawn(function()
+		for _ = 1, 10 do
+			if resetDetected then break end
+			pcall(function() _G.AceCursedResetRemote:FireServer(_G.AceCursedResetGuid, LP, "balloon") end)
+			task.wait(0.05)
+		end
+		for _, conn in ipairs(resetConns) do pcall(function() conn:Disconnect() end) end
+	end)
 end
+_GH.MH_instareset = _aceInstaReset
+_floatDefs.instareset = {
+	label    = "INSTANT\nRESET",
+	onClick  = _aceInstaReset,
+	momentary = true,
+}
 
 _floatDefs.aimv2 = {
 	label = "AIM V2",
