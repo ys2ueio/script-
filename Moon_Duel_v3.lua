@@ -61,6 +61,17 @@ local _THEME_DEFS = {
 		dim     = Color3.fromRGB(105,105,105),
 		d3      = Color3.fromRGB(35,35,35),
 		d4      = Color3.fromRGB(165,165,165),
+	},
+	crimson = {
+		moon    = Color3.fromRGB(230,70,95),
+		moon2   = Color3.fromRGB(255,140,155),
+		on_bg   = Color3.fromRGB(70,15,26),
+		border  = Color3.fromRGB(60,22,30),
+		silver  = Color3.fromRGB(240,210,215),
+		silver2 = Color3.fromRGB(195,135,145),
+		dim     = Color3.fromRGB(135,85,92),
+		d3      = Color3.fromRGB(120,25,42),
+		d4      = Color3.fromRGB(225,60,85),
 	}
 }
 local _currentTheme = "default"
@@ -115,7 +126,7 @@ local function applyTheme(newName)
 			end
 		end)
 	end
-	-- steal fill gradient: swap between blue shimmer (default) and grey shimmer (noir)
+	-- steal fill gradient: swap between blue shimmer (default), grey shimmer (noir), crimson shimmer
 	if _GH.stealFillGradRef and _GH.stealFillGradRef.Parent then
 		if newName == "noir" then
 			_GH.stealFillGradRef.Color = ColorSequence.new({
@@ -124,6 +135,14 @@ local function applyTheme(newName)
 				ColorSequenceKeypoint.new(0.5,  Color3.fromRGB(200, 200, 200)),
 				ColorSequenceKeypoint.new(0.75, Color3.fromRGB(90,  90,  90)),
 				ColorSequenceKeypoint.new(1,    Color3.fromRGB(20,  20,  20)),
+			})
+		elseif newName == "crimson" then
+			_GH.stealFillGradRef.Color = ColorSequence.new({
+				ColorSequenceKeypoint.new(0,    Color3.fromRGB(60,  10,  20)),
+				ColorSequenceKeypoint.new(0.25, Color3.fromRGB(180, 40,  65)),
+				ColorSequenceKeypoint.new(0.5,  Color3.fromRGB(255, 150, 165)),
+				ColorSequenceKeypoint.new(0.75, Color3.fromRGB(180, 40,  65)),
+				ColorSequenceKeypoint.new(1,    Color3.fromRGB(60,  10,  20)),
 			})
 		else
 			_GH.stealFillGradRef.Color = ColorSequence.new({
@@ -2394,6 +2413,74 @@ local function setDragLock(on)
 end
 
 -- ===================================================================
+-- TOAST NOTIFICATIONS — small fading badge, top-center, stacks vertically
+-- ===================================================================
+local toastLayer = Instance.new("Frame", gui)
+toastLayer.Name = "ToastLayer"
+toastLayer.AnchorPoint = Vector2.new(0.5,0)
+toastLayer.Position = UDim2.new(0.5,0,0,10)
+toastLayer.Size = UDim2.new(0,240,0,0)
+toastLayer.AutomaticSize = Enum.AutomaticSize.Y
+toastLayer.BackgroundTransparency = 1
+toastLayer.ZIndex = 200
+local toastLL = Instance.new("UIListLayout", toastLayer)
+toastLL.SortOrder = Enum.SortOrder.LayoutOrder
+toastLL.HorizontalAlignment = Enum.HorizontalAlignment.Center
+toastLL.Padding = UDim.new(0,6)
+
+local _toastOrder = 0
+local function showToast(text, kind)
+	_toastOrder = _toastOrder + 1
+	local order = _toastOrder
+	local accent = (kind=="off" and C_RED) or (kind=="info" and C_MOON) or C_GREEN
+	local icon   = (kind=="off" and "\226\156\151") or (kind=="info" and "\226\128\162") or "\226\156\147"
+
+	local card = Instance.new("Frame", toastLayer)
+	card.Size = UDim2.new(0,0,0,24); card.AutomaticSize = Enum.AutomaticSize.X
+	card.BackgroundColor3 = Color3.fromRGB(6,8,14); card.BackgroundTransparency = 1
+	card.BorderSizePixel = 0; card.LayoutOrder = order; card.ZIndex = 200
+	addCorner(card, 8)
+	local stroke = addStroke(card, accent, 1, 1)
+	local pad = Instance.new("UIPadding", card)
+	pad.PaddingLeft = UDim.new(0,10); pad.PaddingRight = UDim.new(0,10)
+
+	local row = Instance.new("Frame", card)
+	row.Size = UDim2.new(0,0,1,0); row.AutomaticSize = Enum.AutomaticSize.X
+	row.BackgroundTransparency = 1; row.ZIndex = 201
+	local rowLL = Instance.new("UIListLayout", row)
+	rowLL.FillDirection = Enum.FillDirection.Horizontal
+	rowLL.VerticalAlignment = Enum.VerticalAlignment.Center
+	rowLL.Padding = UDim.new(0,6)
+
+	local iconLbl = Instance.new("TextLabel", row)
+	iconLbl.Size = UDim2.new(0,12,1,0); iconLbl.BackgroundTransparency = 1
+	iconLbl.Text = icon; iconLbl.TextColor3 = accent; iconLbl.TextTransparency = 1
+	iconLbl.Font = Enum.Font.GothamBlack; iconLbl.TextSize = 11; iconLbl.ZIndex = 201
+
+	local txtLbl = Instance.new("TextLabel", row)
+	txtLbl.Size = UDim2.new(0,0,1,0); txtLbl.AutomaticSize = Enum.AutomaticSize.X
+	txtLbl.BackgroundTransparency = 1; txtLbl.Text = text
+	txtLbl.TextColor3 = C_WHITE; txtLbl.TextTransparency = 1
+	txtLbl.Font = Enum.Font.GothamBold; txtLbl.TextSize = 10; txtLbl.ZIndex = 201
+
+	TweenService:Create(card, TweenInfo.new(0.18), {BackgroundTransparency=0.15}):Play()
+	TweenService:Create(stroke, TweenInfo.new(0.18), {Transparency=0.2}):Play()
+	TweenService:Create(iconLbl, TweenInfo.new(0.18), {TextTransparency=0}):Play()
+	TweenService:Create(txtLbl, TweenInfo.new(0.18), {TextTransparency=0}):Play()
+
+	task.delay(1.4, function()
+		if not card or not card.Parent then return end
+		TweenService:Create(card, TweenInfo.new(0.25), {BackgroundTransparency=1}):Play()
+		TweenService:Create(stroke, TweenInfo.new(0.25), {Transparency=1}):Play()
+		TweenService:Create(iconLbl, TweenInfo.new(0.25), {TextTransparency=1}):Play()
+		TweenService:Create(txtLbl, TweenInfo.new(0.25), {TextTransparency=1}):Play()
+		task.wait(0.26)
+		if card then card:Destroy() end
+	end)
+end
+_GH.showToast = showToast
+
+-- ===================================================================
 -- MAIN OUTER PANEL
 -- ===================================================================
 local WIN_W, WIN_H = 300, 340
@@ -2452,6 +2539,24 @@ closeBtn.Text = "-"; closeBtn.TextColor3 = C_WHITE; closeBtn.Font = Enum.Font.Go
 closeBtn.ZIndex = 7; addCorner(closeBtn, 8); addLivingStroke(closeBtn, 1)
 closeBtn.MouseEnter:Connect(function() TweenService:Create(closeBtn,TweenInfo.new(0.1),{TextColor3=C_MOON2}):Play() end)
 closeBtn.MouseLeave:Connect(function() TweenService:Create(closeBtn,TweenInfo.new(0.1),{TextColor3=C_WHITE}):Play() end)
+
+-- Small "active features" badge — sits between the title and lock/close, stays tiny
+local activeBadge = Instance.new("Frame", titleBar)
+activeBadge.Size = UDim2.new(0,30,0,16); activeBadge.Position = UDim2.new(1,-90,0.5,-8)
+activeBadge.BackgroundColor3 = Color3.fromRGB(0,0,0); activeBadge.BackgroundTransparency = 0.25
+activeBadge.BorderSizePixel = 0; activeBadge.ZIndex = 7
+addCorner(activeBadge, 8); addStroke(activeBadge, C_BORDER, 1, 0.35)
+local activeDot = Instance.new("Frame", activeBadge)
+activeDot.Size = UDim2.new(0,6,0,6); activeDot.Position = UDim2.new(0,7,0.5,-3)
+activeDot.BackgroundColor3 = C_DIM; activeDot.BorderSizePixel = 0; addCorner(activeDot, 3)
+local activeLbl = Instance.new("TextLabel", activeBadge)
+activeLbl.Size = UDim2.new(1,-16,1,0); activeLbl.Position = UDim2.new(0,15,0,0)
+activeLbl.BackgroundTransparency = 1; activeLbl.Text = "0"
+activeLbl.TextColor3 = C_DIM; activeLbl.Font = Enum.Font.GothamBold; activeLbl.TextSize = 9
+activeLbl.TextXAlignment = Enum.TextXAlignment.Left; activeLbl.ZIndex = 7
+-- updateActiveBadge() is defined below (after _MH_allToggles exists) so it can
+-- scan real toggle state — this keeps it correct even when config-load restores
+-- toggles directly via entry.set() instead of going through the click handler.
 
 local titleDiv = Instance.new("Frame", mainOuter)
 titleDiv.Size = UDim2.new(1,0,0,1); titleDiv.Position = UDim2.new(0,0,0,TITLE_H)
@@ -2528,6 +2633,20 @@ local _MH_allInputs  = {}
 _GH.allToggles = _MH_allToggles
 _GH.allInputs  = _MH_allInputs
 
+-- Scans real toggle state (not an incremental counter) so it stays correct
+-- whether a toggle flips via the click handler or via config-load's entry.set().
+local function updateActiveBadge()
+	local n = 0
+	for _, entry in pairs(_MH_allToggles) do
+		if entry.get() then n = n + 1 end
+	end
+	activeLbl.Text = tostring(n)
+	local on = n > 0
+	TweenService:Create(activeDot, TweenInfo.new(0.15), {BackgroundColor3 = on and C_GREEN or C_DIM}):Play()
+	TweenService:Create(activeLbl, TweenInfo.new(0.15), {TextColor3 = on and C_SILVER or C_DIM}):Play()
+end
+_GH.updateActiveBadge = updateActiveBadge
+
 function UIB.makeInputRow(label, default, onChange)
 	local row = Instance.new("Frame", currentPage)
 	row.Size = UDim2.new(1,0,0,32); row.BackgroundColor3 = C_ROW; row.BackgroundTransparency = 0.35
@@ -2598,8 +2717,10 @@ function UIB.makeToggleRow(label, defaultOn, onToggle)
 	clk.Size = UDim2.new(1,0,1,0); clk.BackgroundTransparency = 1; clk.Text = ""
 	clk.MouseButton1Click:Connect(function()
 		isOn = not isOn; setV(isOn)
+		updateActiveBadge()
 		if onToggle then onToggle(isOn) end
 		if _GH.autoSave then _GH.autoSave() end
+		if _GH.showToast then _GH.showToast(label, isOn and "on" or "off") end
 	end)
 	makeDivider()
 	local key = (currentPage and currentPage.Name or "?") .. "::" .. label
@@ -2715,7 +2836,18 @@ _GH.mbHalo = mbHalo; _GH.miniStk = miniStk; _GH.startMbAnim = startMbAnim
 _GH.stopMbAnim = function() _mbAnimRunning = false end
 makeDraggable(miniBtn, nil, "mini")
 
-local function showGui() mainOuter.Visible = true; miniBtn.Visible = false end
+-- Reuses the existing mainUIScale (persisted UI Scale setting) so the pop-in
+-- never fights the user's chosen size — it just animates toward whatever
+-- scale/position applyUIScale already settled on.
+local function showGui()
+	mainOuter.Visible = true; miniBtn.Visible = false
+	local targetScale = mainUIScale.Scale
+	local targetPos = mainOuter.Position
+	mainUIScale.Scale = targetScale * 0.85
+	mainOuter.Position = targetPos + UDim2.new(0,0,0,14)
+	TweenService:Create(mainUIScale, TweenInfo.new(0.22, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Scale=targetScale}):Play()
+	TweenService:Create(mainOuter, TweenInfo.new(0.22, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Position=targetPos}):Play()
+end
 local function hideGui() mainOuter.Visible = false; miniBtn.Visible = true end
 closeBtn.MouseButton1Click:Connect(hideGui)
 miniBtn.MouseButton1Click:Connect(showGui)
@@ -4418,7 +4550,7 @@ local function MH_load()
 		-- Theme must be applied BEFORE toggle restore: TweenService captures C_ON_BG
 		-- by value at Create() time, so restoring toggles before applyTheme would
 		-- bake the default-blue into all pill tweens even in noir mode.
-		if data.theme == "default" or data.theme == "noir" then
+		if data.theme == "default" or data.theme == "noir" or data.theme == "crimson" then
 			applyTheme(data.theme)
 		end
 
@@ -4756,20 +4888,27 @@ buildPage("Settings", function()
 		thLbl.TextColor3 = C_WHITE; thLbl.Font = Enum.Font.GothamBold
 		thLbl.TextSize = 10; thLbl.TextXAlignment = Enum.TextXAlignment.Left
 		addLivingTextGradient(thLbl)
-		local BW,BH = 55,22
+		local BW,BH = 48,22
+		local crimsonBtn = Instance.new("TextButton", thRow)
+		crimsonBtn.Size = UDim2.new(0,BW,0,BH); crimsonBtn.Position = UDim2.new(1,-(BW*3+26),0.5,-BH/2)
+		crimsonBtn.BackgroundColor3 = C_OFF_BG; crimsonBtn.BackgroundTransparency = 0.3
+		crimsonBtn.BorderSizePixel = 0; crimsonBtn.Text = "Crimson"
+		crimsonBtn.TextColor3 = C_DIM
+		crimsonBtn.Font = Enum.Font.GothamBold; crimsonBtn.TextSize = 8
+		crimsonBtn.AutoButtonColor = false; addCorner(crimsonBtn,6); addLivingStroke(crimsonBtn,1)
 		local defBtn = Instance.new("TextButton", thRow)
-		defBtn.Size = UDim2.new(0,BW,0,BH); defBtn.Position = UDim2.new(1,-(BW*2+14),0.5,-BH/2)
+		defBtn.Size = UDim2.new(0,BW,0,BH); defBtn.Position = UDim2.new(1,-(BW*2+20),0.5,-BH/2)
 		defBtn.BackgroundColor3 = C_MOON; defBtn.BackgroundTransparency = 0.1
 		defBtn.BorderSizePixel = 0; defBtn.Text = "Default"
 		defBtn.TextColor3 = Color3.fromRGB(0,10,20)
-		defBtn.Font = Enum.Font.GothamBold; defBtn.TextSize = 9
+		defBtn.Font = Enum.Font.GothamBold; defBtn.TextSize = 8
 		defBtn.AutoButtonColor = false; addCorner(defBtn,6); addLivingStroke(defBtn,1)
 		local noirBtn = Instance.new("TextButton", thRow)
-		noirBtn.Size = UDim2.new(0,BW,0,BH); noirBtn.Position = UDim2.new(1,-(BW+6),0.5,-BH/2)
+		noirBtn.Size = UDim2.new(0,BW,0,BH); noirBtn.Position = UDim2.new(1,-(BW+14),0.5,-BH/2)
 		noirBtn.BackgroundColor3 = C_OFF_BG; noirBtn.BackgroundTransparency = 0.3
 		noirBtn.BorderSizePixel = 0; noirBtn.Text = "Dark"
 		noirBtn.TextColor3 = C_DIM
-		noirBtn.Font = Enum.Font.GothamBold; noirBtn.TextSize = 9
+		noirBtn.Font = Enum.Font.GothamBold; noirBtn.TextSize = 8
 		noirBtn.AutoButtonColor = false; addCorner(noirBtn,6)
 		_G_updateThemeUI = function(name)
 			defBtn.BackgroundColor3  = name=="default" and C_MOON or C_OFF_BG
@@ -4778,12 +4917,21 @@ buildPage("Settings", function()
 			noirBtn.BackgroundColor3 = name=="noir" and Color3.fromRGB(200,200,200) or C_OFF_BG
 			noirBtn.BackgroundTransparency = name=="noir" and 0.15 or 0.3
 			noirBtn.TextColor3 = name=="noir" and Color3.fromRGB(10,10,10) or C_DIM
+			crimsonBtn.BackgroundColor3 = name=="crimson" and Color3.fromRGB(225,70,95) or C_OFF_BG
+			crimsonBtn.BackgroundTransparency = name=="crimson" and 0.1 or 0.3
+			crimsonBtn.TextColor3 = name=="crimson" and Color3.fromRGB(20,0,4) or C_DIM
 		end
 		defBtn.MouseButton1Click:Connect(function()
 			applyTheme("default"); if _GH.autoSave then _GH.autoSave() end
+			if _GH.showToast then _GH.showToast("Theme: Default", "info") end
 		end)
 		noirBtn.MouseButton1Click:Connect(function()
 			applyTheme("noir"); if _GH.autoSave then _GH.autoSave() end
+			if _GH.showToast then _GH.showToast("Theme: Dark", "info") end
+		end)
+		crimsonBtn.MouseButton1Click:Connect(function()
+			applyTheme("crimson"); if _GH.autoSave then _GH.autoSave() end
+			if _GH.showToast then _GH.showToast("Theme: Crimson", "info") end
 		end)
 	end
 	UIB.makeGap(6)
@@ -5555,6 +5703,7 @@ end)()
 -- INITIALIZATION
 -- ===================================================================
 local _configLoaded = MH_load()   -- loads the config at startup
+updateActiveBadge()               -- sync the small "active features" badge with real state
 selectTab("Combat")
 -- No save file: start Auto Steal immediately (it defaults to enabled).
 -- When a save exists, MH_load already re-activates it via the toggles table.
