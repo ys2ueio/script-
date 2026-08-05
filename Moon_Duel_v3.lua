@@ -1060,9 +1060,13 @@ end
 -- ===================================================================
 -- MEDUSA COUNTER (logique raw__59_)
 -- MEDUSA COUNTER (raw__59_ logic)
+-- Copie exacte de la logique Ace Duels : cooldown 25s (pas 0.5s),
+-- check State.medusaCounterEnabled dans useMedusaCounter lui-même,
+-- wait 0.05s après l'équip avant d'activer.
 local _medLastUsed = 0
 local _medDebounce = false
 local _medConns = {}
+local _MED_COOLDOWN = 25
 
 local function findMedusa()
 	local char=LP.Character; if not char then return nil end
@@ -1071,7 +1075,8 @@ local function findMedusa()
 			if tn:find("medusa") or tn:find("head") or tn:find("stone") then return tool end
 		end
 	end
-	local bp2=LP:FindFirstChild("Backpack"); if bp2 then
+	local bp2=LP:FindFirstChild("Backpack") or LP:FindFirstChildOfClass("Backpack")
+	if bp2 then
 		for _,tool in ipairs(bp2:GetChildren()) do
 			if tool:IsA("Tool") then local tn=tool.Name:lower()
 				if tn:find("medusa") or tn:find("head") or tn:find("stone") then return tool end
@@ -1082,13 +1087,15 @@ local function findMedusa()
 end
 
 local function useMedusaCounter()
+	if not State.medusaCounterEnabled then return end
 	if _medDebounce then return end
-	if tick()-_medLastUsed < 0.5 then return end
+	if tick()-_medLastUsed < _MED_COOLDOWN then return end
 	local char=LP.Character; if not char then return end
 	_medDebounce=true
 	local med=findMedusa(); if not med then _medDebounce=false; return end
 	if med.Parent~=char then
 		local hum2=char:FindFirstChildOfClass("Humanoid"); if hum2 then pcall(function() hum2:EquipTool(med) end) end
+		task.wait(0.05)
 	end
 	pcall(function() med:Activate() end)
 	_medLastUsed=tick(); _medDebounce=false
@@ -1116,50 +1123,72 @@ LP.CharacterAdded:Connect(function(char) if State.medusaCounterEnabled then task
 -- ===================================================================
 -- AUTO RESET MEDUSA (Taser Hub — PlatformStand + Anchored detect)
 -- ===================================================================
-local _armEnabled = false
-local _armDebounce = false
-local _armConns = {}
+-- Copie exacte de la logique Ace Duels (AceAutoResetShouldFire/FireOnce/
+-- OnAnchorChanged/Start/Stop) : détecte uniquement Anchored+Transparent
+-- (signature freeze Medusa), exclut les parts d'un Tool/Accessory,
+-- cooldown 2.25s + debounce medTriggered + délai 2.3s avant le reset.
+-- L'ancienne détection PlatformStand (absente chez Ace, faux positifs
+-- sur tout ragdoll normal) est supprimée.
+local _armState = {
+	conns = {}, enabled = false, medTriggered = false,
+	lastFire = 0, cooldown = 2.25,
+}
 
-local function _armDoReset()
-	if _armDebounce then return end
-	_armDebounce = true
-	task.spawn(function()
-		if _GH.MH_instareset then pcall(_GH.MH_instareset) end
-		task.wait(3); _armDebounce = false
+local function _armShouldFire(part)
+	if not _armState.enabled then return false end
+	if _armState.medTriggered then return false end
+	if tick() - (_armState.lastFire or 0) < _armState.cooldown then return false end
+	if not part or not part.Parent then return false end
+	if part:FindFirstAncestorOfClass("Tool") or part:FindFirstAncestorOfClass("Accessory") then
+		return false
+	end
+	return part.Anchored and part.Transparency == 1
+end
+
+local function _armFireOnce(part)
+	if not _armShouldFire(part) then return end
+	_armState.medTriggered = true
+	_armState.lastFire = tick()
+	task.delay(2.3, function()
+		if _armState.enabled and _GH.MH_instareset then
+			pcall(_GH.MH_instareset)
+		end
 	end)
 end
 
 local function _armWatchPart(part)
 	return part:GetPropertyChangedSignal("Anchored"):Connect(function()
-		if not _armEnabled then return end
-		if part.Anchored and part.Transparency == 1 then _armDoReset() end
+		_armFireOnce(part)
 	end)
 end
 
 local function setupAutoResetMedusa(char)
-	for _,c in pairs(_armConns) do pcall(function() c:Disconnect() end) end; _armConns={}
+	for _, c in pairs(_armState.conns) do pcall(function() c:Disconnect() end) end
+	_armState.conns = {}
+	_armState.medTriggered = false
 	if not char then return end
-	local hum=char:FindFirstChildOfClass("Humanoid")
-	if hum then
-		table.insert(_armConns, hum:GetPropertyChangedSignal("PlatformStand"):Connect(function()
-			if not _armEnabled then return end
-			if hum.PlatformStand then _armDoReset() end
-		end))
+	for _, part in ipairs(char:GetDescendants()) do
+		if part:IsA("BasePart") then
+			table.insert(_armState.conns, _armWatchPart(part))
+			_armFireOnce(part)
+		end
 	end
-	for _,part in ipairs(char:GetDescendants()) do
-		if part:IsA("BasePart") then table.insert(_armConns, _armWatchPart(part)) end
-	end
-	table.insert(_armConns, char.DescendantAdded:Connect(function(part)
-		if part:IsA("BasePart") then table.insert(_armConns, _armWatchPart(part)) end
+	table.insert(_armState.conns, char.DescendantAdded:Connect(function(part)
+		if part:IsA("BasePart") then
+			table.insert(_armState.conns, _armWatchPart(part))
+			_armFireOnce(part)
+		end
 	end))
 end
 
 local function stopAutoResetMedusa()
-	for _,c in pairs(_armConns) do pcall(function() c:Disconnect() end) end; _armConns={}
+	for _, c in pairs(_armState.conns) do pcall(function() c:Disconnect() end) end
+	_armState.conns = {}
+	_armState.medTriggered = false
 end
 
 LP.CharacterAdded:Connect(function(char)
-	task.wait(0.5); if _armEnabled then setupAutoResetMedusa(char) end
+	task.wait(0.5); if _armState.enabled then setupAutoResetMedusa(char) end
 end)
 
 
@@ -1567,9 +1596,11 @@ local setInfJumpRowVisual
 local BatCounter = {active=false, conn=nil}
 local _bcDebounce = false
 
+-- findBatForCounter/swingBatForCounter identiques à Ace. isRagdoll
+-- ajoute hum.PlatformStand (absent avant) — copie AceCounterIsRagdoll.
 local function findBatForCounter()
 	local c=LP.Character; if not c then return nil end
-	local bp=LP:FindFirstChildOfClass("Backpack")
+	local bp=LP:FindFirstChildOfClass("Backpack") or LP:FindFirstChild("Backpack")
 	for _,name in ipairs(BAT_NAMES) do
 		local t=c:FindFirstChild(name) or (bp and bp:FindFirstChild(name))
 		if t then return t end
@@ -1586,14 +1617,19 @@ local function swingBatForCounter(bat,char)
 		pcall(function() remote:FireServer() end); task.wait(0.15); pcall(function() remote:FireServer() end)
 	else pcall(function() bat:Activate() end); task.wait(0.15); pcall(function() bat:Activate() end) end
 end
+local function isRagdollForCounter(hum2)
+	if not hum2 then return false end
+	local st=hum2:GetState()
+	return st==Enum.HumanoidStateType.Physics or st==Enum.HumanoidStateType.Ragdoll
+		or st==Enum.HumanoidStateType.FallingDown or hum2.PlatformStand==true
+end
 function BatCounter.start()
 	if BatCounter.conn then BatCounter.conn:Disconnect() end
 	BatCounter.conn=RunService.Heartbeat:Connect(function()
 		if not BatCounter.active or _bcDebounce then return end
 		local char=LP.Character; if not char then return end
 		local hum2=char:FindFirstChildOfClass("Humanoid"); if not hum2 then return end
-		local st=hum2:GetState()
-		if st==Enum.HumanoidStateType.Physics or st==Enum.HumanoidStateType.Ragdoll or st==Enum.HumanoidStateType.FallingDown then
+		if isRagdollForCounter(hum2) then
 			_bcDebounce=true
 			task.spawn(function()
 				local bat=findBatForCounter()
@@ -2738,7 +2774,7 @@ buildPage("Combat", function()
 		if on then setupMedusaCounter(LP.Character) else stopMedusaCounter() end
 	end)
 	UIB.makeToggleRow("Auto Reset Medusa",false,function(on)
-		_armEnabled=on
+		_armState.enabled=on
 		if on then setupAutoResetMedusa(LP.Character) else stopAutoResetMedusa() end
 	end)
 	setInfJumpRowVisual = UIB.makeToggleRow("Infinite Jump",false,function(on)
