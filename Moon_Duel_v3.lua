@@ -3015,6 +3015,18 @@ local function selectTab(name)
 
 	tabFlash.BackgroundTransparency = 0.82
 	TweenService:Create(tabFlash, TweenInfo.new(0.16, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundTransparency=1}):Play()
+
+	-- Small per-tab "open" nudge: slides the whole content area in from a
+	-- slight offset alongside the flash above, so switching tabs reads as
+	-- a touch more alive. Animates mainScroll itself — ONE frame that isn't
+	-- managed by any UIListLayout from ITS OWN parent (unlike the pages and
+	-- rows inside it, which ARE stacked by nested UIListLayouts and would
+	-- fight a direct Position tween the instant the layout recalculates) —
+	-- same reasoning that kept tabFlash a single overlay instead of
+	-- touching per-widget properties. Always snaps from the fixed rest
+	-- constant, never a live read, so rapid tab-switching can't drift it.
+	mainScroll.Position = MAINSCROLL_REST_POS + UDim2.new(0,0,0,10)
+	TweenService:Create(mainScroll, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Position=MAINSCROLL_REST_POS}):Play()
 end
 
 for i, name in ipairs(TABS) do
