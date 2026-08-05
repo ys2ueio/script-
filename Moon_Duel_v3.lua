@@ -1625,12 +1625,26 @@ local function _ijStopHoldState()
 	IJ.mobilePressed=false; IJ.mobileActive=false
 end
 
+-- Same rollback fix as the speed engine: without network ownership the
+-- server stays physics-authoritative and can snap the jump boost straight
+-- back down (root.Velocity write gets overridden by the server's own
+-- simulated gravity), which reads as a stuttery/rubber-banded jump.
+-- _claimOwn / _watchOwn are the same functions the speed engine defines
+-- above — reused here, not duplicated.
+local _ijOwnWatchConn = nil
 local function _ijApplyBoost(boost)
 	if not IJ.active then return end
 	local char = LP.Character
 	local root = char and char:FindFirstChild("HumanoidRootPart")
 	local hum  = char and char:FindFirstChildOfClass("Humanoid")
 	if not root or not hum or hum.Health <= 0 then return end
+	_claimOwn(root)
+	if not _ijOwnWatchConn or not _ijOwnWatchConn.Connected then
+		if _ijOwnWatchConn then pcall(function() _ijOwnWatchConn:Disconnect() end) end
+		_ijOwnWatchConn = root:GetPropertyChangedSignal("ReceiveAge"):Connect(function()
+			if IJ.active then task.defer(function() _claimOwn(root) end) end
+		end)
+	end
 	root.Velocity = Vector3.new(root.Velocity.X, boost or 50, root.Velocity.Z)
 end
 
@@ -1703,6 +1717,7 @@ function IJ.stop()
 	_ijStopHoldState()
 	for _, c in pairs(IJ.conns) do pcall(function() c:Disconnect() end) end
 	IJ.conns = {}
+	if _ijOwnWatchConn then pcall(function() _ijOwnWatchConn:Disconnect() end); _ijOwnWatchConn = nil end
 end
 
 -- ===================================================================
