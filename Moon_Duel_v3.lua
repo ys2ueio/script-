@@ -39,8 +39,14 @@ local C_DEEP4 = Color3.fromRGB(90,150,255)
 -- ===================================================================
 -- THEME SYSTEM (Défaut = bleu, Noir = monochrome)
 -- ===================================================================
+-- panel_bg/text: what C_BG/C_ROW/C_OFF_BG/C_HEADER (always identical, always
+-- pure black) and C_WHITE (primary label text) resolve to per theme. Every
+-- theme except White keeps them at today's black/white — zero visual change,
+-- verified by using the exact same value in all four so the swap is a no-op.
 local _THEME_DEFS = {
 	default = {
+		panel_bg= Color3.fromRGB(0,0,0),
+		text    = Color3.fromRGB(255,255,255),
 		moon    = Color3.fromRGB(90,160,255),
 		moon2   = Color3.fromRGB(160,200,255),
 		on_bg   = Color3.fromRGB(20,45,80),
@@ -52,6 +58,8 @@ local _THEME_DEFS = {
 		d4      = Color3.fromRGB(90,150,255),
 	},
 	noir = {
+		panel_bg= Color3.fromRGB(0,0,0),
+		text    = Color3.fromRGB(255,255,255),
 		moon    = Color3.fromRGB(205,205,205),
 		moon2   = Color3.fromRGB(175,175,175),
 		on_bg   = Color3.fromRGB(28,28,28),
@@ -63,6 +71,8 @@ local _THEME_DEFS = {
 		d4      = Color3.fromRGB(165,165,165),
 	},
 	crimson = {
+		panel_bg= Color3.fromRGB(0,0,0),
+		text    = Color3.fromRGB(255,255,255),
 		moon    = Color3.fromRGB(230,70,95),
 		moon2   = Color3.fromRGB(255,140,155),
 		on_bg   = Color3.fromRGB(70,15,26),
@@ -73,21 +83,28 @@ local _THEME_DEFS = {
 		d3      = Color3.fromRGB(120,25,42),
 		d4      = Color3.fromRGB(225,60,85),
 	},
-	-- Bright platinum/white accent — same dark panel as every other theme
-	-- (Default/Noir/Crimson never touch the panel background either), just
-	-- the moon/borders/gradients go icy-white instead of blue/grey/red.
+	-- The one theme that actually goes light: panel_bg flips to white and
+	-- every text/accent role below was re-picked for contrast against a
+	-- WHITE page instead of the black one every other theme uses. moon/moon2
+	-- land on a medium (not too dark, not too light) slate-indigo on purpose:
+	-- they're also used as inactive-tab text over a small fixed-dark pill
+	-- that never changes color, so pure-dark values would vanish there too.
 	white = {
-		moon    = Color3.fromRGB(235,235,245),
-		moon2   = Color3.fromRGB(255,255,255),
-		on_bg   = Color3.fromRGB(55,55,65),
-		border  = Color3.fromRGB(70,70,82),
-		silver  = Color3.fromRGB(248,248,252),
-		silver2 = Color3.fromRGB(195,195,208),
-		dim     = Color3.fromRGB(130,130,142),
-		d3      = Color3.fromRGB(120,120,138),
-		d4      = Color3.fromRGB(235,235,245),
+		panel_bg= Color3.fromRGB(255,255,255),
+		text    = Color3.fromRGB(24,24,30),
+		moon    = Color3.fromRGB(70,82,125),
+		moon2   = Color3.fromRGB(100,112,155),
+		on_bg   = Color3.fromRGB(205,210,238),
+		border  = Color3.fromRGB(200,202,214),
+		silver  = Color3.fromRGB(40,40,52),
+		silver2 = Color3.fromRGB(102,104,120),
+		dim     = Color3.fromRGB(150,152,164),
+		d3      = Color3.fromRGB(85,95,132),
+		d4      = Color3.fromRGB(128,140,180),
 	},
 	purple = {
+		panel_bg= Color3.fromRGB(0,0,0),
+		text    = Color3.fromRGB(255,255,255),
 		moon    = Color3.fromRGB(170,110,255),
 		moon2   = Color3.fromRGB(205,165,255),
 		on_bg   = Color3.fromRGB(45,20,80),
@@ -121,6 +138,12 @@ local function applyTheme(newName)
 	C_SILVER  = new.silver; C_SILVER2 = new.silver2
 	C_DIM     = new.dim;   C_TABIDLE = new.moon2
 	C_DEEP3   = new.d3;    C_DEEP4   = new.d4
+	-- Keeps anything spawned AFTER this point (new floating buttons,
+	-- dynamically-rebuilt rows, …) using the right colors too — without
+	-- this, only what already existed when the switch happened would
+	-- get caught by the descendant walk below.
+	C_BG = new.panel_bg; C_ROW = new.panel_bg; C_OFF_BG = new.panel_bg; C_HEADER = new.panel_bg
+	C_WHITE = new.text
 	for _, guiRoot in ipairs(_themeAllGuis) do
 		pcall(function()
 			for _, inst in ipairs(guiRoot:GetDescendants()) do
@@ -2957,7 +2980,12 @@ moonIconShadowClip.ClipsDescendants = true; moonIconShadowClip.ZIndex = 52
 Instance.new("UICorner", moonIconShadowClip).CornerRadius = UDim.new(1,0)
 local moonIconShadow = Instance.new("Frame", moonIconShadowClip)
 moonIconShadow.AnchorPoint = Vector2.new(0.5,0.5); moonIconShadow.Position = UDim2.new(0.62,0,0.5,0)
-moonIconShadow.Size = UDim2.new(1.05,0,1.05,0); moonIconShadow.BackgroundColor3 = Color3.fromRGB(0,0,0)
+-- Deliberately NOT pure (0,0,0): this needs to always match miniDisc's own
+-- fixed dark gradient fill (which a theme switch never touches, since a
+-- UIGradient overrides the plain BackgroundColor3 underneath it) — if this
+-- bite got swept to White theme's panel background instead, it would show
+-- as a bright cutout on a disc that stayed dark, breaking the crescent look.
+moonIconShadow.Size = UDim2.new(1.05,0,1.05,0); moonIconShadow.BackgroundColor3 = Color3.fromRGB(15,18,28)
 moonIconShadow.BorderSizePixel = 0; moonIconShadow.ZIndex = 52
 Instance.new("UICorner", moonIconShadow).CornerRadius = UDim.new(1,0)
 
@@ -3214,6 +3242,13 @@ local _floatPositions = {}   -- id -> {xs,xo,ys,yo}
 local _FLOAT_POS_VERSION = 15  -- bumped: default grid now carries more gap (was 3px, now 8px)
 local FLOAT_WIDE_H = 30
 local _floatLocked    = false
+-- "Move Together": when on, dragging any one spawned floating button
+-- carries every other spawned one along by the same delta, so the whole
+-- group can be repositioned in a single drag instead of one at a time.
+local _floatLinkMove     = false
+local _linkDragSnapshot  = nil  -- id -> Position, captured at drag-start while link-move is on
+local function setFloatLinkMove(on) _floatLinkMove = on end
+_GH.setFloatLinkMove = setFloatLinkMove
 local FLOAT_SZ = 46
 
 -- Stable order (independent of activation order) so buttons always line
@@ -4278,17 +4313,37 @@ local function makeFloatButton(id)
 		TweenService:Create(btn, TweenInfo.new(0.15), {BackgroundTransparency = 0}):Play()
 	end
 
-	-- Drag (disabled when locked)
+	-- Drag (disabled when locked). When "Move Together" is on (Settings),
+	-- dragging any one spawned button carries every other spawned one along
+	-- by the same delta — a snapshot of everyone's start position is taken
+	-- once, and each frame every button is placed at its own snapshot + d.
 	local drag, ds, dp = false, nil, nil
 	btn.InputBegan:Connect(function(inp)
 		if _floatLocked then return end
 		if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then
 			drag = true; ds = inp.Position; dp = btn.Position
+			if _floatLinkMove then
+				_linkDragSnapshot = {}
+				for lid, lentry in pairs(_floatBtns) do
+					if lentry.frame and lentry.frame.Parent then
+						_linkDragSnapshot[lid] = lentry.frame.Position
+					end
+				end
+			end
 			inp.Changed:Connect(function()
 				if inp.UserInputState == Enum.UserInputState.End then
 					drag = false
 					local p2 = btn.Position
 					_floatPositions[id] = {p2.X.Scale, p2.X.Offset, p2.Y.Scale, p2.Y.Offset}
+					if _linkDragSnapshot then
+						for lid, lentry in pairs(_floatBtns) do
+							if lentry.frame and lentry.frame.Parent then
+								local lp = lentry.frame.Position
+								_floatPositions[lid] = {lp.X.Scale, lp.X.Offset, lp.Y.Scale, lp.Y.Offset}
+							end
+						end
+						_linkDragSnapshot = nil
+					end
 					if _GH.autoSave then _GH.autoSave() end
 				end
 			end)
@@ -4299,6 +4354,16 @@ local function makeFloatButton(id)
 		if inp.UserInputType == Enum.UserInputType.MouseMovement or inp.UserInputType == Enum.UserInputType.Touch then
 			local d = inp.Position - ds
 			btn.Position = UDim2.new(dp.X.Scale, dp.X.Offset + d.X, dp.Y.Scale, dp.Y.Offset + d.Y)
+			if _linkDragSnapshot then
+				for lid, lentry in pairs(_floatBtns) do
+					if lid ~= id and lentry.frame and lentry.frame.Parent then
+						local sp = _linkDragSnapshot[lid]
+						if sp then
+							lentry.frame.Position = UDim2.new(sp.X.Scale, sp.X.Offset + d.X, sp.Y.Scale, sp.Y.Offset + d.Y)
+						end
+					end
+				end
+			end
 		end
 	end)
 
@@ -4925,6 +4990,52 @@ buildPage("Buttons", function()
 		{id="battp",       name="Bat TP"},
 		{id="instareset",  name="Instant Reset"},
 	}
+
+	do
+		-- Select All / Unselect All: spawns or despawns every floating
+		-- button in one click and keeps their individual toggle rows in
+		-- sync (calling the setter directly only updates the visual — the
+		-- actual spawn/despawn call is what a real click does too).
+		local allRow = Instance.new("Frame", currentPage)
+		allRow.Size = UDim2.new(1,0,0,30); allRow.BackgroundTransparency = 1
+		allRow.LayoutOrder = LO()
+		local allLL = Instance.new("UIListLayout", allRow)
+		allLL.FillDirection = Enum.FillDirection.Horizontal
+		allLL.Padding = UDim.new(0,8)
+
+		local selAllBtn = Instance.new("TextButton", allRow)
+		selAllBtn.Size = UDim2.new(0.5,-4,1,0); selAllBtn.BackgroundColor3 = C_ON_BG
+		selAllBtn.BackgroundTransparency = 0.1; selAllBtn.BorderSizePixel = 0
+		selAllBtn.Text = "Select All"; selAllBtn.TextColor3 = C_MOON
+		selAllBtn.Font = Enum.Font.GothamBold; selAllBtn.TextSize = 10
+		selAllBtn.AutoButtonColor = false; addCorner(selAllBtn,10); addLivingStroke(selAllBtn,1)
+
+		local unselAllBtn = Instance.new("TextButton", allRow)
+		unselAllBtn.Size = UDim2.new(0.5,-4,1,0); unselAllBtn.BackgroundColor3 = C_OFF_BG
+		unselAllBtn.BackgroundTransparency = 0.3; unselAllBtn.BorderSizePixel = 0
+		unselAllBtn.Text = "Unselect All"; unselAllBtn.TextColor3 = C_DIM
+		unselAllBtn.Font = Enum.Font.GothamBold; unselAllBtn.TextSize = 10
+		unselAllBtn.AutoButtonColor = false; addCorner(unselAllBtn,10); addLivingStroke(unselAllBtn,1)
+
+		selAllBtn.MouseButton1Click:Connect(function()
+			for _, entry in ipairs(FLOAT_LABELS) do
+				makeFloatButton(entry.id)
+				if _floatRowSetters[entry.id] then _floatRowSetters[entry.id](true) end
+			end
+			if _GH.autoSave then _GH.autoSave() end
+			if _GH.showToast then _GH.showToast("All Buttons Shown", "on") end
+		end)
+		unselAllBtn.MouseButton1Click:Connect(function()
+			for _, entry in ipairs(FLOAT_LABELS) do
+				removeFloatButton(entry.id)
+				if _floatRowSetters[entry.id] then _floatRowSetters[entry.id](false) end
+			end
+			if _GH.autoSave then _GH.autoSave() end
+			if _GH.showToast then _GH.showToast("All Buttons Hidden", "off") end
+		end)
+	end
+	UIB.makeGap(4)
+
 	for _, entry in ipairs(FLOAT_LABELS) do
 		_floatRowSetters[entry.id] = UIB.makeToggleRow(entry.name, false, function(on)
 			if on then makeFloatButton(entry.id) else removeFloatButton(entry.id) end
@@ -5013,6 +5124,15 @@ buildPage("Settings", function()
 			if _GH.resetMainPosition then _GH.resetMainPosition() end
 			if _GH.resetFloatPositions then _GH.resetFloatPositions() end
 			if _GH.showToast then _GH.showToast("Position Reset", "info") end
+		end)
+	end
+
+	do
+		-- When on, dragging any one spawned floating button carries every
+		-- other spawned one along by the same delta — moves the whole group
+		-- as a block instead of repositioning each one individually.
+		UIB.makeToggleRow("Move Buttons Together", false, function(on)
+			if _GH.setFloatLinkMove then _GH.setFloatLinkMove(on) end
 		end)
 	end
 
@@ -5195,7 +5315,7 @@ buildPage("Settings", function()
 			{id="default", label="Default", swatch=Color3.fromRGB(90,160,255)},
 			{id="noir",    label="Dark",    swatch=Color3.fromRGB(205,205,205)},
 			{id="crimson", label="Crimson", swatch=Color3.fromRGB(225,70,95)},
-			{id="white",   label="Blanc",   swatch=Color3.fromRGB(240,240,248)},
+			{id="white",   label="Blanc",   swatch=Color3.fromRGB(255,255,255)},
 			{id="purple",  label="Violet",  swatch=Color3.fromRGB(170,110,255)},
 		}
 		local thWrap = Instance.new("Frame", currentPage)
@@ -5226,7 +5346,11 @@ buildPage("Settings", function()
 				local active = (id == name)
 				entry.btn.BackgroundColor3 = active and entry.swatch or C_OFF_BG
 				entry.btn.BackgroundTransparency = active and 0.1 or 0.3
-				entry.btn.TextColor3 = active and Color3.fromRGB(12,10,16) or C_DIM
+				-- silver2 (not dim): it's already picked per-theme to read
+				-- against that theme's own panel color everywhere else, so
+				-- it stays legible here too now that White's panel (and this
+				-- inactive chip's background) is bright instead of black.
+				entry.btn.TextColor3 = active and Color3.fromRGB(12,10,16) or C_SILVER2
 			end
 		end
 	end
