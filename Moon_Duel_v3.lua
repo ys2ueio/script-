@@ -4233,61 +4233,12 @@ _floatDefs.battp = {
 }
 
 -- ===================================================================
--- INSTA RESET — Ace Duels (copie exacte)
+-- INSTA RESET — kill local direct (pas de FireServer)
 -- ===================================================================
-_G.AceCursedResetRemote = _G.AceCursedResetRemote or nil
-_G.AceCursedResetGuid   = _G.AceCursedResetGuid   or "f888ee6e-c86d-46e1-93d7-0639d6635d42"
-pcall(function()
-	if not _G.AceCursedResetHooked and hookfunction and newcclosure then
-		_G.AceCursedResetHooked = true
-		local oldFire
-		oldFire = hookfunction(Instance.new("RemoteEvent").FireServer, newcclosure(function(self, ...)
-			if not _G.AceCursedResetRemote and typeof(self) == "Instance"
-			and self:IsA("RemoteEvent") and self.Name:sub(1,3) == "RE/" then
-				_G.AceCursedResetRemote = self
-			end
-			return oldFire(self, ...)
-		end))
-	end
-end)
 local function _aceInstaReset()
-	if not _G.AceCursedResetRemote then
-		local _RS = game:GetService("ReplicatedStorage")
-		for _, desc in ipairs(_RS:GetDescendants()) do
-			if desc:IsA("RemoteEvent") and desc.Name:sub(1,3) == "RE/" then
-				_G.AceCursedResetRemote = desc
-				break
-			end
-		end
-	end
-	if not _G.AceCursedResetRemote then return end
-	local character = LP.Character
-	local humanoid  = character and character:FindFirstChildOfClass("Humanoid")
-	if humanoid and humanoid.Health <= 0 then
-		pcall(function() _G.AceCursedResetRemote:FireServer(_G.AceCursedResetGuid, LP, "balloon") end)
-		return
-	end
-	local resetDetected = false
-	local resetConns = {}
-	if humanoid then
-		table.insert(resetConns, humanoid.Died:Connect(function() resetDetected = true end))
-		table.insert(resetConns, humanoid:GetPropertyChangedSignal("Health"):Connect(function()
-			if humanoid.Health <= 0 then resetDetected = true end
-		end))
-	end
-	if character then
-		table.insert(resetConns, character.AncestryChanged:Connect(function(_, parent)
-			if not parent then resetDetected = true end
-		end))
-	end
-	task.spawn(function()
-		for _ = 1, 10 do
-			if resetDetected then break end
-			pcall(function() _G.AceCursedResetRemote:FireServer(_G.AceCursedResetGuid, LP, "balloon") end)
-			task.wait(0.05)
-		end
-		for _, conn in ipairs(resetConns) do pcall(function() conn:Disconnect() end) end
-	end)
+	local char = LP.Character
+	local hum  = char and char:FindFirstChildOfClass("Humanoid")
+	if hum then hum.Health = 0 end
 end
 _GH.MH_instareset = _aceInstaReset
 _floatDefs.instareset = {
