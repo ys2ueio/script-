@@ -4285,11 +4285,17 @@ local function _aceInstaReset()
 			if not parent then resetDetected = true end
 		end))
 	end
+	-- Fire une seule fois. Retry unique après 0.4s si le perso est toujours en vie.
+	-- (10 fires rapides = serveur respawn avant resetDetected → clones)
+	pcall(function() _G.AceCursedResetRemote:FireServer(_G.AceCursedResetGuid, LP, "balloon") end)
 	task.spawn(function()
-		for _ = 1, 10 do
-			if resetDetected then break end
-			pcall(function() _G.AceCursedResetRemote:FireServer(_G.AceCursedResetGuid, LP, "balloon") end)
-			task.wait(0.05)
+		task.wait(0.4)
+		if not resetDetected then
+			local c2 = LP.Character
+			local h2 = c2 and c2:FindFirstChildOfClass("Humanoid")
+			if h2 and h2.Health > 0 then
+				pcall(function() _G.AceCursedResetRemote:FireServer(_G.AceCursedResetGuid, LP, "balloon") end)
+			end
 		end
 		for _, conn in ipairs(resetConns) do pcall(function() conn:Disconnect() end) end
 	end)
