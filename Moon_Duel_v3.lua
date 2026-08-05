@@ -426,32 +426,59 @@ destroyAllMoonHub()
 -- GAME LOGIC MODULES (hoisted from _MH_buildUI to reduce local count)
 -- =================================================================
 
-local proxy = nil
-local function ensureProxy()
+-- Movement engine — LinearVelocity constraint (Attachment on HumanoidRootPart)
+-- instead of a welded decoy Part + AssemblyLinearVelocity writes. Two reasons
+-- this replaced the old proxy-part approach entirely:
+--   1) A random-named 1x1x1 Transparency=1 CanCollide=false Massless Part
+--      welded straight onto HumanoidRootPart is a textbook signature a lot of
+--      anti-cheat GetDescendants() scans specifically look for.
+--   2) VelocityConstraintMode.Plane locks the constraint to the XZ plane —
+--      it is PHYSICALLY IMPOSSIBLE for it to ever apply a Y-axis force, so
+--      jump/gravity/fall-damage stay untouched with no extra guard code
+--      needed (the old version had to manually re-read and re-write the
+--      existing Y velocity every single write to avoid clobbering it).
+local charLV    = nil   -- LinearVelocity constraint
+local charLVAtt = nil   -- its Attachment, parented to HumanoidRootPart
+
+local function destroyLV()
+	if charLV and charLV.Parent then pcall(function() charLV:Destroy() end) end
+	if charLVAtt and charLVAtt.Parent then pcall(function() charLVAtt:Destroy() end) end
+	charLV, charLVAtt = nil, nil
+end
+
+local function ensureLV()
 	local char = LP.Character; if not char then return nil end
-	local hrp = char:FindFirstChild("HumanoidRootPart"); if not hrp then return nil end
-	if proxy and proxy.Parent == char then return proxy end
-	if proxy then pcall(function() proxy:Destroy() end) end
-	proxy = Instance.new("Part")
-	proxy.Name = _NS .. tostring(math.random(10,99))
-	proxy.Size = Vector3.new(1,1,1); proxy.Transparency = 1
-	proxy.CanCollide = false; proxy.Massless = true; proxy.Parent = char
-	local weld = Instance.new("Weld")
-	weld.Part0 = hrp; weld.Part1 = proxy; weld.C0 = CFrame.new(0,0,0); weld.Parent = proxy
-	return proxy
+	local hrp2 = char:FindFirstChild("HumanoidRootPart"); if not hrp2 then return nil end
+	if charLV and charLVAtt and charLVAtt.Parent == hrp2 then return charLV end
+	destroyLV()
+	charLVAtt = Instance.new("Attachment")
+	charLVAtt.Name = _NS .. "Att"
+	charLVAtt.Parent = hrp2
+	charLV = Instance.new("LinearVelocity")
+	charLV.Name = _NS .. "LV"
+	charLV.Attachment0 = charLVAtt
+	charLV.VelocityConstraintMode = Enum.VelocityConstraintMode.Plane
+	charLV.PrimaryTangentAxis   = Vector3.new(1,0,0)  -- X
+	charLV.SecondaryTangentAxis = Vector3.new(0,0,1)  -- Z
+	charLV.MaxForce      = math.huge
+	charLV.PlaneVelocity = Vector2.zero
+	charLV.RelativeTo    = Enum.ActuatorRelativeTo.World
+	charLV.Parent = hrp2
+	return charLV
 end
 
 local function proxyMove(dir, speed)
 	local char = LP.Character; if not char then return end
-	local hum = char:FindFirstChildOfClass("Humanoid"); local p = ensureProxy()
+	local hum = char:FindFirstChildOfClass("Humanoid")
 	if hum then hum:Move(dir, false) end
-	if p then p.AssemblyLinearVelocity = Vector3.new(dir.X*speed, p.AssemblyLinearVelocity.Y, dir.Z*speed) end
+	local lv = ensureLV()
+	if lv then lv.PlaneVelocity = Vector2.new(dir.X*speed, dir.Z*speed) end
 end
 
 local function proxyStop()
 	local hum = LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
 	if hum then hum:Move(Vector3.zero, false) end
-	if proxy then proxy.AssemblyLinearVelocity = Vector3.new(0, proxy.AssemblyLinearVelocity.Y, 0) end
+	if charLV and charLV.Parent then charLV.PlaneVelocity = Vector2.zero end
 end
 
 -- [FIX #1 & #6] Séparation des effets de bord : updateCarryState mute State,
@@ -487,13 +514,13 @@ local function setupChar(char)
 	h = char:WaitForChild("Humanoid", 5)
 	hrp = char:WaitForChild("HumanoidRootPart", 5)
 	if h then h.WalkSpeed = getCurrentSpeed() end
-	ensureProxy()
+	ensureLV()
 end
 LP.CharacterAdded:Connect(setupChar)
 if LP.Character then setupChar(LP.Character) end
 
 local _speedBoosterActive = false  -- controlled by the Speed Booster widget
-RunService.RenderStepped:Connect(function()
+RunService.Heartbeat:Connect(function()
 	if not _speedBoosterActive then return end
 	local char = LP.Character; if not char then return end
 	local hum = char:FindFirstChildOfClass("Humanoid")
@@ -509,9 +536,9 @@ RunService.RenderStepped:Connect(function()
 	local spd = getCurrentSpeed()
 	if md.Magnitude > 0 then
 		local _n = 1 + (math.random() - 0.5) * 0.04
-		local _px = ensureProxy()
-		if _px then
-			_px.AssemblyLinearVelocity = Vector3.new(md.X * spd * _n, hrp2.AssemblyLinearVelocity.Y, md.Z * spd * _n)
+		local lv = ensureLV()
+		if lv then
+			lv.PlaneVelocity = Vector2.new(md.X * spd * _n, md.Z * spd * _n)
 		end
 	end
 end)
@@ -2959,7 +2986,14 @@ end
 -- MINI BUTTON
 -- ===================================================================
 local miniBtn = Instance.new("TextButton", gui)
-miniBtn.Size = UDim2.new(0,56,0,56); miniBtn.Position = UDim2.new(0,20,0,140)
+-- Centered by default (scale-based, not a fixed top-left pixel offset) —
+-- a corner/edge pixel offset like the old (0,20,0,140) reliably lands on
+-- top of whatever native mobile dock a given game docks there (reported:
+-- covered the Shop/Rebirth icons). Dead-center is exactly where mainOuter
+-- itself already opens by default, so it's a spot no game's chrome ever
+-- occupies — and it's still fully draggable afterward if unwanted there.
+local MINI_BTN_DEFAULT_POS = UDim2.new(0.5,-28,0.5,-28)
+miniBtn.Size = UDim2.new(0,56,0,56); miniBtn.Position = MINI_BTN_DEFAULT_POS
 miniBtn.BackgroundTransparency = 1; miniBtn.Text = ""; miniBtn.AutoButtonColor = false
 miniBtn.Visible = false; miniBtn.ZIndex = 50
 
@@ -3158,6 +3192,11 @@ local function resetMainPosition()
 	local scaledW = WIN_W * mainUIScale.Scale
 	local targetPos = UDim2.new(0.5, -scaledW/2, 0.5, -137)
 	TweenService:Create(mainOuter, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Position = targetPos}):Play()
+	-- Also snaps the minimized moon icon back to its centered default —
+	-- it has its own independent position (dragged separately from the
+	-- main panel), so it needs its own reset or it stays wherever it was
+	-- left, including on top of a native UI dock if it ever ends up there.
+	TweenService:Create(miniBtn, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Position = MINI_BTN_DEFAULT_POS}):Play()
 	if _GH.autoSave then _GH.autoSave() end
 end
 _GH.resetMainPosition = resetMainPosition
