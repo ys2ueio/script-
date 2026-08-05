@@ -426,75 +426,48 @@ destroyAllMoonHub()
 -- GAME LOGIC MODULES (hoisted from _MH_buildUI to reduce local count)
 -- =================================================================
 
--- Movement engine — LinearVelocity constraint (Attachment on HumanoidRootPart)
--- Ace logic: network ownership claiming + Unit-normalised direction.
-local charLV         = nil   -- LinearVelocity constraint
-local charLVAtt      = nil   -- its Attachment, parented to HumanoidRootPart
-local _ownerWatchConn = nil  -- ReceiveAge watcher for continuous ownership
-local _ownTimer      = 0
-local _ownInterval   = 0.8 + math.random() * 0.4
+-- Movement engine — Ace proxy-Part method (AssemblyLinearVelocity on a
+-- Massless Part welded to HumanoidRootPart). Identical to Ace_duels_modified.
+local _aceProxy     = nil
+local _aceProxyWeld = nil
 
-local function _claimOwn(hrp2)
-	pcall(function() hrp2:SetNetworkOwner(LP) end)
+local function cleanAceProxy()
+	if _aceProxy then pcall(function() _aceProxy:Destroy() end); _aceProxy = nil end
+	_aceProxyWeld = nil
 end
 
-local function _startOwnerWatch(hrp2)
-	if _ownerWatchConn then pcall(function() _ownerWatchConn:Disconnect() end) end
-	_ownerWatchConn = hrp2:GetPropertyChangedSignal("ReceiveAge"):Connect(function()
-		if _speedBoosterActive then task.defer(function() _claimOwn(hrp2) end) end
-	end)
-end
-
-local function destroyLV()
-	if _ownerWatchConn then pcall(function() _ownerWatchConn:Disconnect() end); _ownerWatchConn = nil end
-	if charLV    and charLV.Parent    then pcall(function() charLV:Destroy()    end) end
-	if charLVAtt and charLVAtt.Parent then pcall(function() charLVAtt:Destroy() end) end
-	charLV, charLVAtt = nil, nil
-end
-
-local function ensureLV()
-	local char = LP.Character; if not char then return nil end
-	local hrp2 = char:FindFirstChild("HumanoidRootPart"); if not hrp2 then return nil end
-	if charLV and charLVAtt and charLVAtt.Parent == hrp2 then return charLV end
-	destroyLV()
-	charLVAtt = Instance.new("Attachment")
-	charLVAtt.Name = _NS .. "Att"
-	charLVAtt.Parent = hrp2
-	charLV = Instance.new("LinearVelocity")
-	charLV.Name = _NS .. "LV"
-	charLV.Attachment0 = charLVAtt
-	charLV.VelocityConstraintMode = Enum.VelocityConstraintMode.Plane
-	charLV.PrimaryTangentAxis   = Vector3.new(1,0,0)
-	charLV.SecondaryTangentAxis = Vector3.new(0,0,1)
-	charLV.MaxForce      = math.huge
-	charLV.PlaneVelocity = Vector2.zero
-	charLV.RelativeTo    = Enum.ActuatorRelativeTo.World
-	charLV.Parent = hrp2
-	_claimOwn(hrp2)
-	_startOwnerWatch(hrp2)
-	return charLV
+local function ensureAceProxy(hrp2)
+	local char = hrp2.Parent
+	if _aceProxy and _aceProxy.Parent == char then return _aceProxy end
+	cleanAceProxy()
+	local p = Instance.new("Part")
+	p.Name = _NS .. "PX"; p.Size = Vector3.new(1,1,1)
+	p.Transparency = 1; p.CanCollide = false; p.Massless = true
+	p.Parent = char
+	local w = Instance.new("Weld", p)
+	w.Part0 = hrp2; w.Part1 = p; w.C0 = CFrame.new()
+	_aceProxyWeld = w; _aceProxy = p
+	return p
 end
 
 local function proxyMove(dir, speed)
 	local char = LP.Character; if not char then return end
-	local hum = char:FindFirstChildOfClass("Humanoid")
+	local hum  = char:FindFirstChildOfClass("Humanoid")
+	local hrp2 = char:FindFirstChild("HumanoidRootPart")
 	if hum then hum:Move(dir, false) end
-	local lv = ensureLV()
-	if lv then
-		local flat = Vector3.new(dir.X, 0, dir.Z)
-		if flat.Magnitude > 0.01 then flat = flat.Unit end
-		lv.PlaneVelocity = Vector2.new(flat.X * speed, flat.Z * speed)
+	if hrp2 then
+		local px = ensureAceProxy(hrp2)
+		px.AssemblyLinearVelocity = Vector3.new(dir.X * speed, hrp2.AssemblyLinearVelocity.Y, dir.Z * speed)
 	end
 end
 
--- Fully tears the constraint down (not just zeroes it) — a LinearVelocity
--- with MaxForce = math.huge left attached at PlaneVelocity zero actively
--- fights ANY other force with infinite force, including the player's own
--- WASD input. "Stop boosting" must mean "give full native control back".
 local function proxyStop()
-	local hum = LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
-	if hum then hum:Move(Vector3.zero, false) end
-	destroyLV()
+	local char = LP.Character
+	local hum  = char and char:FindFirstChildOfClass("Humanoid")
+	local hrp2 = char and char:FindFirstChild("HumanoidRootPart")
+	if hum  then hum:Move(Vector3.zero, false) end
+	if hrp2 and _aceProxy then _aceProxy.AssemblyLinearVelocity = Vector3.zero end
+	cleanAceProxy()
 end
 
 -- [FIX #1 & #6] Séparation des effets de bord : updateCarryState mute State,
@@ -532,58 +505,36 @@ local function setupChar(char)
 	h = char:WaitForChild("Humanoid", 5)
 	hrp = char:WaitForChild("HumanoidRootPart", 5)
 	if h then h.WalkSpeed = getCurrentSpeed() end
-	-- Ace: clean any stale LV from previous life first
-	destroyLV()
-	-- If speed boost is active, re-claim ownership after a short delay
-	-- (character physics settle before we assert ownership)
-	if _speedBoosterActive then
-		task.delay(0.3, function()
-			local hrp2 = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
-			if hrp2 and _speedBoosterActive then
-				_claimOwn(hrp2); _startOwnerWatch(hrp2)
-			end
-		end)
-	end
+	cleanAceProxy()  -- destroy any proxy left from previous life
 end
 LP.CharacterAdded:Connect(setupChar)
 if LP.Character then setupChar(LP.Character) end
 
-RunService.Heartbeat:Connect(function(dt)
-	if not _speedBoosterActive then destroyLV(); return end
-	local char = LP.Character; if not char then destroyLV(); return end
-	local hum = char:FindFirstChildOfClass("Humanoid")
+-- Ace RenderStepped speed loop — identical behaviour to Ace_duels_modified
+RunService.RenderStepped:Connect(function()
+	if not _speedBoosterActive then cleanAceProxy(); return end
+	local char = LP.Character; if not char then cleanAceProxy(); return end
+	local hum  = char:FindFirstChildOfClass("Humanoid")
 	local hrp2 = char:FindFirstChild("HumanoidRootPart")
-	if not hum or not hrp2 then destroyLV(); return end
+	if not hum or not hrp2 then cleanAceProxy(); return end
 	local state = hum:GetState()
 	if hum.PlatformStand
 		or state == Enum.HumanoidStateType.Physics
 		or state == Enum.HumanoidStateType.Ragdoll
 		or state == Enum.HumanoidStateType.FallingDown then
-		-- Fully release control during these states instead of leaving an
-		-- infinite-force constraint fighting ragdoll/fall physics.
-		destroyLV(); return
-	end
-	-- Ace: periodic network ownership re-claim
-	_ownTimer = _ownTimer + dt
-	if _ownTimer >= _ownInterval then
-		_claimOwn(hrp2); _ownTimer = 0; _ownInterval = 0.8 + math.random() * 0.4
+		cleanAceProxy(); return
 	end
 	updateCarryState()
-	local md = hum.MoveDirection
+	local md  = hum.MoveDirection
 	local spd = getCurrentSpeed()
-	if md.Magnitude > 0.1 then
-		local flat = Vector3.new(md.X, 0, md.Z)
-		if flat.Magnitude > 0.01 then flat = flat.Unit end
-		local lv = ensureLV()
-		if lv then
-			lv.PlaneVelocity = Vector2.new(flat.X * spd, flat.Z * spd)
-		end
-	elseif charLV and charLV.Parent then
-		-- Not pressing a movement key right now: hold at zero rather than
-		-- leaving whatever nonzero velocity was last written — otherwise
-		-- releasing WASD would leave the player sliding forever at that
-		-- last speed (infinite force means normal friction can't stop it).
-		charLV.PlaneVelocity = Vector2.zero
+	if md.Magnitude > 0 then
+		local _n = 1 + (math.random() - 0.5) * 0.04
+		local px = ensureAceProxy(hrp2)
+		px.AssemblyLinearVelocity = Vector3.new(
+			md.X * spd * _n,
+			hrp2.AssemblyLinearVelocity.Y,
+			md.Z * spd * _n
+		)
 	end
 end)
 
