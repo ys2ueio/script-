@@ -3046,11 +3046,16 @@ moonIcon.AnchorPoint = Vector2.new(0.5,0.5); moonIcon.Position = UDim2.new(0.5,0
 moonIcon.Size = UDim2.new(0,moonIconSize,0,moonIconSize)
 moonIcon.BackgroundColor3 = C_SILVER; moonIcon.BorderSizePixel = 0; moonIcon.ZIndex = 51
 Instance.new("UICorner", moonIcon).CornerRadius = UDim.new(1,0)
-local moonIconShadowClip = Instance.new("Frame", moonIcon)
-moonIconShadowClip.Size = UDim2.new(1,0,1,0); moonIconShadowClip.BackgroundTransparency = 1
-moonIconShadowClip.ClipsDescendants = true; moonIconShadowClip.ZIndex = 52
-Instance.new("UICorner", moonIconShadowClip).CornerRadius = UDim.new(1,0)
-local moonIconShadow = Instance.new("Frame", moonIconShadowClip)
+-- Crescent bite: a dark circle overlapping the light disc's edge. NOT
+-- wrapped in a ClipsDescendants frame anymore — Roblox clips descendants
+-- to a frame's plain RECTANGULAR bounding box no matter what UICorner is
+-- set on the clipping frame itself, so the old moonIconShadowClip wrapper
+-- was cutting this to a square at the disc's corners ("carré bizarre"
+-- wherever the moon icon renders). moonIconShadow already has its own
+-- UICorner making IT a real circle, so it doesn't need clipping to look
+-- right — any sliver that pokes past moonIcon's own round edge just
+-- blends into miniDisc's near-identical dark background behind it.
+local moonIconShadow = Instance.new("Frame", moonIcon)
 moonIconShadow.AnchorPoint = Vector2.new(0.5,0.5); moonIconShadow.Position = UDim2.new(0.62,0,0.5,0)
 -- Deliberately NOT pure (0,0,0): this needs to always match miniDisc's own
 -- fixed dark gradient fill (which a theme switch never touches, since a
@@ -3195,9 +3200,13 @@ local function hideGui()
 		-- Rounds toward a full circle as it shrinks — without this the
 		-- panel keeps its fixed 24px corner radius the whole way down,
 		-- which reads as a shrinking square instead of melting into the
-		-- round moon icon it's flying toward.
-		TweenService:Create(mainCorner, info, {CornerRadius=UDim.new(0.5,0)}):Play()
-		TweenService:Create(bgCorner, info, {CornerRadius=UDim.new(0.5,0)}):Play()
+		-- round moon icon it's flying toward. UDim.new(1,0) is the actual
+		-- "fully round" value (scale is relative to the shorter side, so
+		-- 100% = a perfect circle/pill) — the previous 0.5 only rounds
+		-- halfway, which still reads as a squarish blob once the panel has
+		-- shrunk down small, right on top of the moon icon it lands on.
+		TweenService:Create(mainCorner, info, {CornerRadius=UDim.new(1,0)}):Play()
+		TweenService:Create(bgCorner, info, {CornerRadius=UDim.new(1,0)}):Play()
 		task.wait(dur)
 
 		moonAbsorbFlash()
