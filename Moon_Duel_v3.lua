@@ -3007,18 +3007,23 @@ end
 -- MINI BUTTON
 -- ===================================================================
 local miniBtn = Instance.new("TextButton", gui)
--- Right-edge, vertically centered by default (scale-based, not a fixed
--- pixel offset). The old (0,20,0,140) top-left offset landed on top of
--- this game's native mobile dock (reported: covered Shop/Rebirth). Dead
--- center was tried next and is wrong for a different reason: unlike
--- mainOuter (only centered while the panel is actively open), the mini
--- icon sits on screen THE WHOLE TIME the hub is minimized — parking it
--- at screen-center means it permanently covers the character during
--- normal play, which reads as "the moon disappeared" even though it's
--- technically still there. The right edge is clear of both problems and
--- of the opposite (left) edge where the reported dock collision was —
--- still fully draggable afterward if a given game wants it elsewhere.
-local MINI_BTN_DEFAULT_POS = UDim2.new(1,-76,0.5,-28)
+-- Left-edge by default (scale-based, not a fixed pixel offset), sitting
+-- in the vertical gap BELOW the native dock and ABOVE the bottom money
+-- counter. History of what was tried and why each failed:
+--   (0,20,0,140) top-left, fixed pixel  → landed square on the native
+--     mobile dock (reported: covered Shop/Rebirth).
+--   dead-center                         → sits on screen the WHOLE TIME
+--     the hub is minimized (unlike mainOuter, only centered while open),
+--     so it permanently covered the character during normal play.
+--   right edge, vertically centered     → collided with the hub's OWN
+--     floating-buttons grid, which is also right-anchored (AIM V2/DROP
+--     BR/AUTO LEFT/… all hug the right edge) — same "swallowed" symptom,
+--     just against our own UI instead of the game's.
+-- Left edge avoids the floating-buttons grid (right-anchored) entirely;
+-- the 0.78 vertical offset clears the dock zone from the first report
+-- (roughly the upper-middle third) without dropping into the bottom
+-- money-counter row. Still fully draggable afterward either way.
+local MINI_BTN_DEFAULT_POS = UDim2.new(0,20,0.78,-28)
 miniBtn.Size = UDim2.new(0,56,0,56); miniBtn.Position = MINI_BTN_DEFAULT_POS
 miniBtn.BackgroundTransparency = 1; miniBtn.Text = ""; miniBtn.AutoButtonColor = false
 miniBtn.Visible = false; miniBtn.ZIndex = 50
