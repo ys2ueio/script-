@@ -416,7 +416,9 @@ RunService.RenderStepped:Connect(function()
 		local _n = 1 + (math.random() - 0.5) * 0.04
 		local _px = ensureProxy()
 		if _px then
-			_px.AssemblyLinearVelocity = Vector3.new(md.X * spd * _n, hrp2.AssemblyLinearVelocity.Y, md.Z * spd * _n)
+			-- Clamp Y: préserve le saut (≤60) mais bloque le lock de fling (>60)
+			local _y = math.min(hrp2.AssemblyLinearVelocity.Y, 60)
+			_px.AssemblyLinearVelocity = Vector3.new(md.X * spd * _n, _y, md.Z * spd * _n)
 		end
 	end
 end)
