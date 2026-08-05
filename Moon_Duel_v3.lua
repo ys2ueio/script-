@@ -2780,6 +2780,11 @@ mainScroll.BackgroundTransparency = 1; mainScroll.BorderSizePixel = 0
 mainScroll.ScrollBarThickness = 3; mainScroll.ScrollBarImageColor3 = C_MOON
 mainScroll.ScrollBarImageTransparency = 0.4; mainScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
 mainScroll.CanvasSize = UDim2.new(0,0,0,0); mainScroll.ZIndex = 3
+-- Captured once, right after Position is set above and never touched again
+-- elsewhere — selectTab's per-tab nudge animation snaps from this fixed
+-- constant each time (never a live read of mainScroll.Position) so rapid
+-- tab-switching can't drift it off its true resting spot mid-tween.
+local MAINSCROLL_REST_POS = mainScroll.Position
 
 local mainLL = Instance.new("UIListLayout", mainScroll)
 mainLL.SortOrder = Enum.SortOrder.LayoutOrder; mainLL.Padding = UDim.new(0,6)
@@ -3029,9 +3034,8 @@ end
 -- MINI BUTTON
 -- ===================================================================
 local miniBtn = Instance.new("TextButton", gui)
--- Left-edge by default (scale-based, not a fixed pixel offset), sitting
--- in the vertical gap BELOW the native dock and ABOVE the bottom money
--- counter. History of what was tried and why each failed:
+-- Left-edge by default (scale-based, not a fixed pixel offset). History of
+-- what was tried and why each failed:
 --   (0,20,0,140) top-left, fixed pixel  → landed square on the native
 --     mobile dock (reported: covered Shop/Rebirth).
 --   dead-center                         → sits on screen the WHOLE TIME
@@ -3041,11 +3045,12 @@ local miniBtn = Instance.new("TextButton", gui)
 --     floating-buttons grid, which is also right-anchored (AIM V2/DROP
 --     BR/AUTO LEFT/… all hug the right edge) — same "swallowed" symptom,
 --     just against our own UI instead of the game's.
--- Left edge avoids the floating-buttons grid (right-anchored) entirely;
--- the 0.78 vertical offset clears the dock zone from the first report
--- (roughly the upper-middle third) without dropping into the bottom
--- money-counter row. Still fully draggable afterward either way.
-local MINI_BTN_DEFAULT_POS = UDim2.new(0,20,0.72,-28)
+--   left edge, 0.72 down (mid-lower)    → requested move: too low, wanted
+--     up near the Roblox logo at the top instead.
+-- Now: left edge, in the gap just below Roblox's own top-left icon row
+-- (avatar/menu/chat, roughly the top ~17% of screen) and above the native
+-- dock further down — clear of both. Still fully draggable afterward.
+local MINI_BTN_DEFAULT_POS = UDim2.new(0,20,0.20,0)
 miniBtn.Size = UDim2.new(0,56,0,56); miniBtn.Position = MINI_BTN_DEFAULT_POS
 miniBtn.BackgroundTransparency = 1; miniBtn.Text = ""; miniBtn.AutoButtonColor = false
 miniBtn.Visible = false; miniBtn.ZIndex = 50
