@@ -1738,7 +1738,6 @@ local function startAntiKick()
 	-- 3. Position safety (anti-teleport >150 studs while not moving) + velocity clamp
 	if _akPosConn then pcall(function() _akPosConn:Disconnect() end) end
 	_akPosConn = RunService.Heartbeat:Connect(function()
-		if _GH._brResetting then return end  -- burst reset actif : laisser la mort se faire
 		local c2   = LP.Character;                          if not c2 then return end
 		local r2   = c2:FindFirstChild("HumanoidRootPart"); if not r2 then return end
 		local h2   = c2:FindFirstChildOfClass("Humanoid");  if not h2 then return end
@@ -4235,31 +4234,69 @@ _floatDefs.battp = {
 
 
 -- ===================================================================
--- INSTANT RESET — single hum.Health=0 (un seul signal, pas de boucle)
+-- INSTANT RESET — copie exacte de la logique Ace Duels (100%, zéro trace
+-- des anciennes méthodes locales). Hookfunction capture le remote RE/,
+-- fallback scan ReplicatedStorage, boucle 10x/0.05s, stop sur resetDetected.
 -- ===================================================================
-_GH._brResetting = false
-do
-	local function triggerReset()
-		local char = LP.Character
-		local hum  = char and char:FindFirstChildOfClass("Humanoid")
-		if not hum or hum.Health <= 0 or _GH._brResetting then return end
-		_GH._brResetting = true
-		pcall(function() hum.Health = 0 end)
-		task.spawn(function()
-			local done = false
-			local c = LP.CharacterAdded:Connect(function() done = true end)
-			local t0 = tick()
-			repeat task.wait(0.1) until done or (tick() - t0 > 5)
-			c:Disconnect()
-			_GH._brResetting = false
-		end)
+_G.AceCursedResetRemote = _G.AceCursedResetRemote or nil
+_G.AceCursedResetGuid   = _G.AceCursedResetGuid or "f888ee6e-c86d-46e1-93d7-0639d6635d42"
+pcall(function()
+	if not _G.AceCursedResetHooked and hookfunction and newcclosure then
+		_G.AceCursedResetHooked = true
+		local oldFire
+		oldFire = hookfunction(Instance.new("RemoteEvent").FireServer, newcclosure(function(self, ...)
+			if not _G.AceCursedResetRemote and typeof(self) == "Instance" and self:IsA("RemoteEvent") and self.Name:sub(1,3) == "RE/" then
+				_G.AceCursedResetRemote = self
+			end
+			return oldFire(self, ...)
+		end))
 	end
+end)
+function _G.AceCursedInstaReset()
+	if not _G.AceCursedResetRemote then
+		for _, desc in ipairs(game:GetService("ReplicatedStorage"):GetDescendants()) do
+			if desc:IsA("RemoteEvent") and desc.Name:sub(1,3) == "RE/" then
+				_G.AceCursedResetRemote = desc
+				break
+			end
+		end
+	end
+	if not _G.AceCursedResetRemote then return end
+	local character = LP.Character
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	if humanoid and humanoid.Health <= 0 then
+		pcall(function() _G.AceCursedResetRemote:FireServer(_G.AceCursedResetGuid, LP, "balloon") end)
+		return
+	end
+	local resetDetected = false
+	local resetConns = {}
+	if humanoid then
+		table.insert(resetConns, humanoid.Died:Connect(function() resetDetected = true end))
+		table.insert(resetConns, humanoid:GetPropertyChangedSignal("Health"):Connect(function()
+			if humanoid.Health <= 0 then resetDetected = true end
+		end))
+	end
+	if character then
+		table.insert(resetConns, character.AncestryChanged:Connect(function(_, parent)
+			if not parent then resetDetected = true end
+		end))
+	end
+	task.spawn(function()
+		for _ = 1, 10 do
+			if resetDetected then break end
+			pcall(function() _G.AceCursedResetRemote:FireServer(_G.AceCursedResetGuid, LP, "balloon") end)
+			task.wait(0.05)
+		end
+		for _, conn in ipairs(resetConns) do pcall(function() conn:Disconnect() end) end
+	end)
+end
 
-	_GH.MH_instareset = triggerReset
+do
+	_GH.MH_instareset = _G.AceCursedInstaReset
 
 	_floatDefs.instareset = {
 		label    = "INSTANT\nRESET",
-		onClick  = triggerReset,
+		onClick  = _G.AceCursedInstaReset,
 		momentary = true,
 	}
 end
