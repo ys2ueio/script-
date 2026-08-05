@@ -5366,8 +5366,8 @@ buildPage("Settings", function()
 			{id="default", label="Default", swatch=Color3.fromRGB(90,160,255)},
 			{id="noir",    label="Dark",    swatch=Color3.fromRGB(205,205,205)},
 			{id="crimson", label="Crimson", swatch=Color3.fromRGB(225,70,95)},
-			{id="white",   label="Blanc",   swatch=Color3.fromRGB(255,255,255)},
-			{id="purple",  label="Violet",  swatch=Color3.fromRGB(170,110,255)},
+			{id="white",   label="White",   swatch=Color3.fromRGB(255,255,255)},
+			{id="purple",  label="Purple",  swatch=Color3.fromRGB(170,110,255)},
 		}
 		local thWrap = Instance.new("Frame", currentPage)
 		thWrap.Size = UDim2.new(1,0,0,0); thWrap.AutomaticSize = Enum.AutomaticSize.Y
