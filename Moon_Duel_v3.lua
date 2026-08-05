@@ -1612,18 +1612,11 @@ end
 -- ===================================================================
 -- INFINITE JUMP
 -- ===================================================================
--- Copie exacte de la logique Ace Duels : pas de mode manuel/hold, un
--- seul comportement — boost immédiat à chaque JumpRequest (tap) +
--- boost continu si maintenu >0.12s (clavier Espace, ButtonA manette,
--- bouton mobile JumpButton). Ancien système manual/hold + clamp de
--- chute supprimé — Ace n'a rien de tout ça.
-local IJ = {active=false, holdPressed=false, holdActive=false, controllerActive=false,
-	mobilePressed=false, mobileActive=false, hooked={}, conns={}}
-
-local function _ijStopHoldState()
-	IJ.holdPressed=false; IJ.holdActive=false; IJ.controllerActive=false
-	IJ.mobilePressed=false; IJ.mobileActive=false
-end
+-- Copie de la logique Ace Duels, simplifiée : un seul comportement —
+-- boost immédiat à chaque JumpRequest (tap). Hold jump (clavier Espace
+-- maintenu, ButtonA manette maintenu, bouton mobile JumpButton maintenu)
+-- retiré à la demande — plus de boost continu tant qu'on maintient.
+local IJ = {active=false, conns={}}
 
 -- Same rollback fix as the speed engine: without network ownership the
 -- server stays physics-authoritative and can snap the jump boost straight
@@ -1648,73 +1641,13 @@ local function _ijApplyBoost(boost)
 	root.Velocity = Vector3.new(root.Velocity.X, boost or 50, root.Velocity.Z)
 end
 
-local function _ijHookMobileJumpButton(obj)
-	if not obj or obj.Name ~= "JumpButton" or not obj:IsA("GuiButton") or IJ.hooked[obj] then return end
-	IJ.hooked[obj] = true
-	obj.InputBegan:Connect(function(input)
-		if input.UserInputType ~= Enum.UserInputType.Touch or not IJ.active then return end
-		IJ.mobilePressed = true
-		task.delay(0.12, function()
-			if IJ.mobilePressed and IJ.active then
-				IJ.mobileActive = true
-				_ijApplyBoost(50)
-			end
-		end)
-	end)
-	obj.InputEnded:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.Touch then
-			IJ.mobilePressed = false; IJ.mobileActive = false
-		end
-	end)
-	obj.AncestryChanged:Connect(function(_, parent)
-		if not parent then
-			IJ.hooked[obj] = nil; IJ.mobilePressed = false; IJ.mobileActive = false
-		end
-	end)
-end
-
 function IJ.start()
-	if IJ.conns.jumpReq then return end -- déjà démarré (les hooks tournent en continu, gated par IJ.active)
+	if IJ.conns.jumpReq then return end -- déjà démarré
 	IJ.conns.jumpReq = UIS.JumpRequest:Connect(function()
 		_ijApplyBoost(50)
 	end)
-	IJ.conns.inputBegan = UIS.InputBegan:Connect(function(input)
-		if UIS:GetFocusedTextBox() then return end
-		if input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode == Enum.KeyCode.Space then
-			IJ.holdPressed = true
-			task.delay(0.12, function()
-				if IJ.holdPressed and IJ.active then
-					IJ.holdActive = true
-					_ijApplyBoost(50)
-				end
-			end)
-		elseif input.KeyCode == Enum.KeyCode.ButtonA and input.UserInputType.Name:match("^Gamepad") then
-			IJ.controllerActive = true
-		end
-	end)
-	IJ.conns.inputEnded = UIS.InputEnded:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode == Enum.KeyCode.Space then
-			IJ.holdPressed = false; IJ.holdActive = false
-		end
-		if input.KeyCode == Enum.KeyCode.ButtonA and input.UserInputType.Name:match("^Gamepad") then
-			IJ.controllerActive = false
-		end
-	end)
-	local pg = LP:FindFirstChild("PlayerGui")
-	if pg then
-		for _, obj in ipairs(pg:GetDescendants()) do _ijHookMobileJumpButton(obj) end
-		IJ.conns.descAdded = pg.DescendantAdded:Connect(function(obj)
-			task.defer(_ijHookMobileJumpButton, obj)
-		end)
-	end
-	IJ.conns.heartbeat = RunService.Heartbeat:Connect(function()
-		if IJ.active and (IJ.holdActive or IJ.mobileActive or IJ.controllerActive) then
-			_ijApplyBoost(50)
-		end
-	end)
 end
 function IJ.stop()
-	_ijStopHoldState()
 	for _, c in pairs(IJ.conns) do pcall(function() c:Disconnect() end) end
 	IJ.conns = {}
 	if _ijOwnWatchConn then pcall(function() _ijOwnWatchConn:Disconnect() end); _ijOwnWatchConn = nil end
