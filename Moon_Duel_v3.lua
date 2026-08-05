@@ -4288,8 +4288,7 @@ do
 	_GH.MH_instareset = triggerBurstReset
 
 	_floatDefs.instareset = {
-		label    = "INSTANT
-RESET",
+		label    = "INSTANT\nRESET",
 		onClick  = triggerBurstReset,
 		momentary = true,
 	}
