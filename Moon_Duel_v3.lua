@@ -72,7 +72,32 @@ local _THEME_DEFS = {
 		dim     = Color3.fromRGB(135,85,92),
 		d3      = Color3.fromRGB(120,25,42),
 		d4      = Color3.fromRGB(225,60,85),
-	}
+	},
+	-- Bright platinum/white accent — same dark panel as every other theme
+	-- (Default/Noir/Crimson never touch the panel background either), just
+	-- the moon/borders/gradients go icy-white instead of blue/grey/red.
+	white = {
+		moon    = Color3.fromRGB(235,235,245),
+		moon2   = Color3.fromRGB(255,255,255),
+		on_bg   = Color3.fromRGB(55,55,65),
+		border  = Color3.fromRGB(70,70,82),
+		silver  = Color3.fromRGB(248,248,252),
+		silver2 = Color3.fromRGB(195,195,208),
+		dim     = Color3.fromRGB(130,130,142),
+		d3      = Color3.fromRGB(120,120,138),
+		d4      = Color3.fromRGB(235,235,245),
+	},
+	purple = {
+		moon    = Color3.fromRGB(170,110,255),
+		moon2   = Color3.fromRGB(205,165,255),
+		on_bg   = Color3.fromRGB(45,20,80),
+		border  = Color3.fromRGB(55,30,78),
+		silver  = Color3.fromRGB(228,212,248),
+		silver2 = Color3.fromRGB(172,142,208),
+		dim     = Color3.fromRGB(122,98,152),
+		d3      = Color3.fromRGB(95,45,165),
+		d4      = Color3.fromRGB(182,122,255),
+	},
 }
 local _currentTheme = "default"
 local _themeAllGuis = {}
@@ -143,6 +168,22 @@ local function applyTheme(newName)
 				ColorSequenceKeypoint.new(0.5,  Color3.fromRGB(255, 150, 165)),
 				ColorSequenceKeypoint.new(0.75, Color3.fromRGB(180, 40,  65)),
 				ColorSequenceKeypoint.new(1,    Color3.fromRGB(60,  10,  20)),
+			})
+		elseif newName == "white" then
+			_GH.stealFillGradRef.Color = ColorSequence.new({
+				ColorSequenceKeypoint.new(0,    Color3.fromRGB(55,  55,  65)),
+				ColorSequenceKeypoint.new(0.25, Color3.fromRGB(180, 180, 195)),
+				ColorSequenceKeypoint.new(0.5,  Color3.fromRGB(255, 255, 255)),
+				ColorSequenceKeypoint.new(0.75, Color3.fromRGB(180, 180, 195)),
+				ColorSequenceKeypoint.new(1,    Color3.fromRGB(55,  55,  65)),
+			})
+		elseif newName == "purple" then
+			_GH.stealFillGradRef.Color = ColorSequence.new({
+				ColorSequenceKeypoint.new(0,    Color3.fromRGB(40,  15,  75)),
+				ColorSequenceKeypoint.new(0.25, Color3.fromRGB(120, 60,  210)),
+				ColorSequenceKeypoint.new(0.5,  Color3.fromRGB(210, 175, 255)),
+				ColorSequenceKeypoint.new(0.75, Color3.fromRGB(120, 60,  210)),
+				ColorSequenceKeypoint.new(1,    Color3.fromRGB(40,  15,  75)),
 			})
 		else
 			_GH.stealFillGradRef.Color = ColorSequence.new({
@@ -2295,14 +2336,44 @@ do
 		end)
 
 		task.wait(0.4)
+		-- Moonrise: starts low and rises into place instead of just popping
+		-- in at its resting spot — reads as an actual moonrise, not a spawn.
 		moonWrap.Size = UDim2.new(0,0,0,0)
-		TweenService:Create(moonWrap, TweenInfo.new(0.48, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
-			{Size = UDim2.new(0,70,0,70)}):Play()
+		moonWrap.Position = UDim2.new(0.5,0,0.62,0)
+		TweenService:Create(moonWrap, TweenInfo.new(0.55, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+			{Size = UDim2.new(0,70,0,70), Position = UDim2.new(0.5,0,0.42,0)}):Play()
 		fireShockwave()
 		task.delay(0.18, fireShockwave)
 		fireFlash(0.9)
 		_sfx(2545463903, 0.78, 1.0)            -- impact cinématique — apparition de la lune
 		task.wait(0.5)
+
+		-- Glitch reveal: a few scrambled/jittery frames before the title
+		-- locks in clean, reads as "the system just booted" rather than a
+		-- plain fade — self-contained, restores the label exactly before
+		-- the existing Back-Out reveal tween below takes over.
+		do
+			local GLITCH_CHARS = "#$%&XZQ019/\\"
+			local realText = nameLbl.Text
+			for i = 1, 6 do
+				local scrambled = {}
+				for c in realText:gmatch(".") do
+					if c ~= " " and math.random() < 0.5 then
+						local gi = math.random(1, #GLITCH_CHARS)
+						scrambled[#scrambled+1] = GLITCH_CHARS:sub(gi, gi)
+					else
+						scrambled[#scrambled+1] = c
+					end
+				end
+				nameLbl.Text = table.concat(scrambled)
+				nameLbl.TextTransparency = (i % 2 == 0) and 0 or 0.5
+				nameLbl.Position = UDim2.new(0.5, math.random(-3,3), 0.54, 0)
+				task.wait(0.03)
+			end
+			nameLbl.Text = realText
+			nameLbl.Position = UDim2.new(0.5, 0, 0.54, 0)
+			nameLbl.TextTransparency = 1
+		end
 		nameLbl.TextSize = 62
 		TweenService:Create(nameLbl, TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
 			{TextTransparency = 0, TextSize = 46}):Play()
@@ -2343,8 +2414,25 @@ do
 		_sfx(131070686, 0.25, 1.0)             -- transition sci-fi — fade out cinématique
 		task.wait(0.55)
 
-		TweenService:Create(introGui, TweenInfo.new(0.5), {BackgroundTransparency = 1}):Play()
-		task.wait(0.5)
+		-- Continuity: the moon that just introduced the hub flies to the
+		-- corner where its little floating icon lives before the curtain
+		-- drops — same visual language as the close/open "absorb" animation
+		-- later, so the intro hands off into the live menu as one gesture
+		-- instead of a hard cut. Guarded: miniBtn is created moments after
+		-- this whole intro block runs, so by the time this fires (a few
+		-- seconds in) it always exists — the pcall is just a safety net.
+		pcall(function()
+			local mb = _GH.miniBtn
+			if mb then
+				local targetAbs = mb.AbsolutePosition + mb.AbsoluteSize/2
+				TweenService:Create(moonWrap, TweenInfo.new(0.4, Enum.EasingStyle.Quint, Enum.EasingDirection.In), {
+					Position = UDim2.new(0, targetAbs.X, 0, targetAbs.Y),
+					Size = UDim2.new(0,8,0,8),
+				}):Play()
+			end
+		end)
+		TweenService:Create(introGui, TweenInfo.new(0.4), {BackgroundTransparency = 1}):Play()
+		task.wait(0.42)
 		introGui:Destroy()
 	end)
 end
@@ -2891,7 +2979,39 @@ end
 startMbAnim()
 _GH.mbHalo = mbHalo; _GH.miniStk = miniStk; _GH.startMbAnim = startMbAnim
 _GH.stopMbAnim = function() _mbAnimRunning = false end
+_GH.miniBtn = miniBtn
 makeDraggable(miniBtn, nil, "mini")
+
+-- Ambient dust: a few soft motes drifting off the moon icon while it's
+-- minimized — idle life for what would otherwise be a static button.
+-- Fully self-contained (own Frames, own loop, reads C_MOON2 fresh each
+-- spawn so it follows theme changes) — can't touch drag/click/anything else.
+task.spawn(function()
+	while gui.Parent do
+		task.wait(math.random(4,8)/10)
+		if miniBtn.Visible then
+			pcall(function()
+				local ang = math.random() * math.pi * 2
+				local dist = 20 + math.random() * 14
+				local mote = Instance.new("Frame", miniBtn)
+				mote.AnchorPoint = Vector2.new(0.5,0.5)
+				mote.Size = UDim2.new(0, math.random(2,3), 0, math.random(2,3))
+				mote.Position = UDim2.new(0.5, math.cos(ang)*10, 0.5, math.sin(ang)*10)
+				mote.BackgroundColor3 = C_MOON2
+				mote.BackgroundTransparency = 0.3
+				mote.BorderSizePixel = 0
+				mote.ZIndex = 48
+				addCorner(mote, 2)
+				local dur = 1.2 + math.random()*0.6
+				TweenService:Create(mote, TweenInfo.new(dur, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {
+					Position = UDim2.new(0.5, math.cos(ang)*dist, 0.5, math.sin(ang)*dist),
+					BackgroundTransparency = 1,
+				}):Play()
+				task.delay(dur+0.1, function() if mote then mote:Destroy() end end)
+			end)
+		end
+	end
+end)
 
 -- Shared guard: the close animation is async (spans several frames), so
 -- showGui() must refuse to start a fresh pop-in while the panel is still
@@ -2979,6 +3099,18 @@ local function hideGui()
 end
 closeBtn.MouseButton1Click:Connect(hideGui)
 miniBtn.MouseButton1Click:Connect(showGui)
+_GH.showGui = showGui
+
+-- Snaps the main panel back to its default centered position (keeps
+-- whatever UI Scale is currently set — only Position moves). Used by the
+-- "Reset Position" button in Settings.
+local function resetMainPosition()
+	local scaledW = WIN_W * mainUIScale.Scale
+	local targetPos = UDim2.new(0.5, -scaledW/2, 0.5, -137)
+	TweenService:Create(mainOuter, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Position = targetPos}):Play()
+	if _GH.autoSave then _GH.autoSave() end
+end
+_GH.resetMainPosition = resetMainPosition
 
 -- ===================================================================
 -- Drag-lock is handled only by lockTitleBtn (title button).
@@ -3079,10 +3211,51 @@ local _floatPositions = {}   -- id -> {xs,xo,ys,yo}
 -- Bump this whenever the default layout changes: saved positions from an
 -- older version get discarded on load instead of restoring stale/overlapping
 -- coordinates, so everyone gets the current clean column layout by default.
-local _FLOAT_POS_VERSION = 14
+local _FLOAT_POS_VERSION = 15  -- bumped: default grid now carries more gap (was 3px, now 8px)
 local FLOAT_WIDE_H = 30
 local _floatLocked    = false
 local FLOAT_SZ = 46
+
+-- Stable order (independent of activation order) so buttons always line
+-- up the same way: a tight 2-wide grid. Declared here (not next to
+-- makeFloatButton further down) so both makeFloatButton AND the "Button
+-- Size" slider in applyScale can share the exact same position formula —
+-- previously the slider only grew each button's Size and never touched
+-- Position, so at high scale neighbouring buttons grew into each other.
+local _FLOAT_GRID_ORDER = {
+	"aimbot","aimv2","dropbr","autoleft",
+	"autoright","tpdown","battp","instareset",
+}
+local function _floatGridIndex(id)
+	for i, fid in ipairs(_FLOAT_GRID_ORDER) do
+		if fid == id then return i end
+	end
+	return #_FLOAT_GRID_ORDER + 1
+end
+local FLOAT_GAP = 8  -- was 3 — the extra room the user asked for
+local function _floatGridPos(id, sz)
+	local idx = _floatGridIndex(id) - 1
+	local col = idx % 2
+	local row = math.floor(idx / 2)
+	local topOffset = 40
+	local blockW = sz * 2 + FLOAT_GAP
+	return UDim2.new(1, -(blockW + 12) + col * (sz + FLOAT_GAP), 0, topOffset + row * (sz + FLOAT_GAP))
+end
+
+-- Clears every custom-dragged floating-button position and snaps whatever
+-- is currently spawned back to the default grid. Used by the "Reset
+-- Position" button in Settings (alongside resetMainPosition).
+local function resetFloatPositions()
+	for k in pairs(_floatPositions) do _floatPositions[k] = nil end
+	for id, entry in pairs(_floatBtns) do
+		if entry.frame and entry.frame.Parent then
+			TweenService:Create(entry.frame, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+				{Position = _floatGridPos(id, FLOAT_SZ)}):Play()
+		end
+	end
+	if _GH.autoSave then _GH.autoSave() end
+end
+_GH.resetFloatPositions = resetFloatPositions
 
 -- Declared here (before buildPage Settings) so the Speed
 -- Bypass / Lagger toggles can reference the widgets built further
@@ -3154,6 +3327,14 @@ buildPage("Visual", function()
 		for id, entry in pairs(_floatBtns) do
 			if entry.frame and entry.frame.Parent then
 				entry.frame.Size = UDim2.new(0, newSz, 0, newSz)
+				-- Only grid-default buttons get repositioned — anything the
+				-- user has dragged to a custom spot keeps that spot (growing
+				-- in place there), same as before. This is what fixes buttons
+				-- overlapping each other as the size grows: previously only
+				-- Size changed here and Position never followed along.
+				if not _floatPositions[id] then
+					entry.frame.Position = _floatGridPos(id, newSz)
+				end
 			end
 		end
 	end
@@ -4070,19 +4251,9 @@ end
 -- Each action has a toggle in Settings that spawns/despawns its
 -- own floating square button. "Lock" freezes the drag once placed.
 -- ===================================================================
--- Stable order (independent of activation order) so buttons always line
--- up in the same compact block: Anti Bat Aimbot wide on top, the other
--- 8 packed right below it in a tight 2-wide grid (4 rows).
-local _FLOAT_GRID_ORDER = {
-	"aimbot","aimv2","dropbr","autoleft",
-	"autoright","tpdown","battp","instareset",
-}
-local function _floatGridIndex(id)
-	for i, fid in ipairs(_FLOAT_GRID_ORDER) do
-		if fid == id then return i end
-	end
-	return #_FLOAT_GRID_ORDER + 1
-end
+-- Grid order + position formula (_FLOAT_GRID_ORDER / _floatGridIndex /
+-- _floatGridPos) live earlier in the file, before buildPage("Visual",...),
+-- so the "Button Size" slider can share this exact math.
 
 local function makeFloatButton(id)
 	if _floatBtns[id] then return _floatBtns[id] end
@@ -4091,19 +4262,8 @@ local function makeFloatButton(id)
 	local btn = Instance.new("TextButton", gui)
 	btn.Name = "Float_"..id
 	local saved = _floatPositions[id]
-	local GAP = 3
-	local blockX = 1
-	local blockW = FLOAT_SZ * 2 + GAP
 	btn.Size = UDim2.new(0, FLOAT_SZ, 0, FLOAT_SZ)
-	if saved then
-		btn.Position = UDim2.new(saved[1], saved[2], saved[3], saved[4])
-	else
-		local idx = _floatGridIndex(id) - 1
-		local col = idx % 2
-		local row = math.floor(idx / 2)
-		local topOffset = 40
-		btn.Position = UDim2.new(blockX, -(blockW + 12) + col * (FLOAT_SZ + GAP), 0, topOffset + row * (FLOAT_SZ + GAP))
-	end
+	btn.Position = saved and UDim2.new(saved[1], saved[2], saved[3], saved[4]) or _floatGridPos(id, FLOAT_SZ)
 	btn.BackgroundColor3 = C_ROW; btn.BackgroundTransparency = 0; btn.BorderSizePixel = 0
 	btn.Text = def.label; btn.TextColor3 = C_WHITE; btn.Font = Enum.Font.GothamBold
 	btn.TextScaled = false; btn.TextSize = 9; btn.TextWrapped = true; btn.AutoButtonColor = false
@@ -4678,7 +4838,8 @@ local function MH_load()
 		-- Theme must be applied BEFORE toggle restore: TweenService captures C_ON_BG
 		-- by value at Create() time, so restoring toggles before applyTheme would
 		-- bake the default-blue into all pill tweens even in noir mode.
-		if data.theme == "default" or data.theme == "noir" or data.theme == "crimson" then
+		if data.theme == "default" or data.theme == "noir" or data.theme == "crimson"
+			or data.theme == "white" or data.theme == "purple" then
 			applyTheme(data.theme)
 		end
 
@@ -4832,6 +4993,27 @@ buildPage("Settings", function()
 				btn2.BackgroundTransparency = 0.05; btn2.TextColor3 = C_WHITE
 			end)
 		end
+	end
+
+	UIB.makeGap(4)
+	do
+		-- Snaps the main panel AND every default-grid floating button back
+		-- to their starting spot — the fix for "dragged everything into a
+		-- mess" without having to place each one back by hand.
+		local resetRow = Instance.new("Frame", currentPage)
+		resetRow.Size = UDim2.new(1,0,0,32); resetRow.BackgroundColor3 = C_ROW
+		resetRow.BackgroundTransparency = 0.35; resetRow.BorderSizePixel = 0
+		resetRow.LayoutOrder = LO(); addCorner(resetRow,12); addLivingStroke(resetRow,1)
+		local resetClk = Instance.new("TextButton", resetRow)
+		resetClk.Size = UDim2.new(1,0,1,0); resetClk.BackgroundTransparency = 1
+		resetClk.Text = "↺  Reset Position"; resetClk.TextColor3 = C_WHITE
+		resetClk.Font = Enum.Font.GothamBold; resetClk.TextSize = 10
+		addLivingTextGradient(resetClk)
+		resetClk.MouseButton1Click:Connect(function()
+			if _GH.resetMainPosition then _GH.resetMainPosition() end
+			if _GH.resetFloatPositions then _GH.resetFloatPositions() end
+			if _GH.showToast then _GH.showToast("Position Reset", "info") end
+		end)
 	end
 
 	UIB.makeGap(4)
@@ -5006,61 +5188,47 @@ buildPage("Settings", function()
 	UIB.makeSectionLabel("Theme")
 	UIB.makeGap(2)
 	do
-		local thRow = Instance.new("Frame", currentPage)
-		thRow.Size = UDim2.new(1,0,0,32); thRow.BackgroundColor3 = C_ROW
-		thRow.BackgroundTransparency = 0.35; thRow.BorderSizePixel = 0
-		thRow.LayoutOrder = LO(); addCorner(thRow,12); addLivingStroke(thRow,1)
-		local thLbl = Instance.new("TextLabel", thRow)
-		thLbl.Size = UDim2.new(0,80,1,0); thLbl.Position = UDim2.new(0,14,0,0)
-		thLbl.BackgroundTransparency = 1; thLbl.Text = "Colors"
-		thLbl.TextColor3 = C_WHITE; thLbl.Font = Enum.Font.GothamBold
-		thLbl.TextSize = 10; thLbl.TextXAlignment = Enum.TextXAlignment.Left
-		addLivingTextGradient(thLbl)
-		local BW,BH = 48,22
-		local crimsonBtn = Instance.new("TextButton", thRow)
-		crimsonBtn.Size = UDim2.new(0,BW,0,BH); crimsonBtn.Position = UDim2.new(1,-(BW*3+26),0.5,-BH/2)
-		crimsonBtn.BackgroundColor3 = C_OFF_BG; crimsonBtn.BackgroundTransparency = 0.3
-		crimsonBtn.BorderSizePixel = 0; crimsonBtn.Text = "Crimson"
-		crimsonBtn.TextColor3 = C_DIM
-		crimsonBtn.Font = Enum.Font.GothamBold; crimsonBtn.TextSize = 8
-		crimsonBtn.AutoButtonColor = false; addCorner(crimsonBtn,6); addLivingStroke(crimsonBtn,1)
-		local defBtn = Instance.new("TextButton", thRow)
-		defBtn.Size = UDim2.new(0,BW,0,BH); defBtn.Position = UDim2.new(1,-(BW*2+20),0.5,-BH/2)
-		defBtn.BackgroundColor3 = C_MOON; defBtn.BackgroundTransparency = 0.1
-		defBtn.BorderSizePixel = 0; defBtn.Text = "Default"
-		defBtn.TextColor3 = Color3.fromRGB(0,10,20)
-		defBtn.Font = Enum.Font.GothamBold; defBtn.TextSize = 8
-		defBtn.AutoButtonColor = false; addCorner(defBtn,6); addLivingStroke(defBtn,1)
-		local noirBtn = Instance.new("TextButton", thRow)
-		noirBtn.Size = UDim2.new(0,BW,0,BH); noirBtn.Position = UDim2.new(1,-(BW+14),0.5,-BH/2)
-		noirBtn.BackgroundColor3 = C_OFF_BG; noirBtn.BackgroundTransparency = 0.3
-		noirBtn.BorderSizePixel = 0; noirBtn.Text = "Dark"
-		noirBtn.TextColor3 = C_DIM
-		noirBtn.Font = Enum.Font.GothamBold; noirBtn.TextSize = 8
-		noirBtn.AutoButtonColor = false; addCorner(noirBtn,6)
-		_G_updateThemeUI = function(name)
-			defBtn.BackgroundColor3  = name=="default" and C_MOON or C_OFF_BG
-			defBtn.BackgroundTransparency  = name=="default" and 0.1 or 0.3
-			defBtn.TextColor3  = name=="default" and Color3.fromRGB(0,10,20) or C_DIM
-			noirBtn.BackgroundColor3 = name=="noir" and Color3.fromRGB(200,200,200) or C_OFF_BG
-			noirBtn.BackgroundTransparency = name=="noir" and 0.15 or 0.3
-			noirBtn.TextColor3 = name=="noir" and Color3.fromRGB(10,10,10) or C_DIM
-			crimsonBtn.BackgroundColor3 = name=="crimson" and Color3.fromRGB(225,70,95) or C_OFF_BG
-			crimsonBtn.BackgroundTransparency = name=="crimson" and 0.1 or 0.3
-			crimsonBtn.TextColor3 = name=="crimson" and Color3.fromRGB(20,0,4) or C_DIM
+		-- Grid (not manually-positioned buttons) so adding themes never means
+		-- re-doing pixel math and risking overlap in a 300px-wide panel —
+		-- UIGridLayout wraps to a new row on its own once cells run out of room.
+		local THEME_LIST = {
+			{id="default", label="Default", swatch=Color3.fromRGB(90,160,255)},
+			{id="noir",    label="Dark",    swatch=Color3.fromRGB(205,205,205)},
+			{id="crimson", label="Crimson", swatch=Color3.fromRGB(225,70,95)},
+			{id="white",   label="Blanc",   swatch=Color3.fromRGB(240,240,248)},
+			{id="purple",  label="Violet",  swatch=Color3.fromRGB(170,110,255)},
+		}
+		local thWrap = Instance.new("Frame", currentPage)
+		thWrap.Size = UDim2.new(1,0,0,0); thWrap.AutomaticSize = Enum.AutomaticSize.Y
+		thWrap.BackgroundTransparency = 1; thWrap.LayoutOrder = LO()
+		local thGrid = Instance.new("UIGridLayout", thWrap)
+		thGrid.CellSize = UDim2.new(0,84,0,26)
+		thGrid.CellPadding = UDim2.new(0,6,0,6)
+		thGrid.SortOrder = Enum.SortOrder.LayoutOrder
+
+		local _themeBtns = {}
+		for i, t in ipairs(THEME_LIST) do
+			local btn = Instance.new("TextButton", thWrap)
+			btn.BackgroundColor3 = C_OFF_BG; btn.BackgroundTransparency = 0.3
+			btn.BorderSizePixel = 0; btn.Text = t.label; btn.TextColor3 = C_DIM
+			btn.Font = Enum.Font.GothamBold; btn.TextSize = 9
+			btn.AutoButtonColor = false; btn.LayoutOrder = i
+			addCorner(btn, 8); addLivingStroke(btn, 1)
+			_themeBtns[t.id] = {btn = btn, swatch = t.swatch}
+			btn.MouseButton1Click:Connect(function()
+				applyTheme(t.id)
+				if _GH.autoSave then _GH.autoSave() end
+				if _GH.showToast then _GH.showToast("Theme: " .. t.label, "info") end
+			end)
 		end
-		defBtn.MouseButton1Click:Connect(function()
-			applyTheme("default"); if _GH.autoSave then _GH.autoSave() end
-			if _GH.showToast then _GH.showToast("Theme: Default", "info") end
-		end)
-		noirBtn.MouseButton1Click:Connect(function()
-			applyTheme("noir"); if _GH.autoSave then _GH.autoSave() end
-			if _GH.showToast then _GH.showToast("Theme: Dark", "info") end
-		end)
-		crimsonBtn.MouseButton1Click:Connect(function()
-			applyTheme("crimson"); if _GH.autoSave then _GH.autoSave() end
-			if _GH.showToast then _GH.showToast("Theme: Crimson", "info") end
-		end)
+		_G_updateThemeUI = function(name)
+			for id, entry in pairs(_themeBtns) do
+				local active = (id == name)
+				entry.btn.BackgroundColor3 = active and entry.swatch or C_OFF_BG
+				entry.btn.BackgroundTransparency = active and 0.1 or 0.3
+				entry.btn.TextColor3 = active and Color3.fromRGB(12,10,16) or C_DIM
+			end
+		end
 	end
 	UIB.makeGap(6)
 	UIB.makeSectionLabel("Credits")
