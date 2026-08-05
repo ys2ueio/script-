@@ -1,6 +1,4 @@
 local _NS = tostring(math.random(0x100000, 0xFFFFFF)) .. tostring(tick()):gsub("%.", "")
-if _G[_NS] then return end
-_G[_NS] = true
 local _GH  = {}   -- replaces all _GH.* / _GH.MH_* to leave zero _G footprint
 
 if not game:IsLoaded() then game.Loaded:Wait() end
@@ -321,17 +319,10 @@ end)
 -- DESTROY EXISTING
 -- ===================================================================
 local function destroyAllMoonHub()
-	local function sweep(container)
-		if not container then return end
-		pcall(function()
-			for _, inst in ipairs(container:GetChildren()) do
-				if inst.Name == _NS and inst:IsA("ScreenGui") then pcall(function() inst:Destroy() end) end
-			end
-		end)
+	if _G["_MH_GUI"] and _G["_MH_GUI"].Parent then
+		pcall(function() _G["_MH_GUI"]:Destroy() end)
 	end
-	sweep(LP:FindFirstChildOfClass("PlayerGui"))
-	sweep(game:GetService("CoreGui"))
-	pcall(function() if gethui then sweep(gethui()) end end)
+	_G["_MH_GUI"] = nil
 end
 destroyAllMoonHub()
 
@@ -449,6 +440,8 @@ local AutoSteal = {
 
 
 -- ── AUTO GRAB V2 mode (new default) ────────────────────────────
+local startAutoSteal, stopAutoSteal   -- pre-declared; assigned inside do..end
+do
 local _KAG_started  = false
 local _KAG_conn     = nil
 local _KAG_scanTask = nil
@@ -717,8 +710,9 @@ local function stopAutoStealV2()
 	if AutoSteal.StatusLabel then AutoSteal.StatusLabel.Text="READY" end
 end
 
-local function startAutoSteal() startAutoStealV2() end
-local function stopAutoSteal()  stopAutoStealV2()  end
+startAutoSteal = function() startAutoStealV2() end
+stopAutoSteal  = function() stopAutoStealV2()  end
+end -- do..end AUTO GRAB V2
 
 
 
@@ -1170,29 +1164,6 @@ LP.CharacterAdded:Connect(function(char)
 	task.wait(0.5); if _armEnabled then setupAutoResetMedusa(char) end
 end)
 
--- ANTI BAT (logique Envy — spike 1000 + restore XZ)
--- ANTI BAT (Envy logic — 1000 spike + XZ restore)
-local BC = {active=false, conn=nil}
-
-function BC.start()
-	if BC.conn then BC.conn:Disconnect() end
-	BC.conn = RunService.Heartbeat:Connect(function()
-		if not BC.active then return end
-		local char = LP.Character; if not char then return end
-		local hum = char:FindFirstChildOfClass("Humanoid")
-		local root = char:FindFirstChild("HumanoidRootPart")
-		if not hum or not root then return end
-		if hum.MoveDirection.Magnitude <= 0 then return end
-		local vel = root.AssemblyLinearVelocity
-		root.AssemblyLinearVelocity = Vector3.new(vel.X * 50, 50, vel.Z * 50)
-		RunService.RenderStepped:Wait()
-		root.AssemblyLinearVelocity = vel + Vector3.new(0, 0.05, 0)
-	end)
-end
-
-function BC.stop()
-	if BC.conn then BC.conn:Disconnect(); BC.conn = nil end
-end
 
 -- ===================================================================
 -- BAT AIMBOT + AIM BYPASS (logique raw__59_)
@@ -1519,10 +1490,8 @@ end
 -- ===================================================================
 -- BUILD PAGES
 -- ===================================================================
-local applyAntiBatState
 local setAutoStealRowVisual
 local setAntiRagdollRowVisual
-local setAntiBatQuickBtnVisual
 local setBatCounterRowVisual
 local setAimbotRowVisual
 local setAimbotV2RowVisual
@@ -1870,6 +1839,218 @@ local function stopAntiKick()
 end
 task.spawn(function() pcall(startAntiKick) end)
 
+-- ===================================================================
+-- GC SCANNER — block X-15 / X-16 kick signals on any remote
+-- ===================================================================
+local _gcScanned = {}
+
+local function _gcHookRemote(remote)
+	pcall(function()
+		local oldFire
+		oldFire = hookfunction(remote.FireServer, newcclosure(function(self, ...)
+			local a1 = select(1, ...) and tostring(select(1, ...)):lower() or ""
+			if a1 == "x-15" or a1 == "x-16" then return task.wait(9e9) end
+			return oldFire(self, ...)
+		end))
+	end)
+end
+
+local function _gcDeepScan(value)
+	if _gcScanned[value] then return end
+	_gcScanned[value] = true
+	if typeof(value) == "Instance" and value:IsA("RemoteEvent") then
+		if not value:IsDescendantOf(game:GetService("ReplicatedStorage")) then
+			_gcHookRemote(value)
+			pcall(function()
+				local _cwOld
+				_cwOld = hookfunction(getrenv().coroutine.wrap, newcclosure(function(...)
+					if not checkcaller() then return task.wait(9e9) end
+					return _cwOld(...)
+				end))
+			end)
+		end
+		return
+	end
+	if typeof(value) == "function" then
+		local ok, up = pcall(getupvalues, value)
+		if ok and up then for _, v in pairs(up) do _gcDeepScan(v) end end
+	end
+	if typeof(value) == "table" then
+		for _, v in pairs(value) do _gcDeepScan(v) end
+	end
+end
+
+if getgc and islclosure and isexecutorclosure then
+	task.spawn(function()
+		pcall(function()
+			for _, obj in next, getgc(true) do
+				if typeof(obj) == "function" and islclosure(obj) and not isexecutorclosure(obj) then
+					_gcDeepScan(obj)
+				end
+			end
+		end)
+	end)
+end
+
+-- ===================================================================
+-- SCREEN-TEXT ANTI-KICK — countdown "5"→"1" pause auto-steal
+-- ===================================================================
+local _akScreenLock  = false
+local _akPending     = {autoSteal = false, armMedusa = false}
+local _akWatchedLbls = {}
+
+local _STKILL_BAD  = {"backpack","inventory","chatmain","bubblechat","overhead","nametag","leaderboard","hudgui"}
+local _STKILL_GOOD = {"global","announce","notif","banner","broadcast","event","popup","sammy","alert","header","news","system","message","center","steal","countdown","timer"}
+
+local function _stClassify(obj)
+	if not obj or not obj.Parent then return false end
+	local n   = (obj.Name or ""):lower()
+	local pn  = ((obj.Parent and obj.Parent.Name) or ""):lower()
+	local gpn = ((obj.Parent and obj.Parent.Parent and obj.Parent.Parent.Name) or ""):lower()
+	for _, b in ipairs(_STKILL_BAD) do
+		if n:find(b,1,true) or pn:find(b,1,true) then return false end
+	end
+	for _, g in ipairs(_STKILL_GOOD) do
+		if n:find(g,1,true) or pn:find(g,1,true) or gpn:find(g,1,true) then return true end
+	end
+	return false
+end
+
+local function _stHandleText(txt)
+	if type(txt) ~= "string" then return end
+	local clean = txt:gsub("<[^>]+>",""):gsub("%s+","")
+	if clean == "5" then
+		_akScreenLock = true
+		if AutoSteal and AutoSteal.Enabled then
+			_akPending.autoSteal = true
+			pcall(stopAutoSteal)
+		end
+		if _armState and _armState.enabled then
+			_akPending.armMedusa = true
+			_armState.enabled = false
+		end
+	elseif clean == "1" then
+		task.delay(0.6, function()
+			_akScreenLock = false
+			if _akPending.autoSteal then
+				_akPending.autoSteal = false
+				if AutoSteal then AutoSteal.Enabled = true; pcall(startAutoSteal) end
+			end
+			if _akPending.armMedusa then
+				_akPending.armMedusa = false
+				if _armState then _armState.enabled = true end
+			end
+		end)
+	end
+end
+
+local function _stWatchLabel(obj)
+	if _akWatchedLbls[obj] then return end
+	_akWatchedLbls[obj] = true
+	pcall(function() _stHandleText(obj.Text or "") end)
+	obj:GetPropertyChangedSignal("Text"):Connect(function()
+		if _stClassify(obj) then _stHandleText(obj.Text or "") end
+	end)
+end
+
+task.spawn(function()
+	local pg = LP:WaitForChild("PlayerGui", 10)
+	if not pg then return end
+	for _, obj in ipairs(pg:GetDescendants()) do
+		if obj:IsA("TextLabel") and _stClassify(obj) then _stWatchLabel(obj) end
+	end
+	pg.DescendantAdded:Connect(function(obj)
+		task.wait(0.04)
+		if not obj:IsA("TextLabel") then return end
+		if _stClassify(obj) then
+			_stWatchLabel(obj)
+			local t = obj.Text or ""
+			if #t >= 1 then _stHandleText(t) end
+		end
+		obj:GetPropertyChangedSignal("Text"):Connect(function()
+			if _stClassify(obj) then _stHandleText(obj.Text or "") end
+		end)
+	end)
+end)
+
+pcall(function()
+	local TCS = game:GetService("TextChatService")
+	if TCS and TCS.MessageReceived then
+		TCS.MessageReceived:Connect(function(msg)
+			if not msg then return end
+			local t = (msg.Text or ""):gsub("<[^>]+>",""):gsub("%s+","")
+			_stHandleText(t)
+		end)
+	end
+end)
+
+-- ===================================================================
+-- ANTI-DETECT EXTRA — periodic GC rescan + HTTP block + shutdown hook
+-- ===================================================================
+
+-- 1. Periodic GC rescan every 30s (catch kick remotes injected dynamically)
+task.spawn(function()
+	while true do
+		task.wait(30)
+		pcall(function()
+			if not (getgc and islclosure and isexecutorclosure) then return end
+			for _, obj in next, getgc(true) do
+				if typeof(obj) == "function" and islclosure(obj) and not isexecutorclosure(obj) then
+					_gcDeepScan(obj)
+				end
+			end
+		end)
+	end
+end)
+
+-- 2. Block HTTP reporting (syn.request / request / http_request)
+pcall(function()
+	local _BAD_URL = {"log","report","detect","analytics","telemetry","anticheat","anti_cheat","ban"}
+	local function _wrapReq(fn)
+		if not fn then return fn end
+		return newcclosure(function(opts, ...)
+			if type(opts) == "table" then
+				local url = (opts.Url or opts.url or ""):lower()
+				for _, kw in ipairs(_BAD_URL) do
+					if url:find(kw, 1, true) then return {StatusCode=200,Body="",Success=true} end
+				end
+			end
+			return fn(opts, ...)
+		end)
+	end
+	if syn and syn.request  then syn.request   = _wrapReq(syn.request)  end
+	if request              then request        = _wrapReq(request)       end
+	if http_request         then http_request   = _wrapReq(http_request)  end
+end)
+
+-- 3. Block game:Shutdown() and game:BindToClose() via __namecall
+pcall(function()
+	local gmt = getrawmetatable(game); if not gmt then return end
+	setreadonly(gmt, false)
+	local _gOldNC = gmt.__namecall
+	local _gRaw   = _gOldNC
+	gmt.__namecall = newcclosure(function(self, ...)
+		local fromGame = not (checkcaller and checkcaller())
+		if fromGame then
+			local m = tostring(getnamecallmethod and getnamecallmethod() or ""):lower()
+			if m == "shutdown" or m == "bindtoclose" then return end
+		end
+		return _gRaw(self, ...)
+	end)
+	setreadonly(gmt, true)
+end)
+
+-- 4. Monitor workspace for character removal and restore instantly
+task.spawn(function()
+	while true do
+		task.wait(0.05)
+		pcall(function()
+			local char = LP.Character; if not char then return end
+			if char.Parent ~= workspace then char.Parent = workspace end
+		end)
+	end
+end)
+
 local _MH_buildUI
 _MH_buildUI = function()
 local gui = Instance.new("ScreenGui")
@@ -1883,6 +2064,7 @@ end)
 if not pcall(function() gui.Parent = game:GetService("CoreGui") end) then
 	gui.Parent = (gethui and gethui()) or LP:WaitForChild("PlayerGui")
 end
+_G["_MH_GUI"] = gui
 
 -- ===================================================================
 -- INTRO CUTSCENE — crescent moon reveal, orbit ring, cinematic zoom (~4.2s)
@@ -2963,11 +3145,7 @@ buildPage("Visual", function()
 		FLOAT_SZ = newSz
 		for id, entry in pairs(_floatBtns) do
 			if entry.frame and entry.frame.Parent then
-				if id == "antibat" then
-					entry.frame.Size = UDim2.new(0, newSz * 2 + 8, 0, newSz)
-				else
-					entry.frame.Size = UDim2.new(0, newSz, 0, newSz)
-				end
+				entry.frame.Size = UDim2.new(0, newSz, 0, newSz)
 			end
 		end
 	end
@@ -3200,7 +3378,6 @@ buildPage("Keybind", function()
 
 	-- Central bindings table (exposed for saving)
 	local KB = _GH.MH_KB or {
-		AntiBatAimbot = {key=nil, gp=nil},
 		DropBR        = {key=nil, gp=nil},
 		AutoLeft      = {key=nil, gp=nil},
 		AimBot        = {key=nil, gp=nil},
@@ -3338,7 +3515,6 @@ buildPage("Keybind", function()
 	end
 
 	UIB.makeSectionLabel("Quick Panel")
-	makeKBRow("Antibat Aimbot", KB.AntiBatAimbot)
 	makeKBRow("Drop BR",        KB.DropBR)
 	makeKBRow("Auto Left",      KB.AutoLeft)
 	makeKBRow("Aim Bot",        KB.AimBot)
@@ -3374,8 +3550,7 @@ buildPage("Keybind", function()
 			return (e.key and kc == e.key) or (e.gp and kc == e.gp)
 		end
 
-		if match(KB.AntiBatAimbot) then applyAntiBatState(not BC.active)
-		elseif match(KB.DropBR)    then runDropBrainrot()
+		if match(KB.DropBR)    then runDropBrainrot()
 		elseif match(KB.AutoLeft)  then
 			State.autoLeftEnabled = not State.autoLeftEnabled
 			if State.autoLeftEnabled then startAutoLeft() else stopAutoLeft() end
@@ -3580,19 +3755,6 @@ buildPage("Optimize", function()
 		task.delay(1.2,function() if cleanRow and cleanRow.Parent then cleanRow.Text="Clean Particles & Lights" end end)
 	end)
 end)
-
--- ===================================================================
--- ANTI BAT WIDGET
--- ===================================================================
--- Anti Bat + Infinite Jump logic (no widget — via QP button only)
-applyAntiBatState=function(on)
-	BC.active=on; if on then BC.start() else BC.stop() end
-	if on then
-		if not IJ.active then IJ.active=true; IJ.start() end
-	end
-	if setAntiBatQuickBtnVisual then setAntiBatQuickBtnVisual(on) end
-	if _GH.autoSave then _GH.autoSave() end
-end
 
 -- ===================================================================
 -- SPEED WIDGET (jxsh — Anti Bat style)
@@ -3919,28 +4081,17 @@ local function makeFloatButton(id)
 	btn.Name = "Float_"..id
 	local saved = _floatPositions[id]
 	local GAP = 3
-	local blockX = 1  -- block anchored near the right edge of the screen
+	local blockX = 1
 	local blockW = FLOAT_SZ * 2 + GAP
-	if id == "antibat" then
-		-- Wide standalone button, top of the block.
-		btn.Size = UDim2.new(0, blockW, 0, FLOAT_SZ)
-		if saved then
-			btn.Position = UDim2.new(saved[1], saved[2], saved[3], saved[4])
-		else
-			btn.Position = UDim2.new(blockX, -(blockW + 12), 0, 40)
-		end
+	btn.Size = UDim2.new(0, FLOAT_SZ, 0, FLOAT_SZ)
+	if saved then
+		btn.Position = UDim2.new(saved[1], saved[2], saved[3], saved[4])
 	else
-		btn.Size = UDim2.new(0, FLOAT_SZ, 0, FLOAT_SZ)
-		if saved then
-			btn.Position = UDim2.new(saved[1], saved[2], saved[3], saved[4])
-		else
-			-- Tight 2-wide grid right under the Anti Bat bar, same block.
-			local idx = _floatGridIndex(id) - 1
-			local col = idx % 2
-			local row = math.floor(idx / 2)
-			local topOffset = 40 + FLOAT_SZ + GAP
-			btn.Position = UDim2.new(blockX, -(blockW + 12) + col * (FLOAT_SZ + GAP), 0, topOffset + row * (FLOAT_SZ + GAP))
-		end
+		local idx = _floatGridIndex(id) - 1
+		local col = idx % 2
+		local row = math.floor(idx / 2)
+		local topOffset = 40
+		btn.Position = UDim2.new(blockX, -(blockW + 12) + col * (FLOAT_SZ + GAP), 0, topOffset + row * (FLOAT_SZ + GAP))
 	end
 	btn.BackgroundColor3 = C_ROW; btn.BackgroundTransparency = 0; btn.BorderSizePixel = 0
 	btn.Text = def.label; btn.TextColor3 = C_WHITE; btn.Font = Enum.Font.GothamBold
@@ -4035,11 +4186,6 @@ _GH.refreshFloatActiveColors = function()
 end
 
 -- ── Action registration ──────────────────────────────────────
-_floatDefs.antibat = {
-	label = "ANTIBAT\nAIMBOT",
-	onClick = function() applyAntiBatState(not BC.active) end,
-	isActive = function() return BC.active end,
-}
 _floatDefs.dropbr = {
 	label = "DROP BR",
 	onClick = function() runDropBrainrot() end,
@@ -4410,7 +4556,6 @@ local function MH_save()
 				autoRightEnabled = State.autoRightEnabled,
 				antiRagdollEnabled  = State.antiRagdollEnabled,
 				medusaCounterEnabled= State.medusaCounterEnabled,
-				antiBatEnabled   = BC and BC.active or false,
 				batCounterEnabled= BatCounter and BatCounter.active or false,
 				aimbotEnabled    = AB and AB.active or false,
 				aimbotV2Enabled  = ABP and ABP.active or false,
@@ -4456,7 +4601,6 @@ local function MH_save()
 					return t
 				end)(),
 				kb = {
-					AntiBatAimbot = ks(kb.AntiBatAimbot),
 					DropBR        = ks(kb.DropBR),
 					AutoLeft      = ks(kb.AutoLeft),
 					AimBot        = ks(kb.AimBot),
@@ -4628,7 +4772,6 @@ buildPage("Buttons", function()
 	UIB.makeGap(2)
 
 	local FLOAT_LABELS = {
-		{id="antibat",     name="Anti Bat Aimbot"},
 		{id="aimbot",      name="Aim Bot"},
 		{id="aimv2",       name="Aim V2"},
 		{id="dropbr",      name="Drop Brainrot"},
