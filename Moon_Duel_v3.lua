@@ -857,67 +857,63 @@ end
 -- ===================================================================
 -- ANTI RAGDOLL
 -- ===================================================================
+-- Copie exacte de la logique Ace Duels (startAntiRagdoll/stopAntiRagdoll/
+-- setAntiRagdoll) : state Physics/Ragdoll/FallingDown + attribut
+-- RagdollEndTime, destroy BallSocketConstraint/RagdollAttachment,
+-- re-enable Motor6D, unanchor + zero velocity. Ancienne logique
+-- (JumpPower/WalkSpeed/CanCollide/ControlModule/Dead/PlatformStand/Sit)
+-- supprimée — Ace ne fait rien de tout ça.
 local antiRagdollConn = nil
-
-local function _arResetCharacter(char)
-	local hum = char:FindFirstChildOfClass("Humanoid")
-	local root = char:FindFirstChild("HumanoidRootPart")
-	if not hum or not root or hum.Health <= 0 then return end
-	pcall(function()
-		hum:ChangeState(Enum.HumanoidStateType.GettingUp)
-		hum:ChangeState(Enum.HumanoidStateType.Running)
-		root.Velocity = Vector3.zero
-		root.RotVelocity = Vector3.zero
-		root.AssemblyLinearVelocity = Vector3.zero
-		root.AssemblyAngularVelocity = Vector3.zero
-		hum.PlatformStand = false
-		hum.Sit = false
-		hum.AutoRotate = true
-		hum.JumpPower = hum.JumpPower > 0 and hum.JumpPower or 50
-		hum.WalkSpeed = hum.WalkSpeed > 0 and hum.WalkSpeed or 16
-		for _, obj in ipairs(char:GetDescendants()) do
-			if obj:IsA("Motor6D") then
-				obj.Enabled = true
-			elseif obj:IsA("Constraint") or obj:IsA("BallSocketConstraint") or obj:IsA("HingeConstraint") then
-				obj.Enabled = true
-			elseif obj:IsA("BasePart") then
-				obj.CanCollide = true
-				obj.AssemblyLinearVelocity = Vector3.zero
-				obj.AssemblyAngularVelocity = Vector3.zero
-			end
-		end
-		workspace.CurrentCamera.CameraSubject = hum
-		local PM = LP.PlayerScripts:FindFirstChild("PlayerModule")
-		if PM then
-			local CM = PM:FindFirstChild("ControlModule")
-			if CM then
-				local ok, module = pcall(require, CM)
-				if ok and module and module.Enable then module:Enable() end
-			end
-		end
-	end)
-end
 
 local function startAntiRagdoll()
 	if antiRagdollConn then return end
 	antiRagdollConn = RunService.Heartbeat:Connect(function()
 		if not State.antiRagdollEnabled then return end
-		local char = LP.Character; if not char then return end
-		local hum = char:FindFirstChildOfClass("Humanoid"); if not hum then return end
-		local st = hum:GetState()
-		if st == Enum.HumanoidStateType.Physics or
-		   st == Enum.HumanoidStateType.Ragdoll or
-		   st == Enum.HumanoidStateType.FallingDown or
-		   st == Enum.HumanoidStateType.Dead or
-		   hum.PlatformStand == true or
-		   hum.Sit == true then
-			_arResetCharacter(char)
+		local char = LP.Character
+		if not char then return end
+		local hum = char:FindFirstChildOfClass("Humanoid")
+		local root = char:FindFirstChild("HumanoidRootPart")
+		if not (hum and root) then return end
+		local s = hum:GetState()
+		local ragdolled = (
+			s == Enum.HumanoidStateType.Physics
+			or s == Enum.HumanoidStateType.Ragdoll
+			or s == Enum.HumanoidStateType.FallingDown
+		)
+		local endTime = LP:GetAttribute("RagdollEndTime")
+		if endTime and (endTime - workspace:GetServerTimeNow()) > 0 then
+			ragdolled = true
+		end
+		if ragdolled then
+			pcall(function()
+				LP:SetAttribute("RagdollEndTime", workspace:GetServerTimeNow())
+			end)
+			for _, d in ipairs(char:GetDescendants()) do
+				if d:IsA("BallSocketConstraint") or (d:IsA("Attachment") and d.Name:find("RagdollAttachment")) then
+					pcall(function() d:Destroy() end)
+				end
+			end
+			for _, obj in ipairs(char:GetDescendants()) do
+				if obj:IsA("Motor6D") and obj.Enabled == false then
+					obj.Enabled = true
+				end
+			end
+			if hum.Health > 0 then
+				hum:ChangeState(Enum.HumanoidStateType.Running)
+			end
+			workspace.CurrentCamera.CameraSubject = hum
+			root.Anchored = false
+			root.AssemblyLinearVelocity = Vector3.zero
+			root.AssemblyAngularVelocity = Vector3.zero
 		end
 	end)
 end
 
 local function stopAntiRagdoll()
-	if antiRagdollConn then antiRagdollConn:Disconnect(); antiRagdollConn = nil end
+	if antiRagdollConn then
+		antiRagdollConn:Disconnect()
+		antiRagdollConn = nil
+	end
 end
 
 LP.CharacterAdded:Connect(function()
@@ -1464,32 +1460,97 @@ end
 -- ===================================================================
 -- INFINITE JUMP
 -- ===================================================================
-local IJ = {active=false, conn=nil, hbConn=nil, wantJump=false, mode="manual"}
-function IJ.start()
-	if IJ.conn then IJ.conn:Disconnect() end; if IJ.hbConn then IJ.hbConn:Disconnect() end; IJ.wantJump=false
-	IJ.conn=UIS.JumpRequest:Connect(function()
-		if IJ.active and IJ.mode=="manual" then IJ.wantJump=true end
-	end)
-	IJ.hbConn=RunService.Heartbeat:Connect(function()
-		if not IJ.active then return end
-		local c=LP.Character; if not c then return end
-		local root=c:FindFirstChild("HumanoidRootPart"); if not root then return end
-		if IJ.mode=="manual" then
-			if not IJ.wantJump then return end; IJ.wantJump=false
-			root.AssemblyLinearVelocity=Vector3.new(root.AssemblyLinearVelocity.X,55,root.AssemblyLinearVelocity.Z)
-		elseif IJ.mode=="hold" then
-			local hum2=c:FindFirstChildOfClass("Humanoid")
-			local jumpHeld=UIS:IsKeyDown(Enum.KeyCode.Space) or (hum2 and hum2.Jump==true)
-			if jumpHeld and root.AssemblyLinearVelocity.Y<30 then
-				root.AssemblyLinearVelocity=Vector3.new(root.AssemblyLinearVelocity.X,55,root.AssemblyLinearVelocity.Z)
+-- Copie exacte de la logique Ace Duels : pas de mode manuel/hold, un
+-- seul comportement — boost immédiat à chaque JumpRequest (tap) +
+-- boost continu si maintenu >0.12s (clavier Espace, ButtonA manette,
+-- bouton mobile JumpButton). Ancien système manual/hold + clamp de
+-- chute supprimé — Ace n'a rien de tout ça.
+local IJ = {active=false, holdPressed=false, holdActive=false, controllerActive=false,
+	mobilePressed=false, mobileActive=false, hooked={}, conns={}}
+
+local function _ijStopHoldState()
+	IJ.holdPressed=false; IJ.holdActive=false; IJ.controllerActive=false
+	IJ.mobilePressed=false; IJ.mobileActive=false
+end
+
+local function _ijApplyBoost(boost)
+	if not IJ.active then return end
+	local char = LP.Character
+	local root = char and char:FindFirstChild("HumanoidRootPart")
+	local hum  = char and char:FindFirstChildOfClass("Humanoid")
+	if not root or not hum or hum.Health <= 0 then return end
+	root.Velocity = Vector3.new(root.Velocity.X, boost or 50, root.Velocity.Z)
+end
+
+local function _ijHookMobileJumpButton(obj)
+	if not obj or obj.Name ~= "JumpButton" or not obj:IsA("GuiButton") or IJ.hooked[obj] then return end
+	IJ.hooked[obj] = true
+	obj.InputBegan:Connect(function(input)
+		if input.UserInputType ~= Enum.UserInputType.Touch or not IJ.active then return end
+		IJ.mobilePressed = true
+		task.delay(0.12, function()
+			if IJ.mobilePressed and IJ.active then
+				IJ.mobileActive = true
+				_ijApplyBoost(50)
 			end
+		end)
+	end)
+	obj.InputEnded:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.Touch then
+			IJ.mobilePressed = false; IJ.mobileActive = false
 		end
-		if root.AssemblyLinearVelocity.Y<-120 then root.AssemblyLinearVelocity=Vector3.new(root.AssemblyLinearVelocity.X,-120,root.AssemblyLinearVelocity.Z) end
+	end)
+	obj.AncestryChanged:Connect(function(_, parent)
+		if not parent then
+			IJ.hooked[obj] = nil; IJ.mobilePressed = false; IJ.mobileActive = false
+		end
+	end)
+end
+
+function IJ.start()
+	if IJ.conns.jumpReq then return end -- déjà démarré (les hooks tournent en continu, gated par IJ.active)
+	IJ.conns.jumpReq = UIS.JumpRequest:Connect(function()
+		_ijApplyBoost(50)
+	end)
+	IJ.conns.inputBegan = UIS.InputBegan:Connect(function(input)
+		if UIS:GetFocusedTextBox() then return end
+		if input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode == Enum.KeyCode.Space then
+			IJ.holdPressed = true
+			task.delay(0.12, function()
+				if IJ.holdPressed and IJ.active then
+					IJ.holdActive = true
+					_ijApplyBoost(50)
+				end
+			end)
+		elseif input.KeyCode == Enum.KeyCode.ButtonA and input.UserInputType.Name:match("^Gamepad") then
+			IJ.controllerActive = true
+		end
+	end)
+	IJ.conns.inputEnded = UIS.InputEnded:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode == Enum.KeyCode.Space then
+			IJ.holdPressed = false; IJ.holdActive = false
+		end
+		if input.KeyCode == Enum.KeyCode.ButtonA and input.UserInputType.Name:match("^Gamepad") then
+			IJ.controllerActive = false
+		end
+	end)
+	local pg = LP:FindFirstChild("PlayerGui")
+	if pg then
+		for _, obj in ipairs(pg:GetDescendants()) do _ijHookMobileJumpButton(obj) end
+		IJ.conns.descAdded = pg.DescendantAdded:Connect(function(obj)
+			task.defer(_ijHookMobileJumpButton, obj)
+		end)
+	end
+	IJ.conns.heartbeat = RunService.Heartbeat:Connect(function()
+		if IJ.active and (IJ.holdActive or IJ.mobileActive or IJ.controllerActive) then
+			_ijApplyBoost(50)
+		end
 	end)
 end
 function IJ.stop()
-	if IJ.conn then IJ.conn:Disconnect(); IJ.conn=nil end
-	if IJ.hbConn then IJ.hbConn:Disconnect(); IJ.hbConn=nil end; IJ.wantJump=false
+	_ijStopHoldState()
+	for _, c in pairs(IJ.conns) do pcall(function() c:Disconnect() end) end
+	IJ.conns = {}
 end
 
 -- ===================================================================
@@ -2683,26 +2744,6 @@ buildPage("Combat", function()
 	setInfJumpRowVisual = UIB.makeToggleRow("Infinite Jump",false,function(on)
 		IJ.active=on; if on then IJ.start() else IJ.stop() end
 	end)
-	do
-		local mr=Instance.new("Frame",currentPage); mr.Size=UDim2.new(1,0,0,26); mr.BackgroundColor3=C_ROW; mr.BackgroundTransparency=0.35; mr.BorderSizePixel=0; mr.LayoutOrder=LO(); addCorner(mr,12); addLivingStroke(mr,1)
-		local ml=Instance.new("TextLabel",mr); ml.Size=UDim2.new(0,90,1,0); ml.Position=UDim2.new(0,14,0,0); ml.BackgroundTransparency=1; ml.Text="Jump Mode"; ml.TextColor3=C_WHITE; ml.Font=Enum.Font.GothamBold; ml.TextSize=10; ml.TextXAlignment=Enum.TextXAlignment.Left; addLivingTextGradient(ml)
-		local BW,BH=50,18
-		local manB=Instance.new("TextButton",mr); manB.Size=UDim2.new(0,BW,0,BH); manB.Position=UDim2.new(1,-(BW*2+14),0.5,-BH/2); manB.BackgroundColor3=C_ON_BG; manB.BackgroundTransparency=0.1; manB.BorderSizePixel=0; manB.Text="Manual"; manB.TextColor3=C_SILVER; manB.Font=Enum.Font.GothamBold; manB.TextSize=9; manB.AutoButtonColor=false; addCorner(manB,6); addLivingStroke(manB,1)
-		local holB=Instance.new("TextButton",mr); holB.Size=UDim2.new(0,BW,0,BH); holB.Position=UDim2.new(1,-(BW+6),0.5,-BH/2); holB.BackgroundColor3=C_OFF_BG; holB.BackgroundTransparency=0.3; holB.BorderSizePixel=0; holB.Text="Hold"; holB.TextColor3=C_DIM; holB.Font=Enum.Font.GothamBold; holB.TextSize=9; holB.AutoButtonColor=false; addCorner(holB,6)
-		local function updM()
-			manB.BackgroundColor3 = IJ.mode=="manual" and C_MOON or C_OFF_BG
-			manB.BackgroundTransparency = IJ.mode=="manual" and 0.15 or 0.5
-			manB.TextColor3 = IJ.mode=="manual" and Color3.fromRGB(0,10,20) or C_DIM
-			holB.BackgroundColor3 = IJ.mode=="hold" and C_MOON or C_OFF_BG
-			holB.BackgroundTransparency = IJ.mode=="hold" and 0.15 or 0.5
-			holB.TextColor3 = IJ.mode=="hold" and Color3.fromRGB(0,10,20) or C_DIM
-			if IJ.active then IJ.stop(); IJ.start() end
-		end
-		updM() -- apply initial state
-		manB.MouseButton1Click:Connect(function() IJ.mode="manual"; updM(); if _GH.autoSave then _GH.autoSave() end end)
-		holB.MouseButton1Click:Connect(function() IJ.mode="hold"; updM(); if _GH.autoSave then _GH.autoSave() end end)
-		makeDivider()
-	end
 	setAutoStealRowVisual=UIB.makeToggleRow("Auto Steal",true,function(on)
 		AutoSteal.Enabled=on; if on then startAutoSteal() else stopAutoSteal() end
 	end)
@@ -4233,7 +4274,6 @@ local function MH_save()
 				aimbotV2Enabled  = ABP and ABP.active or false,
 				aimSpeed         = AB and AB.SPEED or nil,
 				infJumpEnabled   = IJ and IJ.active or false,
-				infJumpMode      = IJ and IJ.mode or nil,
 				autoGrabEnabled  = AutoSteal and AutoSteal.Enabled or false,
 				grabRadius       = AutoSteal and AutoSteal.Radius or nil,
 				floatSpawned = (function()
@@ -4332,10 +4372,6 @@ local function MH_load()
 		-- match the "everything OFF at execution" policy. The user
 		-- re-enables whichever features they want each session.
 		if data.aimSpeed then AB.SPEED=data.aimSpeed end
-		if data.infJumpMode=="manual" or data.infJumpMode=="hold" then
-				IJ.mode=data.infJumpMode
-				if setJumpModeUI then setJumpModeUI() end
-			end
 		if data.grabRadius then AutoSteal.Radius=data.grabRadius end
 		if data.autoPlayMode then
 			if setAutoPlayModeUI then setAutoPlayModeUI(data.autoPlayMode)
