@@ -2704,6 +2704,32 @@ function UIB.makeToggleRow(label, defaultOn, onToggle)
 	ball.Position = defaultOn and UDim2.new(1,-17,0.5,-7) or UDim2.new(0,3,0.5,-7)
 	ball.BackgroundColor3 = defaultOn and C_WHITE or C_SILVER2; ball.BorderSizePixel = 0
 	addCorner(ball, 7)
+
+	-- Breathing glow: a dedicated stroke (separate from the always-rotating
+	-- "living" one above) that only pulses while this toggle is ON.
+	local glowStroke = Instance.new("UIStroke", pill)
+	glowStroke.Thickness = 2.5; glowStroke.Color = C_MOON
+	glowStroke.Transparency = 1; glowStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Outline
+	local _glowRunning = false
+	local function startGlow()
+		if _glowRunning then return end
+		_glowRunning = true
+		task.spawn(function()
+			while _glowRunning and pill and pill.Parent do
+				TweenService:Create(glowStroke, TweenInfo.new(0.9, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {Transparency=0.35}):Play()
+				task.wait(0.9)
+				if not _glowRunning then break end
+				TweenService:Create(glowStroke, TweenInfo.new(0.9, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {Transparency=0.85}):Play()
+				task.wait(0.9)
+			end
+		end)
+	end
+	local function stopGlow()
+		_glowRunning = false
+		TweenService:Create(glowStroke, TweenInfo.new(0.2), {Transparency=1}):Play()
+	end
+	if defaultOn then startGlow() end
+
 	local isOn = defaultOn
 	local function setV(on)
 		isOn = on
@@ -2712,6 +2738,7 @@ function UIB.makeToggleRow(label, defaultOn, onToggle)
 			Position=on and UDim2.new(1,-17,0.5,-7) or UDim2.new(0,3,0.5,-7),
 			BackgroundColor3=on and C_WHITE or C_SILVER2,
 		}):Play()
+		if on then startGlow() else stopGlow() end
 	end
 	local clk = Instance.new("TextButton", row)
 	clk.Size = UDim2.new(1,0,1,0); clk.BackgroundTransparency = 1; clk.Text = ""
@@ -2738,10 +2765,14 @@ end
 local tabPages   = {}
 local tabButtons = {}
 
+-- CanvasGroup (not Frame): GroupTransparency fades the whole subtree as one
+-- flattened image, so the tab-switch crossfade doesn't need to walk/tween
+-- every descendant's own transparency.
 local function buildPage(name, buildFn)
-	local page = Instance.new("Frame", mainScroll)
+	local page = Instance.new("CanvasGroup", mainScroll)
 	page.Name = name; page.Size = UDim2.new(1,0,0,0); page.AutomaticSize = Enum.AutomaticSize.Y
 	page.BackgroundTransparency = 1; page.BorderSizePixel = 0; page.Visible = false
+	page.GroupTransparency = 0
 	local ll = Instance.new("UIListLayout", page)
 	ll.SortOrder = Enum.SortOrder.LayoutOrder; ll.Padding = UDim.new(0,6)
 	tabPages[name] = page; currentPage = page; lo = 0
@@ -2750,8 +2781,13 @@ local function buildPage(name, buildFn)
 	return page
 end
 
+local _activeTabName = nil
 local function selectTab(name)
-	for n, page in pairs(tabPages) do page.Visible = (n==name) end
+	local newPage = tabPages[name]
+	if not newPage or name == _activeTabName then return end
+	local oldPage = _activeTabName and tabPages[_activeTabName]
+	_activeTabName = name
+
 	for n, btn in pairs(tabButtons) do
 		local active = (n==name)
 		TweenService:Create(btn.frame,TweenInfo.new(0.15),{
@@ -2760,6 +2796,21 @@ local function selectTab(name)
 		}):Play()
 		btn.lbl.TextColor3 = active and Color3.fromRGB(0,10,20) or C_TABIDLE
 	end
+
+	if oldPage and oldPage ~= newPage then
+		TweenService:Create(oldPage, TweenInfo.new(0.08), {GroupTransparency=1}):Play()
+		task.delay(0.08, function()
+			-- only hide it if the user hasn't flipped back to this tab meanwhile
+			if oldPage ~= tabPages[_activeTabName] then
+				oldPage.Visible = false
+				oldPage.GroupTransparency = 0
+			end
+		end)
+	end
+
+	newPage.GroupTransparency = 1
+	newPage.Visible = true
+	TweenService:Create(newPage, TweenInfo.new(0.12), {GroupTransparency=0}):Play()
 end
 
 for i, name in ipairs(TABS) do
@@ -2836,10 +2887,17 @@ _GH.mbHalo = mbHalo; _GH.miniStk = miniStk; _GH.startMbAnim = startMbAnim
 _GH.stopMbAnim = function() _mbAnimRunning = false end
 makeDraggable(miniBtn, nil, "mini")
 
+-- Shared guard: the close animation is async (spans several frames), so
+-- showGui() must refuse to start a fresh pop-in while the panel is still
+-- mid-flight into the moon — avoids the two animations fighting over
+-- mainOuter.Position / mainUIScale.Scale at the same time.
+local _closeAnimPlaying = false
+
 -- Reuses the existing mainUIScale (persisted UI Scale setting) so the pop-in
 -- never fights the user's chosen size — it just animates toward whatever
 -- scale/position applyUIScale already settled on.
 local function showGui()
+	if _closeAnimPlaying then return end
 	mainOuter.Visible = true; miniBtn.Visible = false
 	local targetScale = mainUIScale.Scale
 	local targetPos = mainOuter.Position
@@ -2848,7 +2906,63 @@ local function showGui()
 	TweenService:Create(mainUIScale, TweenInfo.new(0.22, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Scale=targetScale}):Play()
 	TweenService:Create(mainOuter, TweenInfo.new(0.22, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Position=targetPos}):Play()
 end
-local function hideGui() mainOuter.Visible = false; miniBtn.Visible = true end
+
+-- Small glint that "pops" on the moon icon the instant the panel is absorbed.
+local function moonAbsorbFlash()
+	local cx = miniBtn.Position.X.Offset + miniBtn.Size.X.Offset/2
+	local cy = miniBtn.Position.Y.Offset + miniBtn.Size.Y.Offset/2
+	local ring = Instance.new("Frame", gui)
+	ring.AnchorPoint = Vector2.new(0.5,0.5)
+	ring.Position = UDim2.new(miniBtn.Position.X.Scale, cx, miniBtn.Position.Y.Scale, cy)
+	ring.Size = UDim2.new(0,8,0,8); ring.BackgroundColor3 = C_MOON
+	ring.BackgroundTransparency = 0.15; ring.BorderSizePixel = 0; ring.ZIndex = 60
+	Instance.new("UICorner", ring).CornerRadius = UDim.new(1,0)
+	TweenService:Create(ring, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		{Size=UDim2.new(0,64,0,64), BackgroundTransparency=1}):Play()
+	task.delay(0.36, function() if ring then ring:Destroy() end end)
+end
+
+-- Closing "sucks" the panel toward the moon icon (shrink + slide), then flashes
+-- a glint on the moon on arrival — restores mainOuter to its resting
+-- position/scale afterward so the next showGui() pop-in starts correctly.
+local function hideGui()
+	if _closeAnimPlaying or not mainOuter.Visible then return end
+	_closeAnimPlaying = true
+	miniBtn.Visible = true
+
+	local savedPos    = mainOuter.Position
+	local savedAnchor = mainOuter.AnchorPoint
+	local savedScale  = mainUIScale.Scale
+	local savedBg     = bgImg.BackgroundTransparency
+	local savedStroke = mainStroke.Transparency
+
+	local half = mainOuter.AbsoluteSize
+	mainOuter.AnchorPoint = Vector2.new(0.5,0.5)
+	mainOuter.Position = UDim2.new(savedPos.X.Scale, savedPos.X.Offset + half.X/2, savedPos.Y.Scale, savedPos.Y.Offset + half.Y/2)
+
+	local cx = miniBtn.Position.X.Offset + miniBtn.Size.X.Offset/2
+	local cy = miniBtn.Position.Y.Offset + miniBtn.Size.Y.Offset/2
+	local targetPos = UDim2.new(miniBtn.Position.X.Scale, cx, miniBtn.Position.Y.Scale, cy)
+
+	local info = TweenInfo.new(0.3, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
+	TweenService:Create(mainOuter, info, {Position=targetPos}):Play()
+	TweenService:Create(mainUIScale, info, {Scale=0.02}):Play()
+	TweenService:Create(bgImg, info, {BackgroundTransparency=1}):Play()
+	local strokeTween = TweenService:Create(mainStroke, info, {Transparency=1})
+	strokeTween:Play()
+	strokeTween.Completed:Wait()
+
+	mainOuter.Visible = false
+	moonAbsorbFlash()
+
+	-- reset to the resting layout so the next open starts from the right place
+	mainOuter.AnchorPoint = savedAnchor
+	mainOuter.Position = savedPos
+	mainUIScale.Scale = savedScale
+	bgImg.BackgroundTransparency = savedBg
+	mainStroke.Transparency = savedStroke
+	_closeAnimPlaying = false
+end
 closeBtn.MouseButton1Click:Connect(hideGui)
 miniBtn.MouseButton1Click:Connect(showGui)
 
