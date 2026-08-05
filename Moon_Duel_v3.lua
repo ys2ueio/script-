@@ -475,10 +475,16 @@ local function proxyMove(dir, speed)
 	if lv then lv.PlaneVelocity = Vector2.new(dir.X*speed, dir.Z*speed) end
 end
 
+-- Fully tears the constraint down (not just zeroes it) — a LinearVelocity
+-- with MaxForce = math.huge left attached at PlaneVelocity zero actively
+-- fights ANY other force with infinite force, including the player's own
+-- WASD input. "Stop boosting" must mean "give full native control back",
+-- exactly like the reference script's removeBoost()+destroyLV(), or the
+-- player stays invisibly locked in place after the very first use.
 local function proxyStop()
 	local hum = LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
 	if hum then hum:Move(Vector3.zero, false) end
-	if charLV and charLV.Parent then charLV.PlaneVelocity = Vector2.zero end
+	destroyLV()
 end
 
 -- [FIX #1 & #6] Séparation des effets de bord : updateCarryState mute State,
@@ -514,32 +520,47 @@ local function setupChar(char)
 	h = char:WaitForChild("Humanoid", 5)
 	hrp = char:WaitForChild("HumanoidRootPart", 5)
 	if h then h.WalkSpeed = getCurrentSpeed() end
-	ensureLV()
+	-- NOTE: deliberately NOT pre-warming ensureLV() here. The constraint
+	-- must only ever exist while a feature is actively driving it — see
+	-- proxyStop's comment. Creating it eagerly on every spawn is what
+	-- locked movement completely: MaxForce=math.huge + PlaneVelocity=zero
+	-- fights the player's own input from the instant they spawn, before
+	-- any hub feature is even touched.
 end
 LP.CharacterAdded:Connect(setupChar)
 if LP.Character then setupChar(LP.Character) end
 
 local _speedBoosterActive = false  -- controlled by the Speed Booster widget
 RunService.Heartbeat:Connect(function()
-	if not _speedBoosterActive then return end
-	local char = LP.Character; if not char then return end
+	if not _speedBoosterActive then destroyLV(); return end
+	local char = LP.Character; if not char then destroyLV(); return end
 	local hum = char:FindFirstChildOfClass("Humanoid")
 	local hrp2 = char:FindFirstChild("HumanoidRootPart")
-	if not hum or not hrp2 then return end
+	if not hum or not hrp2 then destroyLV(); return end
 	local state = hum:GetState()
 	if hum.PlatformStand
 		or state == Enum.HumanoidStateType.Physics
 		or state == Enum.HumanoidStateType.Ragdoll
-		or state == Enum.HumanoidStateType.FallingDown then return end
+		or state == Enum.HumanoidStateType.FallingDown then
+		-- Fully release control during these states instead of leaving an
+		-- infinite-force constraint fighting ragdoll/fall physics.
+		destroyLV(); return
+	end
 	updateCarryState()
 	local md = hum.MoveDirection
 	local spd = getCurrentSpeed()
-	if md.Magnitude > 0 then
+	if md.Magnitude > 0.1 then
 		local _n = 1 + (math.random() - 0.5) * 0.04
 		local lv = ensureLV()
 		if lv then
 			lv.PlaneVelocity = Vector2.new(md.X * spd * _n, md.Z * spd * _n)
 		end
+	elseif charLV and charLV.Parent then
+		-- Not pressing a movement key right now: hold at zero rather than
+		-- leaving whatever nonzero velocity was last written — otherwise
+		-- releasing WASD would leave the player sliding forever at that
+		-- last speed (infinite force means normal friction can't stop it).
+		charLV.PlaneVelocity = Vector2.zero
 	end
 end)
 
@@ -2986,13 +3007,18 @@ end
 -- MINI BUTTON
 -- ===================================================================
 local miniBtn = Instance.new("TextButton", gui)
--- Centered by default (scale-based, not a fixed top-left pixel offset) —
--- a corner/edge pixel offset like the old (0,20,0,140) reliably lands on
--- top of whatever native mobile dock a given game docks there (reported:
--- covered the Shop/Rebirth icons). Dead-center is exactly where mainOuter
--- itself already opens by default, so it's a spot no game's chrome ever
--- occupies — and it's still fully draggable afterward if unwanted there.
-local MINI_BTN_DEFAULT_POS = UDim2.new(0.5,-28,0.5,-28)
+-- Right-edge, vertically centered by default (scale-based, not a fixed
+-- pixel offset). The old (0,20,0,140) top-left offset landed on top of
+-- this game's native mobile dock (reported: covered Shop/Rebirth). Dead
+-- center was tried next and is wrong for a different reason: unlike
+-- mainOuter (only centered while the panel is actively open), the mini
+-- icon sits on screen THE WHOLE TIME the hub is minimized — parking it
+-- at screen-center means it permanently covers the character during
+-- normal play, which reads as "the moon disappeared" even though it's
+-- technically still there. The right edge is clear of both problems and
+-- of the opposite (left) edge where the reported dock collision was —
+-- still fully draggable afterward if a given game wants it elsewhere.
+local MINI_BTN_DEFAULT_POS = UDim2.new(1,-76,0.5,-28)
 miniBtn.Size = UDim2.new(0,56,0,56); miniBtn.Position = MINI_BTN_DEFAULT_POS
 miniBtn.BackgroundTransparency = 1; miniBtn.Text = ""; miniBtn.AutoButtonColor = false
 miniBtn.Visible = false; miniBtn.ZIndex = 50
@@ -4564,10 +4590,11 @@ function _G.AceCursedInstaReset()
 	-- The forced kill/respawn below ragdolls the character just like a real
 	-- stun would, which would otherwise falsely flash the "READY!!" speed
 	-- billboard into a stun countdown right after a self-reset. Suppressed
-	-- for a short window that comfortably covers the death/respawn/settle
-	-- sequence, well under the 3s a real stun would actually show for.
+	-- for a window generous enough to cover a slow death/respawn/settle
+	-- round-trip (server latency can easily eat the old 1.5s on its own,
+	-- before the new character has even finished loading in).
 	if _GH.setStunSuppressed then _GH.setStunSuppressed(true) end
-	task.delay(1.5, function() if _GH.setStunSuppressed then _GH.setStunSuppressed(false) end end)
+	task.delay(3.0, function() if _GH.setStunSuppressed then _GH.setStunSuppressed(false) end end)
 
 	if not _G.AceCursedResetRemote then
 		for _, desc in ipairs(game:GetService("ReplicatedStorage"):GetDescendants()) do
@@ -4715,7 +4742,25 @@ do
 	-- falsely flashing "READY!!" into a stun countdown (and its red/silver/
 	-- moon2 colors) even though nobody actually hit the player.
 	local _stunSuppressed = false
-	_GH.setStunSuppressed = function(on) _stunSuppressed = on end
+	_GH.setStunSuppressed = function(on)
+		_stunSuppressed = on
+		-- Suppressing only ever blocked a NEW stun countdown from starting.
+		-- The common real case is pressing Instant Reset WHILE already
+		-- stunned (that's usually exactly why it gets pressed) — the
+		-- countdown was already running before suppression turned on, so
+		-- it kept cycling its red/silver/moon2 colors underneath the
+		-- suppression window regardless. Force it back to READY right now
+		-- too, or the "wrong color after reset" symptom never actually
+		-- goes away for that (very common) case.
+		if on and stunActive then
+			stunActive = false
+			if stunConn then stunConn:Disconnect(); stunConn = nil end
+			if timerLbl then
+				timerLbl.Text = "READY!!"
+				timerLbl.TextColor3 = Color3.new(1,1,1)
+			end
+		end
+	end
 
 	local function onStun()
 		if stunActive or _stunSuppressed then return end
