@@ -4235,43 +4235,16 @@ _floatDefs.battp = {
 
 
 -- ===================================================================
--- BURST RESET — v4gg 0.1s method (physics conflict → server respawn)
+-- INSTANT RESET — single hum.Health=0 (un seul signal, pas de boucle)
 -- ===================================================================
 _GH._brResetting = false
 do
-	local function triggerBurstReset()
+	local function triggerReset()
 		local char = LP.Character
-		local root = char and char:FindFirstChild("HumanoidRootPart")
 		local hum  = char and char:FindFirstChildOfClass("Humanoid")
-		if not root or not hum or _GH._brResetting then return end
+		if not hum or hum.Health <= 0 or _GH._brResetting then return end
 		_GH._brResetting = true
-
-		-- Hook temporaire : WalkSpeed=16 pour passer les checks serveur pendant le burst
-		local mt     = getrawmetatable(game)
-		local oldIdx = mt.__index
-		pcall(function() setreadonly(mt, false) end)
-		mt.__index = newcclosure(function(s, k)
-			if k == "WalkSpeed" and _GH._brResetting then return 16 end
-			return oldIdx(s, k)
-		end)
-		pcall(function() setreadonly(mt, true) end)
-
-		-- Burst 0.15s : vélocité extrême + health=0 → conflit physique → respawn serveur
-		local conn
-		local startT = tick()
-		conn = RunService.Heartbeat:Connect(function()
-			if tick() - startT > 0.15 or not char.Parent then
-				conn:Disconnect()
-				return
-			end
-			pcall(function()
-				root:SetNetworkOwner(LP)
-				root.AssemblyLinearVelocity = Vector3.new(1e7, 1e7, 1e7)
-				hum.Health = 0
-			end)
-		end)
-
-		-- Nettoyage après respawn (timeout 5s si ça échoue)
+		pcall(function() hum.Health = 0 end)
 		task.spawn(function()
 			local done = false
 			local c = LP.CharacterAdded:Connect(function() done = true end)
@@ -4279,17 +4252,14 @@ do
 			repeat task.wait(0.1) until done or (tick() - t0 > 5)
 			c:Disconnect()
 			_GH._brResetting = false
-			pcall(function() setreadonly(mt, false) end)
-			mt.__index = oldIdx
-			pcall(function() setreadonly(mt, true) end)
 		end)
 	end
 
-	_GH.MH_instareset = triggerBurstReset
+	_GH.MH_instareset = triggerReset
 
 	_floatDefs.instareset = {
 		label    = "INSTANT\nRESET",
-		onClick  = triggerBurstReset,
+		onClick  = triggerReset,
 		momentary = true,
 	}
 end
