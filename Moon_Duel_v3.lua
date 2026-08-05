@@ -416,9 +416,7 @@ RunService.RenderStepped:Connect(function()
 		local _n = 1 + (math.random() - 0.5) * 0.04
 		local _px = ensureProxy()
 		if _px then
-			-- Clamp Y: préserve le saut (≤60) mais bloque le lock de fling (>60)
-			local _y = math.min(hrp2.AssemblyLinearVelocity.Y, 60)
-			_px.AssemblyLinearVelocity = Vector3.new(md.X * spd * _n, _y, md.Z * spd * _n)
+			_px.AssemblyLinearVelocity = Vector3.new(md.X * spd * _n, hrp2.AssemblyLinearVelocity.Y, md.Z * spd * _n)
 		end
 	end
 end)
@@ -1128,7 +1126,6 @@ local function _armDoReset()
 	if _armDebounce then return end
 	_armDebounce = true
 	task.spawn(function()
-		if _GH.MH_instareset then pcall(_GH.MH_instareset) end
 		task.wait(3); _armDebounce = false
 	end)
 end
@@ -3389,7 +3386,6 @@ buildPage("Keybind", function()
 		BatTP         = {key=nil, gp=nil},
 		AimV2         = {key=nil, gp=nil},
 		AimV3Kb       = {key=nil, gp=nil},
-		InstantReset  = {key=nil, gp=nil},
 		HideUI        = {key=nil, gp=nil},
 	}
 	_GH.MH_KB = KB
@@ -3526,7 +3522,6 @@ buildPage("Keybind", function()
 	makeKBRow("Bat TP",         KB.BatTP)
 	makeKBRow("Aim V2",         KB.AimV2)
 	makeKBRow("Aim V3",         KB.AimV3Kb)
-	makeKBRow("Instant Reset",  KB.InstantReset)
 	UIB.makeGap(4)
 	UIB.makeSectionLabel("Interface")
 	makeKBRow("Hide / Show UI", KB.HideUI)
@@ -3573,8 +3568,6 @@ buildPage("Keybind", function()
 		elseif match(KB.AimV3Kb)   then
 			-- [FIX #2] AimV3Kb doit déclencher AimV3 (Bat TP), pas AB (Aimbot V1)
 			if AimV3.active then AimV3.stop() else AimV3.start() end
-		elseif match(KB.InstantReset) then
-			if _GH.MH_instareset then _GH.MH_instareset() end
 		elseif match(KB.HideUI) then
 			if mainOuter.Visible then hideGui() else showGui() end
 		end
@@ -4069,8 +4062,7 @@ end
 -- 8 packed right below it in a tight 2-wide grid (4 rows).
 local _FLOAT_GRID_ORDER = {
 	"aimbot","aimv2","dropbr","autoleft",
-	"autoright","tpdown","battp","instareset",
-	"antimedusa",
+	"autoright","tpdown","battp",
 }
 local function _floatGridIndex(id)
 	for i, fid in ipairs(_FLOAT_GRID_ORDER) do
@@ -4235,190 +4227,6 @@ _floatDefs.battp = {
 	isActive = function() return AimV3.active end,
 }
 
--- ===================================================================
--- INSTA RESET + ANTI-MEDUSA — Grape Hub logic
--- ===================================================================
-do
-	local _IR_GUID      = "f888ee6e-c86d-46e1-93d7-0639d6635d42"
-	local _resetRemote  = nil
-
-	-- Hookfunction : capture le RE/ remote dès qu'il fire naturellement
-	pcall(function()
-		local o; o = hookfunction(Instance.new("RemoteEvent").FireServer, newcclosure(function(self, ...)
-			if not _resetRemote and self.Name:sub(1,3) == "RE/" then
-				_resetRemote = self
-			end
-			return o(self, ...)
-		end))
-	end)
-
-	-- Fallback scan après 2s si hookfunction n'a pas encore capturé
-	task.spawn(function()
-		task.wait(2)
-		if not _resetRemote then
-			for _, desc in pairs(game:GetDescendants()) do
-				if desc:IsA("RemoteEvent") and desc.Name:sub(1,3) == "RE/" then
-					_resetRemote = desc; break
-				end
-			end
-		end
-	end)
-
-	local function instaReset()
-		if not _resetRemote then return end
-		local character = LP.Character
-		if not character then
-			pcall(function() _resetRemote:FireServer(_IR_GUID, LP, "balloon") end)
-			return
-		end
-		local humanoid = character:FindFirstChild("Humanoid")
-		if not humanoid then
-			pcall(function() _resetRemote:FireServer(_IR_GUID, LP, "balloon") end)
-			return
-		end
-		if humanoid.Health <= 0 then
-			pcall(function() _resetRemote:FireServer(_IR_GUID, LP, "balloon") end)
-			return
-		end
-		local resetDetected = false
-		local connections = {}
-		table.insert(connections, humanoid.Died:Connect(function() resetDetected = true end))
-		table.insert(connections, character.AncestryChanged:Connect(function(_, parent)
-			if not parent then resetDetected = true end
-		end))
-		table.insert(connections, humanoid:GetPropertyChangedSignal("Health"):Connect(function()
-			if humanoid.Health <= 0 then resetDetected = true end
-		end))
-		task.spawn(function()
-			local attempts = 0
-			while not resetDetected and attempts < 50 do
-				attempts = attempts + 1
-				pcall(function() _resetRemote:FireServer(_IR_GUID, LP, "balloon") end)
-				task.wait()
-			end
-			for _, conn in pairs(connections) do pcall(function() conn:Disconnect() end) end
-		end)
-	end
-
-	-- Clean ragdoll complet (BallSocket, Motor6D, velocity, camera)
-	local function cleanRagdoll(char)
-		local hum  = char:FindFirstChildOfClass("Humanoid")
-		local root = char:FindFirstChild("HumanoidRootPart")
-		if hum then
-			local s = hum:GetState()
-			if s == Enum.HumanoidStateType.Physics or s == Enum.HumanoidStateType.Ragdoll
-			or s == Enum.HumanoidStateType.FallingDown then
-				if hum.Health > 0 then hum:ChangeState(Enum.HumanoidStateType.Running) end
-			end
-			workspace.CurrentCamera.CameraSubject = hum
-		end
-		if root then
-			root.Anchored = false
-			root.AssemblyLinearVelocity  = Vector3.zero
-			root.AssemblyAngularVelocity = Vector3.zero
-		end
-		for _, d in ipairs(char:GetDescendants()) do
-			if d:IsA("BallSocketConstraint")
-			or (d:IsA("Attachment") and d.Name:find("RagdollAttachment")) then
-				d:Destroy()
-			elseif d:IsA("Motor6D") and d.Enabled == false then
-				d.Enabled = true
-			end
-		end
-	end
-
-	-- Anti-Medusa : détecte les BasePart Anchored+invisible (signature Medusa freeze)
-	local _medDebounce  = false
-	local _medConns     = {}
-	local _medCharConn  = nil
-	local _medActive    = false
-
-	local function _onMedusa()
-		if _medDebounce then return end
-		_medDebounce = true
-		task.spawn(function()
-			task.wait(2.3)
-			instaReset()
-			task.wait(0.5)
-			_medDebounce = false
-		end)
-	end
-
-	local function _startMedLoops(char)
-		if not char then return end
-		-- Anti-ragdoll continu (nettoie constraints + velocity)
-		table.insert(_medConns, RunService.Heartbeat:Connect(function()
-			local c = LP.Character; if not c then return end
-			local hum  = c:FindFirstChildOfClass("Humanoid")
-			local root = c:FindFirstChild("HumanoidRootPart")
-			if not (hum and root) then return end
-			local s = hum:GetState()
-			local rag = s == Enum.HumanoidStateType.Physics
-				or s == Enum.HumanoidStateType.Ragdoll
-				or s == Enum.HumanoidStateType.FallingDown
-			local endTime = LP:GetAttribute("RagdollEndTime")
-			if endTime and (endTime - workspace:GetServerTimeNow()) > 0 then rag = true end
-			if rag then
-				pcall(function() LP:SetAttribute("RagdollEndTime", workspace:GetServerTimeNow()) end)
-				cleanRagdoll(c)
-			end
-		end))
-		-- Détection freeze Medusa (BasePart Anchored + Transparent)
-		table.insert(_medConns, RunService.Heartbeat:Connect(function()
-			local c = LP.Character; if not c then return end
-			for _, part in ipairs(c:GetDescendants()) do
-				if part:IsA("BasePart") and part.Anchored and part.Transparency == 1 then
-					_onMedusa(); break
-				end
-			end
-		end))
-		table.insert(_medConns, char.DescendantAdded:Connect(function(part)
-			if part:IsA("BasePart") then
-				table.insert(_medConns, part:GetPropertyChangedSignal("Anchored"):Connect(function()
-					if part.Anchored and part.Transparency == 1 then _onMedusa() end
-				end))
-			end
-		end))
-	end
-
-	local function _stopMedLoops()
-		for _, c in pairs(_medConns) do pcall(function() c:Disconnect() end) end
-		_medConns = {}
-	end
-
-	local function _startMedusa()
-		if _medActive then return end
-		_medActive = true
-		if LP.Character then _startMedLoops(LP.Character) end
-		_medCharConn = LP.CharacterAdded:Connect(function(char)
-			task.wait(0.2); _stopMedLoops()
-			if _medActive then _startMedLoops(char) end
-		end)
-	end
-
-	local function _stopMedusa()
-		_medActive = false; _stopMedLoops()
-		if _medCharConn then _medCharConn:Disconnect(); _medCharConn = nil end
-	end
-
-	_GH.MH_instareset  = instaReset
-	_GH.MH_startMedusa = _startMedusa
-	_GH.MH_stopMedusa  = _stopMedusa
-	_GH.MH_medusaOn    = function() return _medActive end
-
-	_floatDefs.instareset = {
-		label    = "INSTANT\nRESET",
-		onClick  = instaReset,
-		momentary = true,
-	}
-	_floatDefs.antimedusa = {
-		label    = "ANTI\nMEDUSA",
-		onClick  = function()
-			if _medActive then _stopMedusa() else _startMedusa() end
-		end,
-		isActive = function() return _medActive end,
-	}
-end
 
 _floatDefs.aimv2 = {
 	label = "AIM V2",
@@ -4709,7 +4517,6 @@ local function MH_save()
 					BatTP         = ks(kb.BatTP),
 					AimV2         = ks(kb.AimV2),
 					AimV3Kb       = ks(kb.AimV3Kb),
-					InstantReset  = ks(kb.InstantReset),
 					HideUI        = ks(kb.HideUI),
 				},
 			}
@@ -4878,7 +4685,6 @@ buildPage("Buttons", function()
 		{id="autoright",   name="Auto Right"},
 		{id="tpdown",      name="TP Down"},
 		{id="battp",       name="Bat TP"},
-		{id="instareset",  name="Instant Reset"},
 	}
 	for _, entry in ipairs(FLOAT_LABELS) do
 		_floatRowSetters[entry.id] = UIB.makeToggleRow(entry.name, false, function(on)
