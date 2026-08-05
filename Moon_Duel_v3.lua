@@ -1353,144 +1353,116 @@ function AimV3.stop()
 	if AimV3.conn then AimV3.conn:Disconnect(); AimV3.conn=nil end; AimV3.active=false
 end
 
--- Aim V2 (Taser Hub — prédiction + rotation angulaire + AutoRotate false)
-local ABP = {active=false, conn=nil}
-local ABP_CFG = {
-	CHASE_SPEED   = 58,
-	VERT_SPEED    = 52,
-	FOLLOW_DIST   = -2,
-	HEIGHT_OFFSET = 1.6,
-	VERT_OFFSET   = 1,
-	TURN_SPEED    = 285,
-	MAX_TURN_RATE = 40,
-	SWING_RANGE   = 6,
-}
-local _abpUnwalkSaved = nil
-local _abpScanCache, _abpScanTime = nil, 0
+-- Aim V2 / Anti-Bypass — copie exacte de AceStartAntiBypassAimbot :
+-- chase direct (pas de prédiction de vélocité), Lerp 0.8 sur la vitesse,
+-- clamp Y [-70,110], rotation via AssemblyAngularVelocity clampée ±2.5
+-- rad puis *42. Swing distance-gated (8 studs) avec cooldown 0.35s.
+-- Ancien système (unwalk, scan-cache, TURN_SPEED/MAX_TURN_RATE,
+-- FOLLOW_DIST/standPos) supprimé — n'existe pas chez Ace.
+local ABP = {active=false, conn=nil, swingCooldown=false}
+local ABP_SPEED = 58
 
 local function ABP_findBat()
 	local char=LP.Character; if not char then return nil end
-	local tool=char:FindFirstChild("Bat"); if tool then return tool end
-	local bp=LP:FindFirstChildOfClass("Backpack")
-	if bp then tool=bp:FindFirstChild("Bat"); if tool then tool.Parent=char; return tool end end
-	for _,n in ipairs(BAT_NAMES) do
-		local t=char:FindFirstChild(n) or (bp and bp:FindFirstChild(n))
+	for _,name in ipairs(BAT_NAMES) do
+		local t=char:FindFirstChild(name)
 		if t and t:IsA("Tool") then return t end
+	end
+	local bp=LP:FindFirstChildOfClass("Backpack")
+	if bp then
+		for _,name in ipairs(BAT_NAMES) do
+			local t=bp:FindFirstChild(name)
+			if t and t:IsA("Tool") then
+				local hum=char:FindFirstChildOfClass("Humanoid")
+				if hum then pcall(function() hum:EquipTool(t) end) end
+				return t
+			end
+		end
+	end
+	for _,ch in ipairs(char:GetChildren()) do
+		if ch:IsA("Tool") and (ch.Name:lower():find("bat") or ch.Name:lower():find("slap")) then return ch end
 	end
 	return nil
 end
 
-local function ABP_equip()
-	local char=LP.Character; local hum=char and char:FindFirstChildOfClass("Humanoid")
-	if not char or not hum then return end
-	if not char:FindFirstChildOfClass("Tool") then
-		local bat=ABP_findBat(); if bat then pcall(function() hum:EquipTool(bat) end) end
-	end
-end
-
-local function ABP_swing()
+local function ABP_trySwing()
+	if ABP.swingCooldown then return end
+	ABP.swingCooldown = true
 	pcall(function()
-		local bat=ABP_findBat(); if not bat then return end
-		pcall(function() bat:Activate() end)
-		local ev=bat:FindFirstChildWhichIsA("RemoteEvent")
-		if ev then pcall(function() ev:FireServer() end) end
+		local char=LP.Character; if not char then return end
+		local bat=ABP_findBat()
+		if bat then
+			if bat.Parent~=char then
+				local hum=char:FindFirstChildOfClass("Humanoid")
+				if hum then pcall(function() hum:EquipTool(bat) end) end
+			end
+			pcall(function() bat:Activate() end)
+		end
 	end)
+	task.delay(0.35, function() ABP.swingCooldown = false end)
 end
 
-local function ABP_startUnwalk()
-	local char=LP.Character; if not char then return end
-	local hum=char:FindFirstChildOfClass("Humanoid")
-	if hum then for _,tr in pairs(hum:GetPlayingAnimationTracks()) do tr:Stop() end end
-	local anim=char:FindFirstChild("Animate")
-	if anim then _abpUnwalkSaved=anim:Clone(); anim:Destroy() end
-end
-
-local function ABP_stopUnwalk()
-	local char=LP.Character
-	if char and _abpUnwalkSaved then _abpUnwalkSaved.Parent=char; _abpUnwalkSaved=nil end
-end
-
-local function ABP_resetMotion()
-	local char=LP.Character
-	local root=char and char:FindFirstChild("HumanoidRootPart")
-	local hum=char and char:FindFirstChildOfClass("Humanoid")
-	if root then root.AssemblyLinearVelocity=root.AssemblyLinearVelocity*0.3; root.AssemblyAngularVelocity=Vector3.zero end
-	if hum then hum.AutoRotate=true end
-end
-
-local function ABP_nearest(root)
-	local now=tick()
-	if now-_abpScanTime<=0.1 and _abpScanCache and _abpScanCache.Parent then
-		local h=_abpScanCache.Parent and _abpScanCache.Parent:FindFirstChildOfClass("Humanoid")
-		if h and h.Health>0 then return _abpScanCache end
-	end
-	_abpScanTime=now; _abpScanCache=nil
-	local best,bestD=nil,math.huge
-	for _,p in ipairs(Players:GetPlayers()) do
-		if p~=LP and p.Character then
-			local tr=p.Character:FindFirstChild("HumanoidRootPart")
-			local h=p.Character:FindFirstChildOfClass("Humanoid")
-			if tr and h and h.Health>0 then
-				local d=(tr.Position-root.Position).Magnitude
-				if d<bestD then bestD=d; best=tr end
+local function ABP_getClosest()
+	local root = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+	if not root then return nil, math.huge end
+	local closest, minDist = nil, math.huge
+	for _, plr in ipairs(Players:GetPlayers()) do
+		if plr ~= LP and plr.Character then
+			local tRoot = plr.Character:FindFirstChild("HumanoidRootPart")
+			local hum = plr.Character:FindFirstChildOfClass("Humanoid")
+			if tRoot and hum and hum.Health > 0 then
+				local dist = (tRoot.Position - root.Position).Magnitude
+				if dist < minDist then minDist = dist; closest = tRoot end
 			end
 		end
 	end
-	_abpScanCache=best; return best
+	return closest, minDist
 end
 
 function ABP.start()
 	if _GH.SM_tryStart and not _GH.SM_tryStart() then return end
 	if ABP.conn then ABP.conn:Disconnect() end; ABP.active=true
-	ABP_startUnwalk()
+	local hum0=LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
+	if hum0 then hum0.AutoRotate=false end
 	ABP.conn=RunService.Heartbeat:Connect(function()
 		if not ABP.active then return end
 		local char=LP.Character; if not char then return end
 		local root=char:FindFirstChild("HumanoidRootPart"); if not root then return end
 		local hum=char:FindFirstChildOfClass("Humanoid"); if not hum then return end
-		ABP_equip()
-		local target=ABP_nearest(root)
-		if target then
-			local vel=target.AssemblyLinearVelocity
-			local aimPos=target.Position+(vel*math.clamp(vel.Magnitude/130,0.05,0.15))+Vector3.new(0,ABP_CFG.VERT_OFFSET,0)
-			hum.AutoRotate=false
-			local look=aimPos-root.Position
-			local flat=Vector3.new(look.X,0,look.Z)
-			if look.Magnitude>0.01 and flat.Magnitude>0.01 then
-				local tYaw=math.deg(math.atan2(-flat.X,-flat.Z))
-				local yawD=(tYaw-root.Orientation.Y+180)%360-180
-				local tPitch=math.deg(math.atan2(look.Y,flat.Magnitude))
-				local pitD=(tPitch-root.Orientation.X+180)%360-180
-				local yawR=math.clamp(math.rad(yawD)*ABP_CFG.TURN_SPEED,-ABP_CFG.MAX_TURN_RATE,ABP_CFG.MAX_TURN_RATE)
-				local pitR=math.clamp(math.rad(pitD)*ABP_CFG.TURN_SPEED,-ABP_CFG.MAX_TURN_RATE,ABP_CFG.MAX_TURN_RATE)
-				local yr=math.rad(root.Orientation.Y)
-				local right=Vector3.new(math.cos(yr),0,-math.sin(yr))
-				root.AssemblyAngularVelocity=Vector3.new(0,yawR,0)+(right*pitR)
-			else
-				root.AssemblyAngularVelocity=Vector3.zero
-			end
-			local fd=math.max(math.abs(ABP_CFG.FOLLOW_DIST),1)
-			local dir=look.Magnitude>0.01 and look.Unit or Vector3.new(1,0,0)
-			local standPos=aimPos-(dir*fd)+Vector3.new(0,ABP_CFG.HEIGHT_OFFSET,0)
-			local mv=standPos-root.Position
-			local hDir=Vector3.new(mv.X,0,mv.Z)
-			local hVel=hDir.Magnitude>0.1 and hDir.Unit*ABP_CFG.CHASE_SPEED or Vector3.zero
-			local vVel=math.abs(mv.Y)>0.1 and Vector3.new(0,math.sign(mv.Y)*ABP_CFG.VERT_SPEED,0) or Vector3.new(0,-2,0)
-			root.AssemblyLinearVelocity=hVel+vVel
-			if hDir.Magnitude>0.5 then hum:Move(hDir.Unit,false) end
-			if (root.Position-target.Position).Magnitude<ABP_CFG.SWING_RANGE then
-				ABP_swing()
-			end
-		else
-			hum.AutoRotate=true
-			root.AssemblyAngularVelocity=Vector3.zero
-			root.AssemblyLinearVelocity=Vector3.zero
+		if not char:FindFirstChildOfClass("Tool") then
+			local bat=ABP_findBat(); if bat then pcall(function() hum:EquipTool(bat) end) end
 		end
+		local target, targetDist = ABP_getClosest()
+		if not target then return end
+		local myPos = root.Position
+		local targetPos = target.Position
+		local direction = targetPos - myPos
+		local flatDir = Vector3.new(direction.X, 0, direction.Z)
+		flatDir = flatDir.Magnitude > 0 and flatDir.Unit or Vector3.zero
+		local desiredHeight = targetPos.Y + 3.7
+		local yVel = (desiredHeight - myPos.Y) * 19.5
+		if hum.FloorMaterial ~= Enum.Material.Air then yVel = math.max(yVel, 13) end
+		yVel = math.clamp(yVel, -70, 110)
+		local desiredVel = Vector3.new(flatDir.X * ABP_SPEED, yVel, flatDir.Z * ABP_SPEED)
+		root.AssemblyLinearVelocity = root.AssemblyLinearVelocity:Lerp(desiredVel, 0.8)
+		local toTarget = targetPos - myPos
+		if toTarget.Magnitude > 0.1 then
+			local goalCF = CFrame.lookAt(myPos, targetPos)
+			local diffCF = root.CFrame:Inverse() * goalCF
+			local rx, ry, rz = diffCF:ToEulerAnglesXYZ()
+			rx = math.clamp(rx, -2.5, 2.5); ry = math.clamp(ry, -2.5, 2.5); rz = math.clamp(rz, -2.5, 2.5)
+			root.AssemblyAngularVelocity = root.CFrame:VectorToWorldSpace(Vector3.new(rx*42, ry*42, rz*42))
+		end
+		if targetDist <= 8 then ABP_trySwing() end
 	end)
 end
 function ABP.stop()
 	if ABP.conn then ABP.conn:Disconnect(); ABP.conn=nil end; ABP.active=false
-	ABP_resetMotion(); ABP_stopUnwalk(); _abpScanCache=nil
+	ABP.swingCooldown = false
+	local c=LP.Character; local root=c and c:FindFirstChild("HumanoidRootPart")
+	if root then root.AssemblyLinearVelocity=Vector3.zero; root.AssemblyAngularVelocity=Vector3.zero end
+	local hum2=c and c:FindFirstChildOfClass("Humanoid")
+	if hum2 then hum2.AutoRotate=true end
 end
 
 -- ===================================================================
