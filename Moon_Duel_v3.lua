@@ -744,20 +744,23 @@ local function runDropBrainrot()
 	local t0 = tick()
 	local dc
 	dc = RunService.Heartbeat:Connect(function()
-		local r = char and char:FindFirstChild("HumanoidRootPart")
-		if not r then dc:Disconnect(); _dropActive = false; return end
+		-- Re-fetch LP.Character à chaque frame (comme Ace) : gère un respawn en plein drop
+		local curChar = LP.Character
+		local r = curChar and curChar:FindFirstChild("HumanoidRootPart")
+		if not curChar or not r then dc:Disconnect(); _dropActive = false; return end
 		if tick() - t0 >= DROP_ASCEND_DURATION then
 			dc:Disconnect()
 			-- Raycast to the ground
 			local rp = RaycastParams.new()
-			rp.FilterDescendantsInstances = {char}
+			rp.FilterDescendantsInstances = {curChar}
 			rp.FilterType = Enum.RaycastFilterType.Exclude
 			local rr = workspace:Raycast(r.Position, Vector3.new(0, -2000, 0), rp)
 			if rr then
-				local hum2 = char:FindFirstChildOfClass("Humanoid")
+				local hum2 = curChar:FindFirstChildOfClass("Humanoid")
 				local off  = (hum2 and hum2.HipHeight or 2) + (r.Size.Y / 2)
 				r.CFrame = CFrame.new(r.Position.X, rr.Position.Y + off, r.Position.Z)
-				r.AssemblyLinearVelocity = Vector3.zero
+				r.AssemblyLinearVelocity  = Vector3.zero
+				r.AssemblyAngularVelocity = Vector3.zero
 			end
 			_dropActive = false
 			return
