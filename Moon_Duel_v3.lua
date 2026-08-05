@@ -2709,7 +2709,7 @@ function UIB.makeToggleRow(label, defaultOn, onToggle)
 	-- "living" one above) that only pulses while this toggle is ON.
 	local glowStroke = Instance.new("UIStroke", pill)
 	glowStroke.Thickness = 2.5; glowStroke.Color = C_MOON
-	glowStroke.Transparency = 1; glowStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Outline
+	glowStroke.Transparency = 1; glowStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 	local _glowRunning = false
 	local function startGlow()
 		if _glowRunning then return end
@@ -2765,13 +2765,16 @@ end
 local tabPages   = {}
 local tabButtons = {}
 
--- Plain Frame (NOT CanvasGroup) — GroupTransparency only exists on CanvasGroup
--- and that instance type renders as a blank/black square on a good chunk of
--- executors, which is exactly what was breaking the whole menu. The fade
--- below is done the compatible way: each descendant's own transparency is
--- cached once at build time, then tweened from 1 -> its resting value on
--- tab-in. Works identically everywhere Frame/TextLabel/etc. already do.
-local _pageFadeList = {}
+-- Plain Frame, instant Visible switch — this is the version that is known
+-- to always show every widget correctly. Two fancier approaches were tried
+-- and both risked leaving real content invisible/blank:
+--   1. CanvasGroup + GroupTransparency: CanvasGroup renders as a blank
+--      black/invisible square on a good chunk of executors.
+--   2. Per-descendant transparency caching + tween: relies on every single
+--      widget's tween firing correctly; any one silently failing left that
+--      widget stuck invisible with no visible symptom until it's too late.
+-- Neither is worth the risk for a cosmetic transition, so tab pages just
+-- swap Visible directly like before.
 local function buildPage(name, buildFn)
 	local page = Instance.new("Frame", mainScroll)
 	page.Name = name; page.Size = UDim2.new(1,0,0,0); page.AutomaticSize = Enum.AutomaticSize.Y
@@ -2781,29 +2784,27 @@ local function buildPage(name, buildFn)
 	tabPages[name] = page; currentPage = page; lo = 0
 	buildFn()
 	currentPage = nil
-
-	local list = {}
-	for _, d in ipairs(page:GetDescendants()) do
-		if d:IsA("GuiObject") then
-			list[#list+1] = {inst=d, prop="BackgroundTransparency", orig=d.BackgroundTransparency}
-		end
-		if d:IsA("TextLabel") or d:IsA("TextButton") or d:IsA("TextBox") then
-			list[#list+1] = {inst=d, prop="TextTransparency", orig=d.TextTransparency}
-		end
-		if d:IsA("ImageLabel") or d:IsA("ImageButton") then
-			list[#list+1] = {inst=d, prop="ImageTransparency", orig=d.ImageTransparency}
-		end
-	end
-	_pageFadeList[page] = list
 	return page
 end
+
+-- Tab-switch flash: ONE overlay Frame, covering the content area, that
+-- snaps opaque then fades away. Gives the switch a bit of life without
+-- touching a single property on any actual widget — so it can never leave
+-- real content stuck invisible, whatever else is going on in the page.
+local tabFlash = Instance.new("Frame", contentBg)
+tabFlash.Name = "TabFlash"
+tabFlash.Position = UDim2.new(0,0,0,36); tabFlash.Size = UDim2.new(1,0,1,-36)
+tabFlash.BackgroundColor3 = C_BG; tabFlash.BackgroundTransparency = 1
+tabFlash.BorderSizePixel = 0; tabFlash.ZIndex = 45
+tabFlash.Active = false
 
 local _activeTabName = nil
 local function selectTab(name)
 	local newPage = tabPages[name]
 	if not newPage or name == _activeTabName then return end
-	local oldPage = _activeTabName and tabPages[_activeTabName]
 	_activeTabName = name
+
+	for n, page in pairs(tabPages) do page.Visible = (n==name) end
 
 	for n, btn in pairs(tabButtons) do
 		local active = (n==name)
@@ -2814,25 +2815,8 @@ local function selectTab(name)
 		btn.lbl.TextColor3 = active and Color3.fromRGB(0,10,20) or C_TABIDLE
 	end
 
-	if oldPage and oldPage ~= newPage then
-		oldPage.Visible = false
-	end
-
-	-- Fade the incoming page in from invisible to its resting look.
-	local list = _pageFadeList[newPage]
-	if list then
-		for _, e in ipairs(list) do
-			pcall(function() e.inst[e.prop] = 1 end)
-		end
-	end
-	newPage.Visible = true
-	if list then
-		for _, e in ipairs(list) do
-			pcall(function()
-				TweenService:Create(e.inst, TweenInfo.new(0.14, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {[e.prop]=e.orig}):Play()
-			end)
-		end
-	end
+	tabFlash.BackgroundTransparency = 0.82
+	TweenService:Create(tabFlash, TweenInfo.new(0.16, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundTransparency=1}):Play()
 end
 
 for i, name in ipairs(TABS) do
