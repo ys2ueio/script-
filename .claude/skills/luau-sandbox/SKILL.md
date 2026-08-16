@@ -55,12 +55,34 @@ semantic differences one crash at a time.
 LUAU="$(.claude/skills/luau-sandbox/build_luau.sh)"
 echo "$LUAU"   # path to the built CLI
 
-# 2. Run a target script through the sandbox, capture the trace
-"$LUAU" .claude/skills/luau-sandbox/harness.lua -a "$(cat target.lua)" > trace.log 2>&1
+# 2. "It doesn't run" — check syntax FIRST, before anything else. Fast,
+#    no mocks, just the real parser. Separates "real syntax error" from
+#    "parses fine, fails at runtime" so you're not debugging the wrong
+#    problem.
+"$LUAU" .claude/skills/luau-sandbox/check_syntax.lua -a "$(cat target.lua)"
+#   -> SYNTAX_OK (N bytes parsed cleanly)         => not a syntax problem, go to step 3
+#   -> SYNTAX_ERROR: target:LINE: message         => real parse error, fix the text at LINE
 
-# 3. Read the trace
+# 3. Run the target through the full sandbox, capture the trace
+"$LUAU" .claude/skills/luau-sandbox/harness.lua -a "$(cat target.lua)" > trace.log 2>&1
+grep -E '^(SYNTAX_OK|SYNTAX_ERROR|PRINT|INVOKE_ERROR|LOAD_ERROR|RUN_RESULT)' trace.log
+
+# 4. Read the full trace for detail
 grep -E '^(PRINT|CALL|SET|INVOKE_ERROR)' trace.log | less
 ```
+
+harness.lua also emits its own `SYNTAX_OK`/`SYNTAX_ERROR` as the very
+first trace lines (same check as step 2, just inline) — so even without
+running check_syntax.lua separately, the top of `trace.log` always
+answers "is this a syntax problem?" before anything else.
+
+**"It doesn't run" is very often NOT a syntax error.** The most common
+real cause seen so far: a script calls `readfile()` on its own config/save
+file without an `isfile()` guard or `pcall`. That's fine once the file
+exists, but on a first run — before the script has ever saved one —
+`readfile()` throws on most executors and kills the whole script before
+it builds anything. `RUN_RESULT false ...: file does not exist (not in
+FAKE_FILES)` in the trace is this exact bug (see below).
 
 The source is passed via a `-a` command-line argument (not read with
 `io.open` from inside the sandboxed script) because stock Luau has **no
@@ -72,6 +94,8 @@ wrapped to log through the same channel with a `PRINT` tag.
 ### Reading the trace
 
 Each line is tab-separated, starting with a tag:
+- `SYNTAX_OK` / `SYNTAX_ERROR <message>` — always the first line(s);
+  whether the real Luau parser accepted the source at all
 - `INDEX <path>` — the script read a property/global (e.g. `game.Players`)
 - `CALL <path>(<args>)` — the script called a function/method
 - `SET <path> = <value>` — the script assigned a property
@@ -103,12 +127,17 @@ wrong:
   immediately on `number < table`, see above). The trace's
   `INVOKE_ERROR ... attempt to compare` lines point at exactly which
   property needs adding.
-- **`FAKE_FILES`**: if the script `readfile()`s a config and branches on
-  its shape (e.g. `if config.autoStart then ...`), populate this table
-  with plausible JSON so those branches take their real path instead of
+- **`FAKE_FILES`**: `readfile()`/`isfile()` default to "the file does not
+  exist" for any path NOT listed here — on purpose (see above), to
+  surface unguarded readfile() calls instead of hiding them. If the
+  script reads a config and branches on its shape (e.g.
+  `if config.autoStart then ...`), populate this table with plausible
+  JSON so those branches take their real path instead of erroring or
   operating on an opaque mock. `HttpService:JSONDecode` is already wired
   to a real JSON parser, so valid JSON here becomes real Lua
-  values/booleans/numbers in the sandboxed script.
+  values/booleans/numbers in the sandboxed script. Test BOTH with and
+  without an entry present — a script should survive its very first run
+  (no file yet) as gracefully as a later one (file present).
 - **`LUAU_SANDBOX_WAIT_BUDGET`** env var: raise it if a loop needs more
   iterations to reach interesting behavior (e.g. `LUAU_SANDBOX_WAIT_BUDGET=30 "$LUAU" ...`).
 

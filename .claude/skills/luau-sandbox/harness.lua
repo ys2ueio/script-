@@ -275,14 +275,20 @@ end
 --=============================================================
 -- Fake filesystem for readfile/isfile — override FAKE_FILES for a
 -- specific target script if it reads config files whose shape matters
--- (see SKILL.md). Default: every path looks like it exists and holds "{}".
+-- (see SKILL.md).
+--
+-- Default is "the file does not exist" for anything not listed here —
+-- NOT "every file exists and holds {}". Real executors (Synapse X, KRNL,
+-- Wave, ...) throw a real Lua error when readfile() targets a missing
+-- file, which is exactly the state of a script's config on someone's
+-- very first run before it has ever saved one. A script that calls
+-- readfile() without an isfile() guard or a pcall around it will crash
+-- on first run in real life — defaulting to "always succeeds" here would
+-- silently hide that exact, common bug class instead of catching it.
 --=============================================================
 local FAKE_FILES = {
 	-- ["SomeConfig.txt"] = '{"speed":16,"enabled":true}',
 }
-local function fakeFileContents(path)
-	return FAKE_FILES[tostring(path)] or "{}"
-end
 
 --=============================================================
 -- The sandboxed environment
@@ -335,9 +341,23 @@ env.wait = boundedWait
 env.spawn = function(fn, ...) runOnce("spawn", fn, ...); return make_mock("spawn()") end
 env.delay = function(t, fn, ...) runOnce("delay", fn, ...); return make_mock("delay()") end
 
-env.readfile = function(path) logf("CALL", "readfile(" .. tostring(path) .. ")"); return fakeFileContents(path) end
+env.readfile = function(path)
+	logf("CALL", "readfile(" .. tostring(path) .. ")")
+	local content = FAKE_FILES[tostring(path)]
+	if content == nil then
+		-- Real behavior on most executors when the file doesn't exist:
+		-- a thrown error, not an empty/placeholder result. If the target
+		-- doesn't guard this with isfile()/pcall(), this is meant to blow
+		-- up the trace and point straight at the missing guard.
+		error(tostring(path) .. ": file does not exist (not in FAKE_FILES)", 0)
+	end
+	return content
+end
 env.writefile = function(path, data) logf("CALL", "writefile(" .. tostring(path) .. ", ...)"); return nil end
-env.isfile = function(path) logf("CALL", "isfile(" .. tostring(path) .. ")"); return true end
+env.isfile = function(path)
+	logf("CALL", "isfile(" .. tostring(path) .. ")")
+	return FAKE_FILES[tostring(path)] ~= nil
+end
 env.isfolder = function(path) logf("CALL", "isfolder(" .. tostring(path) .. ")"); return true end
 
 for _, name in ipairs({
@@ -382,11 +402,18 @@ setmetatable(env, {
 local src = ...
 assert(type(src) == "string" and #src > 0, "expected target source via -a \"$(cat target.lua)\"")
 
+-- Syntax is checked and reported FIRST and separately from execution
+-- errors below — "it doesn't run" is a syntax problem only if this line
+-- says so. A LOAD_ERROR here means Luau's parser rejected the source
+-- (real syntax error); everything logged after SYNTAX_OK is runtime
+-- behavior, not a parsing problem, even if it later fails.
 local chunk, err = loadstring(src, "target")
 if not chunk then
+	logf("SYNTAX_ERROR", err)
 	logf("LOAD_ERROR", err)
 	return
 end
+logf("SYNTAX_OK")
 setfenv(chunk, env)
 
 local ok, err2 = xpcall(chunk, function(m) return tostring(m) .. "\n" .. debug.traceback() end)
