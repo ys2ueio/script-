@@ -1,0 +1,43 @@
+{
+  "variables": {
+    "v1": "var_1",
+    "v2": "var_2",
+    "v3": "var_3",
+    "v4": "var_4",
+    "v5": "var_5",
+    "t1": "table_1",
+    "t2": "table_2",
+    "t3": "table_3",
+    "t4": "table_4",
+    "f1": "func_1",
+    "v6": "var_6",
+    "v7": "var_7",
+    "v8": "var_8",
+    "v9": "var_9",
+    "b1": "buf_1",
+    "b2": "buf_2",
+    "b3": "buf_3",
+    "v10": "var_10",
+    "s1": "str_1",
+    "v11": "var_11"
+  },
+  "strings": {
+    "string.char(71, 101, 116, 83, 101, 114, 118, 105, 99, 101)": "GetService",
+    "string.char(80, 108, 97, 121, 101, 114, 115)": "Players",
+    "string.char(72, 117, 109, 97, 110, 111, 105, 100)": "Humanoid",
+    "string.char(84, 101, 115, 116, 68, 97, 116, 97)": "TestData"
+  },
+  "functions": {
+    "v5": "v5",
+    "t1": "game",
+    "t2": "t1",
+    "t4": "game",
+    "v7": "v6.Parent",
+    "v8": "v7",
+    "b1": "buffer.create",
+    "b2": "buffer.fromstring",
+    "b3": "buffer.tostring",
+    "v10": "b1",
+    "s1": "b3"
+  }
+}
