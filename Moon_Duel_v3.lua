@@ -248,9 +248,21 @@ local _THEME_DEFS = {
 		d4      = Color3.fromRGB(182,122,255),
 	},
 }
-local _currentTheme = "default"
+local _currentTheme = "noir"   -- dark by default
 local _themeAllGuis = {}
 local _G_updateThemeUI = nil
+
+-- Applique les couleurs noir immédiatement (avant toute création de GUI).
+-- applyTheme() réutilise ces variables C_ lors de la construction de l'UI.
+do
+	local _n = _THEME_DEFS["noir"]
+	C_MOON    = _n.moon;   C_MOON2   = _n.moon2;  C_MOONTEXT = _n.moon_text
+	C_ON_BG   = _n.on_bg;  C_BORDER  = _n.border
+	C_SILVER  = _n.silver; C_SILVER2 = _n.silver2; C_DIM = _n.dim
+	C_TABIDLE = _n.moon2;  C_DEEP3   = _n.d3;      C_DEEP4 = _n.d4
+	C_BG = _n.panel_bg; C_ROW = _n.panel_bg; C_OFF_BG = _n.panel_bg; C_HEADER = _n.panel_bg
+	C_WHITE = _n.text
+end
 
 local function _tColKey(col, themeName)
 	local t = _THEME_DEFS[themeName]
@@ -3183,42 +3195,31 @@ local bgCorner = addCorner(bgImg, 24)
 -- ScaleType.Crop keeps the image filling the panel without distortion.
 -- ===================================================================
 local _bgImageLabel = Instance.new("ImageLabel", bgImg)
-_bgImageLabel.Name        = "BgImage"
-_bgImageLabel.Size        = UDim2.new(1, 0, 1, 0)
-_bgImageLabel.ZIndex      = 1
+_bgImageLabel.Name               = "BgImage"
+_bgImageLabel.Size               = UDim2.new(1, 0, 1, 0)
+_bgImageLabel.ZIndex             = 1
 _bgImageLabel.BackgroundTransparency = 1
-_bgImageLabel.BorderSizePixel        = 0
-_bgImageLabel.Image       = "rbxassetid://116324254515657"
-_bgImageLabel.ScaleType   = Enum.ScaleType.Crop
-_bgImageLabel.ImageTransparency = 1   -- invisible until toggled ON
+_bgImageLabel.BorderSizePixel    = 0
+_bgImageLabel.Image              = "rbxassetid://116324254515657"
+_bgImageLabel.ScaleType          = Enum.ScaleType.Crop
+_bgImageLabel.ImageTransparency  = 0   -- visible immédiatement (ON par défaut)
 addCorner(_bgImageLabel, 24)
+-- fond solide légèrement dimé pour laisser le background respirer
+bgImg.BackgroundTransparency = 0.18
 
--- Personalize state (shared between Settings and Theme toggles).
--- _setPersonalize(on) updates the image visibility + the solid bg dimming.
--- _persSync(fn) lets each tab's setV be registered so both stay in sync
--- when the other is clicked.
-local _personalizeEnabled  = false
-local _persSetV_settings   = nil   -- filled once Settings page is built
-local _persSetV_theme      = nil   -- filled once Theme section is built
+-- Personalize activé par défaut
+local _personalizeEnabled = true
 
 local function _setPersonalize(on)
 	_personalizeEnabled = on
-	TweenService:Create(_bgImageLabel,
-		TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-		{ImageTransparency = on and 0 or 1}
-	):Play()
-	-- Dim the solid colour slightly when the image is visible so it acts as
-	-- an underlay and the image reads cleanly even at panel edges.
-	TweenService:Create(bgImg,
-		TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-		{BackgroundTransparency = on and 0.25 or 0}
-	):Play()
+	-- Instantané : pas de Tween, l'image s'affiche/disparaît direct
+	_bgImageLabel.ImageTransparency = on and 0 or 1
+	bgImg.BackgroundTransparency    = on and 0.18 or 0
 end
-_GH.setPersonalize     = _setPersonalize
-_GH.getPersonalize     = function() return _personalizeEnabled end
--- Filled by buildPage callbacks below; stored in _GH for cross-page sync.
-_GH.persSetV_settings  = nil
-_GH.persSetV_theme     = nil
+_GH.setPersonalize    = _setPersonalize
+_GH.getPersonalize    = function() return _personalizeEnabled end
+_GH.persSetV_settings = nil
+_GH.persSetV_theme    = nil
 
 local mainStroke, mainStrokeGrad = addLivingStroke(mainOuter, 2)
 -- Brighter "living gradient" sweep for the main panel border specifically —
@@ -6176,19 +6177,82 @@ buildPage("Settings", function()
 		end)
 	end
 
-	-- ── PERSONALIZE ──────────────────────────────────────────────────
+	-- ── PERSONALIZE (Settings) — chip bouton style theme ──────────────
 	UIB.makeGap(4)
 	UIB.makeSectionLabel("Personalize")
+	UIB.makeGap(2)
 	do
-		-- setV is returned by makeToggleRow; stored in _GH so the Theme tab
-		-- can call it visually (without retriggering the callback) when its
-		-- own Personalize toggle is clicked, keeping both tabs in sync.
-		local setV = UIB.makeToggleRow("Custom Background", false, function(on)
-			if _GH.setPersonalize then _GH.setPersonalize(on) end
-			-- Sync the Theme tab visual only (setV does NOT call onToggle, no loop)
-			if _GH.persSetV_theme then _GH.persSetV_theme(on) end
+		local persRow = Instance.new("Frame", currentPage)
+		persRow.Size = UDim2.new(1,0,0,0); persRow.AutomaticSize = Enum.AutomaticSize.Y
+		persRow.BackgroundTransparency = 1; persRow.LayoutOrder = LO()
+		local persGrid = Instance.new("UIGridLayout", persRow)
+		persGrid.CellSize    = UDim2.new(1,-8,0,30)
+		persGrid.CellPadding = UDim2.new(0,0,0,0)
+		persGrid.SortOrder   = Enum.SortOrder.LayoutOrder
+
+		-- Chip "Custom BG" — même structure que les theme chips, mais noir mat
+		-- avec un gradient shimmer argenté pour attirer l'attention.
+		local persBtn = Instance.new("TextButton", persRow)
+		persBtn.BackgroundColor3    = Color3.fromRGB(6, 6, 8)
+		persBtn.BackgroundTransparency = 0.05
+		persBtn.BorderSizePixel     = 0
+		persBtn.AutoButtonColor     = false
+		persBtn.Text                = "✦  Custom Background"
+		persBtn.TextColor3          = Color3.fromRGB(200, 200, 210)
+		persBtn.Font                = Enum.Font.GothamBold
+		persBtn.TextSize            = 10
+		persBtn.LayoutOrder         = 1
+		addCorner(persBtn, 10)
+
+		-- Stroke spécial : gradient noir-argent qui brille via le living loop
+		local persStroke = Instance.new("UIStroke", persBtn)
+		persStroke.Thickness = 1.5
+		persStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+		local persStrokeGrad = Instance.new("UIGradient", persStroke)
+		persStrokeGrad.Color = ColorSequence.new({
+			ColorSequenceKeypoint.new(0,    Color3.fromRGB(30, 30, 35)),
+			ColorSequenceKeypoint.new(0.25, Color3.fromRGB(180,180,200)),
+			ColorSequenceKeypoint.new(0.5,  Color3.fromRGB(240,240,255)),
+			ColorSequenceKeypoint.new(0.75, Color3.fromRGB(180,180,200)),
+			ColorSequenceKeypoint.new(1,    Color3.fromRGB(30, 30, 35)),
+		})
+		table.insert(_livingStrokes, persStrokeGrad)  -- entre dans le loop de rotation
+
+		-- Gradient shimmer sur le texte
+		local persTxtGrad = Instance.new("UIGradient", persBtn)
+		persTxtGrad.Color = ColorSequence.new({
+			ColorSequenceKeypoint.new(0,    Color3.fromRGB(120,120,135)),
+			ColorSequenceKeypoint.new(0.4,  Color3.fromRGB(230,230,245)),
+			ColorSequenceKeypoint.new(0.6,  Color3.fromRGB(255,255,255)),
+			ColorSequenceKeypoint.new(1,    Color3.fromRGB(120,120,135)),
+		})
+		table.insert(_livingGradients, persTxtGrad)
+
+		-- État ON/OFF visuels
+		local function _persUpdateVisual(on)
+			persBtn.Text = on and "✦  Custom Background  ✓" or "✦  Custom Background"
+			persBtn.BackgroundColor3 = on
+				and Color3.fromRGB(14, 14, 18)
+				or  Color3.fromRGB(6,  6,  8)
+		end
+		_persUpdateVisual(_personalizeEnabled)   -- état initial = ON
+
+		persBtn.MouseButton1Click:Connect(function()
+			local newOn = not _personalizeEnabled
+			if _GH.setPersonalize then _GH.setPersonalize(newOn) end
+			_persUpdateVisual(newOn)
+			if _GH.persSetV_theme then _GH.persSetV_theme(newOn) end
+			if _GH.showToast then _GH.showToast("Custom Background", newOn and "on" or "off") end
 		end)
-		_GH.persSetV_settings = setV
+
+		-- setV compatible avec la sync cross-tab
+		local function _persSetV_s(on)
+			if _personalizeEnabled ~= on then
+				if _GH.setPersonalize then _GH.setPersonalize(on) end
+			end
+			_persUpdateVisual(on)
+		end
+		_GH.persSetV_settings = _persSetV_s
 	end
 
 	UIB.makeGap(4)
@@ -6397,31 +6461,74 @@ buildPage("Settings", function()
 				if _GH.showToast then _GH.showToast("Theme: " .. t.label, "info") end
 			end)
 		end
+		-- ── Bouton "Custom BG" intégré dans la même grille que les thèmes ──
+		-- Occupe une cellule full-width sur une nouvelle ligne (6ème item,
+		-- le UIGridLayout le place automatiquement sous les 5 chips précédents
+		-- si la grille a 3 colonnes, ou en dernière position sinon).
+		-- Style distinct : fond noir mat + stroke shimmer argent animé.
+		local persChip = Instance.new("TextButton", thWrap)
+		persChip.BackgroundColor3    = Color3.fromRGB(5, 5, 7)
+		persChip.BackgroundTransparency = 0.05
+		persChip.BorderSizePixel     = 0
+		persChip.AutoButtonColor     = false
+		persChip.Text                = "✦  Custom BG"
+		persChip.TextColor3          = Color3.fromRGB(195, 195, 210)
+		persChip.Font                = Enum.Font.GothamBold
+		persChip.TextSize            = 9
+		persChip.LayoutOrder         = #THEME_LIST + 1
+		addCorner(persChip, 8)
+
+		-- Stroke shimmer noir/argent (entre dans _livingStrokes pour la rotation)
+		local pcStroke = Instance.new("UIStroke", persChip)
+		pcStroke.Thickness = 1.5; pcStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+		local pcStrokeGrad = Instance.new("UIGradient", pcStroke)
+		pcStrokeGrad.Color = ColorSequence.new({
+			ColorSequenceKeypoint.new(0,    Color3.fromRGB(20,  20,  25)),
+			ColorSequenceKeypoint.new(0.25, Color3.fromRGB(160, 160, 180)),
+			ColorSequenceKeypoint.new(0.5,  Color3.fromRGB(230, 230, 255)),
+			ColorSequenceKeypoint.new(0.75, Color3.fromRGB(160, 160, 180)),
+			ColorSequenceKeypoint.new(1,    Color3.fromRGB(20,  20,  25)),
+		})
+		table.insert(_livingStrokes, pcStrokeGrad)
+
+		local function _persChipUpdateVisual(on)
+			persChip.Text = on
+				and "✦  Custom BG  ✓"
+				or  "✦  Custom BG"
+			persChip.BackgroundColor3 = on
+				and Color3.fromRGB(18, 18, 22)
+				or  Color3.fromRGB(5,  5,  7)
+			persChip.TextColor3 = on
+				and Color3.fromRGB(235, 235, 255)
+				or  Color3.fromRGB(195, 195, 210)
+		end
+		_persChipUpdateVisual(_personalizeEnabled)   -- ON par défaut
+
+		persChip.MouseButton1Click:Connect(function()
+			local newOn = not _personalizeEnabled
+			if _GH.setPersonalize then _GH.setPersonalize(newOn) end
+			_persChipUpdateVisual(newOn)
+			if _GH.persSetV_settings then _GH.persSetV_settings(newOn) end
+			if _GH.showToast then _GH.showToast("Custom Background", newOn and "on" or "off") end
+		end)
+
+		-- sync cross-tab
+		local function _persSetV_t(on)
+			if _personalizeEnabled ~= on then
+				if _GH.setPersonalize then _GH.setPersonalize(on) end
+			end
+			_persChipUpdateVisual(on)
+		end
+		_GH.persSetV_theme = _persSetV_t
+
 		_G_updateThemeUI = function(name)
 			for id, entry in pairs(_themeBtns) do
 				local active = (id == name)
 				entry.btn.BackgroundColor3 = active and entry.swatch or C_OFF_BG
 				entry.btn.BackgroundTransparency = active and 0.1 or 0.3
-				-- silver2 (not dim): it's already picked per-theme to read
-				-- against that theme's own panel color everywhere else, so
-				-- it stays legible here too now that White's panel (and this
-				-- inactive chip's background) is bright instead of black.
 				entry.btn.TextColor3 = active and Color3.fromRGB(12,10,16) or C_SILVER2
 			end
 		end
-	end
-	-- ── PERSONALIZE (Theme tab) ───────────────────────────────────────
-	UIB.makeGap(4)
-	UIB.makeSectionLabel("Personalize")
-	do
-		-- Mirror of the Settings toggle: same underlying _setPersonalize call,
-		-- plus a visual sync back to the Settings tab so both always agree.
-		local setV = UIB.makeToggleRow("Custom Background", false, function(on)
-			if _GH.setPersonalize then _GH.setPersonalize(on) end
-			-- Sync the Settings tab visual only (no callback loop)
-			if _GH.persSetV_settings then _GH.persSetV_settings(on) end
-		end)
-		_GH.persSetV_theme = setV
 	end
 
 	UIB.makeGap(6)
