@@ -52,44 +52,18 @@ local function _AD_partName()
 end
 
 -- ===================================================================
--- Couche 4 — WalkSpeed spoofing via hookmetamethod __index.
--- Quand un script externe lit hum.WalkSpeed de notre personnage, il
--- reçoit 16 (valeur par défaut Roblox). checkcaller() s'assure que
--- nos propres lectures internes reçoivent la vraie valeur.
+-- [RETIRÉ] Couches 4 & 5 — WalkSpeed spoofing via hookmetamethod
+-- __index/__newindex sur `game`.
+--
+-- hookmetamethod(game, ...) ne patche pas que l'instance `game` : il
+-- remplace le __index/__newindex de la métatable PARTAGÉE par TOUTES
+-- les Instances Roblox. Résultat : chaque lecture/écriture de
+-- propriété, sur CHAQUE Instance, dans TOUT le client (physique,
+-- rendu, animations, scripts du jeu…) repassait par notre closure —
+-- des centaines de milliers d'appels/seconde. C'était la cause réelle
+-- du freeze général du jeu (pas Speed Bypass). Retiré : le gain
+-- (masquer WalkSpeed) ne justifie pas le coût (freeze quasi permanent).
 -- ===================================================================
-pcall(function()
-	if not (hookmetamethod and checkcaller and newcclosure) then return end
-	local _realIndex = hookmetamethod(game, "__index", newcclosure(function(self, key)
-		if key == "WalkSpeed" and not checkcaller() then
-			local char = rawget(LP, "Character") or LP.Character
-			local hum  = char and char:FindFirstChildOfClass("Humanoid")
-			if hum and self == hum then
-				return 16   -- renvoie la vitesse "neutre" aux lecteurs externes
-			end
-		end
-		return _realIndex(self, key)
-	end))
-end)
-
--- ===================================================================
--- Couche 5 — hookmetamethod __newindex : bloque les tentatives
--- d'écriture externe sur notre Humanoid (ex: anti-speed qui force-reset
--- WalkSpeed à 16). Les écritures légitimes du jeu passent normalement
--- via checkcaller() et le HumanoidRootPart check.
--- ===================================================================
-pcall(function()
-	if not (hookmetamethod and checkcaller and newcclosure) then return end
-	local _realNewIndex = hookmetamethod(game, "__newindex", newcclosure(function(self, key, value)
-		if key == "WalkSpeed" and not checkcaller() then
-			local char = rawget(LP, "Character") or LP.Character
-			local hum  = char and char:FindFirstChildOfClass("Humanoid")
-			-- si quelqu'un d'autre essaie d'écrire notre WalkSpeed, on laisse
-			-- passer la valeur silencieusement sans l'appliquer
-			if hum and self == hum then return end
-		end
-		return _realNewIndex(self, key, value)
-	end))
-end)
 
 -- ===================================================================
 -- Couche 6 — Jitter helper : ajoute un délai aléatoire infime à
@@ -117,20 +91,17 @@ pcall(function()
 end)
 
 -- ===================================================================
--- Couche 8 — Isolation _GH : setreadonly bloque toute modification
--- externe de notre table de fonctions (injection, overwrite d'API).
+-- [RETIRÉ] Couche 8 — setreadonly(_GH, true).
+--
+-- _GH.pingWarn est réécrit en continu par une boucle `while true`
+-- (surveillance du ping, plus bas dans le fichier) qui tourne pendant
+-- toute la session — bien après la fin de la construction du hub, donc
+-- après le verrouillage. Une fois _GH en lecture seule, cette écriture
+-- légitime levait une erreur à chaque tick de ping, indéfiniment.
+-- Retiré : _GH est une variable locale de fermeture, déjà inatteignable
+-- depuis l'extérieur du script sans API de debug — le verrou n'apportait
+-- pas de protection réelle, seulement ce bug.
 -- ===================================================================
-pcall(function()
-	if typeof(setreadonly) == "function" then
-		-- On rend la table modifiable depuis l'intérieur via rawset,
-		-- mais bloque les writes Lua normaux venus de l'extérieur.
-		-- NOTE: on ne setreadonly(true) qu'après la construction complète
-		-- du hub — l'appel réel est à la toute fin du script.
-		_GH._AD_lockFn = function()
-			pcall(function() setreadonly(_GH, true) end)
-		end
-	end
-end)
 
 
 -- ===================================================================
@@ -7451,16 +7422,3 @@ end
 
 end
 _MH_buildUI()
-
--- ===================================================================
--- COUCHE FINALE — lock _GH après construction complète du hub.
--- setreadonly bloque toute modification externe de notre table d'API
--- (injection de fonctions, overwrite de callbacks, etc.).
--- ===================================================================
-pcall(function()
-	if _GH._AD_lockFn then
-		_GH._AD_lockFn()
-		-- _AD_lockFn elle-même n'a plus d'utilité après l'appel.
-		rawset(_GH, "_AD_lockFn", nil)
-	end
-end)
