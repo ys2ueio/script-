@@ -6190,14 +6190,14 @@ buildPage("Settings", function()
 		persGrid.CellPadding = UDim2.new(0,0,0,0)
 		persGrid.SortOrder   = Enum.SortOrder.LayoutOrder
 
-		-- Chip "Custom BG" — même structure que les theme chips, mais noir mat
+		-- Chip "Custom Moon" — même structure que les theme chips, mais noir mat
 		-- avec un gradient shimmer argenté pour attirer l'attention.
 		local persBtn = Instance.new("TextButton", persRow)
 		persBtn.BackgroundColor3    = Color3.fromRGB(6, 6, 8)
 		persBtn.BackgroundTransparency = 0.05
 		persBtn.BorderSizePixel     = 0
 		persBtn.AutoButtonColor     = false
-		persBtn.Text                = "✦  Custom Background"
+		persBtn.Text                = "✦  Custom Moon"
 		persBtn.TextColor3          = Color3.fromRGB(200, 200, 210)
 		persBtn.Font                = Enum.Font.GothamBold
 		persBtn.TextSize            = 10
@@ -6230,7 +6230,7 @@ buildPage("Settings", function()
 
 		-- État ON/OFF visuels
 		local function _persUpdateVisual(on)
-			persBtn.Text = on and "✦  Custom Background  ✓" or "✦  Custom Background"
+			persBtn.Text = on and "✦  Custom Moon  ✓" or "✦  Custom Moon"
 			persBtn.BackgroundColor3 = on
 				and Color3.fromRGB(14, 14, 18)
 				or  Color3.fromRGB(6,  6,  8)
@@ -6242,7 +6242,7 @@ buildPage("Settings", function()
 			if _GH.setPersonalize then _GH.setPersonalize(newOn) end
 			_persUpdateVisual(newOn)
 			if _GH.persSetV_theme then _GH.persSetV_theme(newOn) end
-			if _GH.showToast then _GH.showToast("Custom Background", newOn and "on" or "off") end
+			if _GH.showToast then _GH.showToast("Custom Moon", newOn and "on" or "off") end
 		end)
 
 		-- setV compatible avec la sync cross-tab
@@ -6461,7 +6461,7 @@ buildPage("Settings", function()
 				if _GH.showToast then _GH.showToast("Theme: " .. t.label, "info") end
 			end)
 		end
-		-- ── Bouton "Custom BG" intégré dans la même grille que les thèmes ──
+		-- ── Bouton "Custom Moon" intégré dans la même grille que les thèmes ──
 		-- Occupe une cellule full-width sur une nouvelle ligne (6ème item,
 		-- le UIGridLayout le place automatiquement sous les 5 chips précédents
 		-- si la grille a 3 colonnes, ou en dernière position sinon).
@@ -6471,7 +6471,7 @@ buildPage("Settings", function()
 		persChip.BackgroundTransparency = 0.05
 		persChip.BorderSizePixel     = 0
 		persChip.AutoButtonColor     = false
-		persChip.Text                = "✦  Custom BG"
+		persChip.Text                = "✦  Custom Moon"
 		persChip.TextColor3          = Color3.fromRGB(195, 195, 210)
 		persChip.Font                = Enum.Font.GothamBold
 		persChip.TextSize            = 9
@@ -6493,8 +6493,8 @@ buildPage("Settings", function()
 
 		local function _persChipUpdateVisual(on)
 			persChip.Text = on
-				and "✦  Custom BG  ✓"
-				or  "✦  Custom BG"
+				and "✦  Custom Moon  ✓"
+				or  "✦  Custom Moon"
 			persChip.BackgroundColor3 = on
 				and Color3.fromRGB(18, 18, 22)
 				or  Color3.fromRGB(5,  5,  7)
@@ -6509,7 +6509,7 @@ buildPage("Settings", function()
 			if _GH.setPersonalize then _GH.setPersonalize(newOn) end
 			_persChipUpdateVisual(newOn)
 			if _GH.persSetV_settings then _GH.persSetV_settings(newOn) end
-			if _GH.showToast then _GH.showToast("Custom Background", newOn and "on" or "off") end
+			if _GH.showToast then _GH.showToast("Custom Moon", newOn and "on" or "off") end
 		end)
 
 		-- sync cross-tab
