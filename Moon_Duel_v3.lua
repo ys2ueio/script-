@@ -1,15 +1,136 @@
-local _NS = tostring(math.random(0x100000, 0xFFFFFF)) .. tostring(tick()):gsub("%.", "")
-local _GH  = {}   -- replaces all _GH.* / _GH.MH_* to leave zero _G footprint
+-- ===================================================================
+-- ANTI-DETECTION ENGINE  (chargé en premier, avant tout le reste)
+-- ===================================================================
+-- Entropie maximale sur le namespace : hex aléatoire + tick sans point +
+-- fragment du JobId (unique par serveur) + os.clock résidu — le résultat
+-- ne ressemble à aucun pattern fixe et change à chaque exécution.
+local _NS
+do
+	local _h  = string.format("%x", math.random(0x100000, 0xFFFFFF))
+	local _t  = tostring(tick()):gsub("%.", ""):sub(-8)
+	local _jf = tostring(game.JobId):gsub("-",""):sub(1,6)
+	local _ck = tostring(math.floor(os.clock()*1e5 % 0xFFFFF))
+	_NS = _h .. _t .. _jf .. _ck
+end
+local _GH  = {}   -- zéro footprint sur _G
+
+-- Couche 1 — cloneref : chaque service passe par une référence clonée.
+-- Un anti-cheat qui compare des instances via == ne peut pas matcher les
+-- nôtres (cloneref retourne un proxy distinct à chaque appel).
+local _cr = (typeof(cloneref) == "function") and cloneref or function(x) return x end
 
 if not game:IsLoaded() then game.Loaded:Wait() end
 
-local Players       = game:GetService("Players")
-local RunService    = game:GetService("RunService")
-local UIS           = game:GetService("UserInputService")
-local TweenService  = game:GetService("TweenService")
-local Lighting      = game:GetService("Lighting")
+local Players       = _cr(game:GetService("Players"))
+local RunService    = _cr(game:GetService("RunService"))
+local UIS           = _cr(game:GetService("UserInputService"))
+local TweenService  = _cr(game:GetService("TweenService"))
+local Lighting      = _cr(game:GetService("Lighting"))
 local LP            = Players.LocalPlayer
 if not LP.Character then LP.CharacterAdded:Wait() end
+
+-- ===================================================================
+-- Couche 2 — newcclosure : wrap les fonctions critiques en C-closure.
+-- islclosure() retournera false, iscclosure() retournera true.
+-- Les scanners qui cherchent des Lua-closures suspectes passent à côté.
+-- ===================================================================
+local _ncc = (typeof(newcclosure) == "function") and newcclosure or function(f) return f end
+
+-- ===================================================================
+-- Couche 3 — Noms de Part pseudo-légitimes.
+-- Le proxy Part s'appelait "_NS..PX" — lisible. On le remplace par un
+-- nom qui ressemble à un objet engine Roblox interne (4 lettres + hash).
+-- ===================================================================
+local _PART_NAMES = {
+	"Handle","Weld","Attachment","Joint","Motor","Bone",
+	"RootConstraint","BasePart","HRP","RootPart"
+}
+local function _AD_partName()
+	local base = _PART_NAMES[math.random(1, #_PART_NAMES)]
+	local sfx  = string.format("%04x", math.random(0, 0xFFFF))
+	return base .. sfx
+end
+
+-- ===================================================================
+-- Couche 4 — WalkSpeed spoofing via hookmetamethod __index.
+-- Quand un script externe lit hum.WalkSpeed de notre personnage, il
+-- reçoit 16 (valeur par défaut Roblox). checkcaller() s'assure que
+-- nos propres lectures internes reçoivent la vraie valeur.
+-- ===================================================================
+pcall(function()
+	if not (hookmetamethod and checkcaller and newcclosure) then return end
+	local _realIndex = hookmetamethod(game, "__index", newcclosure(function(self, key)
+		if key == "WalkSpeed" and not checkcaller() then
+			local char = rawget(LP, "Character") or LP.Character
+			local hum  = char and char:FindFirstChildOfClass("Humanoid")
+			if hum and self == hum then
+				return 16   -- renvoie la vitesse "neutre" aux lecteurs externes
+			end
+		end
+		return _realIndex(self, key)
+	end))
+end)
+
+-- ===================================================================
+-- Couche 5 — hookmetamethod __newindex : bloque les tentatives
+-- d'écriture externe sur notre Humanoid (ex: anti-speed qui force-reset
+-- WalkSpeed à 16). Les écritures légitimes du jeu passent normalement
+-- via checkcaller() et le HumanoidRootPart check.
+-- ===================================================================
+pcall(function()
+	if not (hookmetamethod and checkcaller and newcclosure) then return end
+	local _realNewIndex = hookmetamethod(game, "__newindex", newcclosure(function(self, key, value)
+		if key == "WalkSpeed" and not checkcaller() then
+			local char = rawget(LP, "Character") or LP.Character
+			local hum  = char and char:FindFirstChildOfClass("Humanoid")
+			-- si quelqu'un d'autre essaie d'écrire notre WalkSpeed, on laisse
+			-- passer la valeur silencieusement sans l'appliquer
+			if hum and self == hum then return end
+		end
+		return _realNewIndex(self, key, value)
+	end))
+end)
+
+-- ===================================================================
+-- Couche 6 — Jitter helper : ajoute un délai aléatoire infime à
+-- n'importe quel intervalle de boucle pour casser les patterns fixes
+-- (les détecteurs à base de fréquence ne voient pas de pic régulier).
+-- Usage : task.wait(_AD_jitter(base, amplitude))
+-- ===================================================================
+local function _AD_jitter(base, amp)
+	amp = amp or base * 0.18
+	return math.max(0, base + (math.random() - 0.5) * 2 * amp)
+end
+
+-- ===================================================================
+-- Couche 7 — Script-source evasion : si l'executor expose
+-- setscriptable/makewritable, on efface le source du script courant
+-- pour qu'un dump de bytecode ne révèle pas nos strings sensibles.
+-- ===================================================================
+pcall(function()
+	local scr = getfenv and getfenv(0) and getfenv(0).script or nil
+	if not scr then return end
+	if typeof(setscriptable) == "function" then
+		pcall(function() setscriptable(scr, "Source", true) end)
+		pcall(function() scr.Source = "" end)
+	end
+end)
+
+-- ===================================================================
+-- Couche 8 — Isolation _GH : setreadonly bloque toute modification
+-- externe de notre table de fonctions (injection, overwrite d'API).
+-- ===================================================================
+pcall(function()
+	if typeof(setreadonly) == "function" then
+		-- On rend la table modifiable depuis l'intérieur via rawset,
+		-- mais bloque les writes Lua normaux venus de l'extérieur.
+		-- NOTE: on ne setreadonly(true) qu'après la construction complète
+		-- du hub — l'appel réel est à la toute fin du script.
+		_GH._AD_lockFn = function()
+			pcall(function() setreadonly(_GH, true) end)
+		end
+	end
+end)
 
 
 -- ===================================================================
@@ -429,7 +550,7 @@ local function ensureAceProxy(hrp2)
 	if _aceProxy and _aceProxy.Parent == char then return _aceProxy end
 	cleanAceProxy()
 	local p = Instance.new("Part")
-	p.Name = _NS .. "PX"; p.Size = Vector3.new(1,1,1)
+	p.Name = _AD_partName(); p.Size = Vector3.new(1,1,1)
 	p.Transparency = 1; p.CanCollide = false; p.Massless = true
 	p.Parent = char
 	local w = Instance.new("Weld", p)
@@ -723,7 +844,9 @@ end
 -- Ace RenderStepped speed loop — identical behaviour to Ace_duels_modified,
 -- plus a periodic ownership re-claim (belt-and-braces alongside the
 -- ReceiveAge watcher above) to keep rollback down over long sessions.
-RunService.RenderStepped:Connect(function(dt)
+-- newcclosure : la connexion RenderStepped du speed booster apparaît
+-- comme une C-closure — islclosure() = false, indétectable comme script Lua.
+RunService.RenderStepped:Connect(_ncc(function(dt)
 	if not _speedBoosterActive then cleanAceProxy(); return end
 	local char = LP.Character; if not char then cleanAceProxy(); return end
 	local hum  = char:FindFirstChildOfClass("Humanoid")
@@ -744,7 +867,7 @@ RunService.RenderStepped:Connect(function(dt)
 	local md  = hum.MoveDirection
 	local spd = getCurrentSpeed()
 	if md.Magnitude > 0 then
-		local _n = 1 + (math.random() - 0.5) * 0.04
+		local _n = 1 + (math.random() - 0.5) * 0.10  -- jitter ±5%
 		local px = ensureAceProxy(hrp2)
 		px.AssemblyLinearVelocity = Vector3.new(
 			md.X * spd * _n,
@@ -752,7 +875,7 @@ RunService.RenderStepped:Connect(function(dt)
 			md.Z * spd * _n
 		)
 	end
-end)
+end))
 
 -- ===================================================================
 -- PLOT DETECTION
@@ -1028,11 +1151,20 @@ local function startAutoStealV2()
 	_KAG_initSync()
 	task.spawn(function() pcall(_KAG_scanPlots) end)
 	_KAG_scanTask=task.spawn(function()
-		while _KAG_started do task.wait(5); pcall(_KAG_scanPlots) end
+		-- Jitter sur l'intervalle de scan : 4.5–5.5s au lieu de 5s fixe
+		-- pour ne pas créer de pic Heartbeat à fréquence constante.
+		while _KAG_started do task.wait(_AD_jitter(5, 0.5)); pcall(_KAG_scanPlots) end
 	end)
 	local _kState="READY"
+	-- Throttle anti-pattern : on ne tente un steal que tous les N frames
+	-- (N aléatoire entre 1 et 3) pour éviter le pattern d'appel frame-perfect.
+	local _kagFrameSkip = 0
+	local _kagFrameMax  = math.random(1, 3)
 	_KAG_conn=RunService.Heartbeat:Connect(function()
 		if not AutoSteal.Enabled or _KAG_Active then return end
+		_kagFrameSkip = _kagFrameSkip + 1
+		if _kagFrameSkip < _kagFrameMax then return end
+		_kagFrameSkip = 0; _kagFrameMax = math.random(1, 3)
 		local target=_KAG_pickClosest()
 		local newState=target and "UNREADY" or "READY"
 		if _kState~=newState then
@@ -1218,7 +1350,7 @@ local antiRagdollConn = nil
 
 local function startAntiRagdoll()
 	if antiRagdollConn then return end
-	antiRagdollConn = RunService.Heartbeat:Connect(function()
+	antiRagdollConn = RunService.Heartbeat:Connect(_ncc(function()
 		if not State.antiRagdollEnabled then return end
 		local char = LP.Character
 		if not char then return end
@@ -1257,7 +1389,7 @@ local function startAntiRagdoll()
 			root.AssemblyLinearVelocity = Vector3.zero
 			root.AssemblyAngularVelocity = Vector3.zero
 		end
-	end)
+	end))  -- _ncc close
 end
 
 local function stopAntiRagdoll()
@@ -7203,3 +7335,16 @@ end
 
 end
 _MH_buildUI()
+
+-- ===================================================================
+-- COUCHE FINALE — lock _GH après construction complète du hub.
+-- setreadonly bloque toute modification externe de notre table d'API
+-- (injection de fonctions, overwrite de callbacks, etc.).
+-- ===================================================================
+pcall(function()
+	if _GH._AD_lockFn then
+		_GH._AD_lockFn()
+		-- _AD_lockFn elle-même n'a plus d'utilité après l'appel.
+		rawset(_GH, "_AD_lockFn", nil)
+	end
+end)
