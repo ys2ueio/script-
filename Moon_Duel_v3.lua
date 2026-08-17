@@ -5931,11 +5931,20 @@ local function MH_load()
 		end
 
 		-- Toggle rows: restore saved state (ON and OFF) including defaults-ON features.
+		-- EXCEPTION — "Settings::Speed Bypass" : ce toggle pilote une boucle
+		-- RenderStepped bloquante (busy-wait, voir startLag()) qui freeze
+		-- visuellement le jeu tant qu'elle est active. La restaurer à ON
+		-- automatiquement au chargement du script produisait un freeze
+		-- silencieux à chaque relance, sans aucune action du joueur. On la
+		-- force donc TOUJOURS à OFF au chargement — l'activation ne doit
+		-- venir que d'un clic explicite dans la session en cours.
+		local _RESTORE_FORCE_OFF = { ["Settings::Speed Bypass"] = true }
 		if type(data.toggles) == "table" then
 			for key, on in pairs(data.toggles) do
 				local entry = _GH.allToggles and _GH.allToggles[key]
 				if entry then
-					if on then
+					local applyOn = on and not _RESTORE_FORCE_OFF[key]
+					if applyOn then
 						if entry.onToggle then pcall(entry.onToggle, true) end
 						entry.set(true)
 					else
