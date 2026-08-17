@@ -218,15 +218,38 @@ local _THEME_DEFS = {
 		d3      = Color3.fromRGB(95,45,165),
 		d4      = Color3.fromRGB(182,122,255),
 	},
+	-- "Moon" — thème dédié au fond d'écran personnalisé. Mêmes teintes
+	-- sombres/argentées que Dark (elles se fondent naturellement dans
+	-- l'image éclipse noir & blanc), mais c'est un ID de thème à part
+	-- entière : applyTheme() active/désactive l'image en fonction du nom,
+	-- donc "Moon" se comporte exactement comme Default/Dark/Crimson/
+	-- White/Purple — un seul actif à la fois, plus de toggle séparé.
+	moon = {
+		panel_bg= Color3.fromRGB(0,0,0),
+		text    = Color3.fromRGB(255,255,255),
+		moon_text= Color3.fromRGB(0,10,20),
+		moon    = Color3.fromRGB(215,215,225),
+		moon2   = Color3.fromRGB(180,185,200),
+		on_bg   = Color3.fromRGB(26,26,30),
+		border  = Color3.fromRGB(50,50,58),
+		silver  = Color3.fromRGB(220,222,230),
+		silver2 = Color3.fromRGB(155,158,170),
+		dim     = Color3.fromRGB(110,112,120),
+		d3      = Color3.fromRGB(40,40,48),
+		d4      = Color3.fromRGB(175,178,190),
+	},
 }
-local _currentTheme = "noir"   -- dark by default
+local _currentTheme = "moon"   -- Moon (dark + custom background) by default
 local _themeAllGuis = {}
 local _G_updateThemeUI = nil
 
--- Applique les couleurs noir immédiatement (avant toute création de GUI).
--- applyTheme() réutilise ces variables C_ lors de la construction de l'UI.
+-- Applique les couleurs du thème par défaut immédiatement (avant toute
+-- création de GUI). applyTheme() réutilise ces variables C_ lors de la
+-- construction de l'UI ; le fond d'écran, lui, est activé séparément
+-- par _personalizeEnabled=true plus bas (applyTheme n'est pas encore
+-- appelable ici, _GH.setPersonalize n'existe pas encore à ce stade).
 do
-	local _n = _THEME_DEFS["noir"]
+	local _n = _THEME_DEFS[_currentTheme]
 	C_MOON    = _n.moon;   C_MOON2   = _n.moon2;  C_MOONTEXT = _n.moon_text
 	C_ON_BG   = _n.on_bg;  C_BORDER  = _n.border
 	C_SILVER  = _n.silver; C_SILVER2 = _n.silver2; C_DIM = _n.dim
@@ -260,6 +283,10 @@ local function applyTheme(newName)
 	-- get caught by the descendant walk below.
 	C_BG = new.panel_bg; C_ROW = new.panel_bg; C_OFF_BG = new.panel_bg; C_HEADER = new.panel_bg
 	C_WHITE = new.text
+	-- Le fond d'écran personnalisé fait partie du thème "moon" — un seul
+	-- thème actif à la fois, donc choisir n'importe quel autre thème
+	-- l'éteint automatiquement (même mécanique que pour les couleurs).
+	if _GH.setPersonalize then _GH.setPersonalize(newName == "moon") end
 	for _, guiRoot in ipairs(_themeAllGuis) do
 		pcall(function()
 			for _, inst in ipairs(guiRoot:GetDescendants()) do
@@ -3187,10 +3214,8 @@ local function _setPersonalize(on)
 	_bgImageLabel.ImageTransparency = on and 0 or 1
 	bgImg.BackgroundTransparency    = on and 0.18 or 0
 end
-_GH.setPersonalize    = _setPersonalize
-_GH.getPersonalize    = function() return _personalizeEnabled end
-_GH.persSetV_settings = nil
-_GH.persSetV_theme    = nil
+_GH.setPersonalize = _setPersonalize
+_GH.getPersonalize = function() return _personalizeEnabled end
 
 local mainStroke, mainStrokeGrad = addLivingStroke(mainOuter, 2)
 -- Brighter "living gradient" sweep for the main panel border specifically —
@@ -5897,7 +5922,7 @@ local function MH_load()
 		-- by value at Create() time, so restoring toggles before applyTheme would
 		-- bake the default-blue into all pill tweens even in noir mode.
 		if data.theme == "default" or data.theme == "noir" or data.theme == "crimson"
-			or data.theme == "white" or data.theme == "purple" then
+			or data.theme == "white" or data.theme == "purple" or data.theme == "moon" then
 			applyTheme(data.theme)
 		end
 
@@ -6157,84 +6182,6 @@ buildPage("Settings", function()
 		end)
 	end
 
-	-- ── PERSONALIZE (Settings) — chip bouton style theme ──────────────
-	UIB.makeGap(4)
-	UIB.makeSectionLabel("Personalize")
-	UIB.makeGap(2)
-	do
-		local persRow = Instance.new("Frame", currentPage)
-		persRow.Size = UDim2.new(1,0,0,0); persRow.AutomaticSize = Enum.AutomaticSize.Y
-		persRow.BackgroundTransparency = 1; persRow.LayoutOrder = LO()
-		local persGrid = Instance.new("UIGridLayout", persRow)
-		persGrid.CellSize    = UDim2.new(1,-8,0,30)
-		persGrid.CellPadding = UDim2.new(0,0,0,0)
-		persGrid.SortOrder   = Enum.SortOrder.LayoutOrder
-
-		-- Chip "Custom Moon" — même structure que les theme chips, mais noir mat
-		-- avec un gradient shimmer argenté pour attirer l'attention.
-		local persBtn = Instance.new("TextButton", persRow)
-		persBtn.BackgroundColor3    = Color3.fromRGB(6, 6, 8)
-		persBtn.BackgroundTransparency = 0.05
-		persBtn.BorderSizePixel     = 0
-		persBtn.AutoButtonColor     = false
-		persBtn.Text                = "✦  Custom Moon"
-		persBtn.TextColor3          = Color3.fromRGB(200, 200, 210)
-		persBtn.Font                = Enum.Font.GothamBold
-		persBtn.TextSize            = 10
-		persBtn.LayoutOrder         = 1
-		addCorner(persBtn, 10)
-
-		-- Stroke spécial : gradient noir-argent qui brille via le living loop
-		local persStroke = Instance.new("UIStroke", persBtn)
-		persStroke.Thickness = 1.5
-		persStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-		local persStrokeGrad = Instance.new("UIGradient", persStroke)
-		persStrokeGrad.Color = ColorSequence.new({
-			ColorSequenceKeypoint.new(0,    Color3.fromRGB(30, 30, 35)),
-			ColorSequenceKeypoint.new(0.25, Color3.fromRGB(180,180,200)),
-			ColorSequenceKeypoint.new(0.5,  Color3.fromRGB(240,240,255)),
-			ColorSequenceKeypoint.new(0.75, Color3.fromRGB(180,180,200)),
-			ColorSequenceKeypoint.new(1,    Color3.fromRGB(30, 30, 35)),
-		})
-		table.insert(_livingStrokes, persStrokeGrad)  -- entre dans le loop de rotation
-
-		-- Gradient shimmer sur le texte
-		local persTxtGrad = Instance.new("UIGradient", persBtn)
-		persTxtGrad.Color = ColorSequence.new({
-			ColorSequenceKeypoint.new(0,    Color3.fromRGB(120,120,135)),
-			ColorSequenceKeypoint.new(0.4,  Color3.fromRGB(230,230,245)),
-			ColorSequenceKeypoint.new(0.6,  Color3.fromRGB(255,255,255)),
-			ColorSequenceKeypoint.new(1,    Color3.fromRGB(120,120,135)),
-		})
-		table.insert(_livingGradients, persTxtGrad)
-
-		-- État ON/OFF visuels
-		local function _persUpdateVisual(on)
-			persBtn.Text = on and "✦  Custom Moon  ✓" or "✦  Custom Moon"
-			persBtn.BackgroundColor3 = on
-				and Color3.fromRGB(14, 14, 18)
-				or  Color3.fromRGB(6,  6,  8)
-		end
-		_persUpdateVisual(_personalizeEnabled)   -- état initial = ON
-
-		persBtn.MouseButton1Click:Connect(function()
-			local newOn = not _personalizeEnabled
-			if _GH.setPersonalize then _GH.setPersonalize(newOn) end
-			_persUpdateVisual(newOn)
-			if _GH.persSetV_theme then _GH.persSetV_theme(newOn) end
-			if _GH.showToast then _GH.showToast("Custom Moon", newOn and "on" or "off") end
-		end)
-
-		-- setV compatible avec la sync cross-tab
-		local function _persSetV_s(on)
-			if _personalizeEnabled ~= on then
-				if _GH.setPersonalize then _GH.setPersonalize(on) end
-			end
-			_persUpdateVisual(on)
-		end
-		_GH.persSetV_settings = _persSetV_s
-	end
-
 	UIB.makeGap(4)
 	UIB.makeSectionLabel("Bypass")
 	UIB.makeToggleRow("Speed Bypass", false, function(on)
@@ -6416,6 +6363,7 @@ buildPage("Settings", function()
 			{id="crimson", label="Crimson", swatch=Color3.fromRGB(225,70,95)},
 			{id="white",   label="White",   swatch=Color3.fromRGB(255,255,255)},
 			{id="purple",  label="Purple",  swatch=Color3.fromRGB(170,110,255)},
+			{id="moon",    label="✦ Moon",  swatch=Color3.fromRGB(215,215,225)},
 		}
 		local thWrap = Instance.new("Frame", currentPage)
 		thWrap.Size = UDim2.new(1,0,0,0); thWrap.AutomaticSize = Enum.AutomaticSize.Y
@@ -6441,66 +6389,11 @@ buildPage("Settings", function()
 				if _GH.showToast then _GH.showToast("Theme: " .. t.label, "info") end
 			end)
 		end
-		-- ── Bouton "Custom Moon" intégré dans la même grille que les thèmes ──
-		-- Occupe une cellule full-width sur une nouvelle ligne (6ème item,
-		-- le UIGridLayout le place automatiquement sous les 5 chips précédents
-		-- si la grille a 3 colonnes, ou en dernière position sinon).
-		-- Style distinct : fond noir mat + stroke shimmer argent animé.
-		local persChip = Instance.new("TextButton", thWrap)
-		persChip.BackgroundColor3    = Color3.fromRGB(5, 5, 7)
-		persChip.BackgroundTransparency = 0.05
-		persChip.BorderSizePixel     = 0
-		persChip.AutoButtonColor     = false
-		persChip.Text                = "✦  Custom Moon"
-		persChip.TextColor3          = Color3.fromRGB(195, 195, 210)
-		persChip.Font                = Enum.Font.GothamBold
-		persChip.TextSize            = 9
-		persChip.LayoutOrder         = #THEME_LIST + 1
-		addCorner(persChip, 8)
-
-		-- Stroke shimmer noir/argent (entre dans _livingStrokes pour la rotation)
-		local pcStroke = Instance.new("UIStroke", persChip)
-		pcStroke.Thickness = 1.5; pcStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-		local pcStrokeGrad = Instance.new("UIGradient", pcStroke)
-		pcStrokeGrad.Color = ColorSequence.new({
-			ColorSequenceKeypoint.new(0,    Color3.fromRGB(20,  20,  25)),
-			ColorSequenceKeypoint.new(0.25, Color3.fromRGB(160, 160, 180)),
-			ColorSequenceKeypoint.new(0.5,  Color3.fromRGB(230, 230, 255)),
-			ColorSequenceKeypoint.new(0.75, Color3.fromRGB(160, 160, 180)),
-			ColorSequenceKeypoint.new(1,    Color3.fromRGB(20,  20,  25)),
-		})
-		table.insert(_livingStrokes, pcStrokeGrad)
-
-		local function _persChipUpdateVisual(on)
-			persChip.Text = on
-				and "✦  Custom Moon  ✓"
-				or  "✦  Custom Moon"
-			persChip.BackgroundColor3 = on
-				and Color3.fromRGB(18, 18, 22)
-				or  Color3.fromRGB(5,  5,  7)
-			persChip.TextColor3 = on
-				and Color3.fromRGB(235, 235, 255)
-				or  Color3.fromRGB(195, 195, 210)
-		end
-		_persChipUpdateVisual(_personalizeEnabled)   -- ON par défaut
-
-		persChip.MouseButton1Click:Connect(function()
-			local newOn = not _personalizeEnabled
-			if _GH.setPersonalize then _GH.setPersonalize(newOn) end
-			_persChipUpdateVisual(newOn)
-			if _GH.persSetV_settings then _GH.persSetV_settings(newOn) end
-			if _GH.showToast then _GH.showToast("Custom Moon", newOn and "on" or "off") end
-		end)
-
-		-- sync cross-tab
-		local function _persSetV_t(on)
-			if _personalizeEnabled ~= on then
-				if _GH.setPersonalize then _GH.setPersonalize(on) end
-			end
-			_persChipUpdateVisual(on)
-		end
-		_GH.persSetV_theme = _persSetV_t
-
+		-- "Moon" est un item standard de THEME_LIST (voir plus haut) : même
+		-- boucle de création, même mécanique de clic (applyTheme(t.id)),
+		-- donc mutuellement exclusif avec les 5 autres — le sélectionner
+		-- active le fond d'écran (via applyTheme, voir plus haut) et en
+		-- choisir un autre l'éteint automatiquement. Pas de widget séparé.
 		_G_updateThemeUI = function(name)
 			for id, entry in pairs(_themeBtns) do
 				local active = (id == name)
@@ -6509,6 +6402,10 @@ buildPage("Settings", function()
 				entry.btn.TextColor3 = active and Color3.fromRGB(12,10,16) or C_SILVER2
 			end
 		end
+		-- Reflète immédiatement le thème de départ ("moon") dans la grille —
+		-- sans ça, seul un clic ultérieur (ou un restore) déclencherait le
+		-- highlight, et aucun chip n'apparaîtrait actif au premier affichage.
+		_G_updateThemeUI(_currentTheme)
 	end
 
 	UIB.makeGap(6)
