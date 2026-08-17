@@ -944,7 +944,7 @@ stealProgressBar.Position = UDim2.new(0.5,-150,1,-86)
 stealProgressBar.BackgroundColor3 = C_PANEL
 stealProgressBar.BorderSizePixel = 0; stealProgressBar.ZIndex = 100
 addCorner(stealProgressBar,14)
-addStroke(stealProgressBar, C_YSLEM, 1.5, 0.3)
+local stealStroke = addStroke(stealProgressBar, C_YSLEM, 1.5, 0.3)
 
 local sbTitle = Instance.new("TextLabel", stealProgressBar)
 sbTitle.Size = UDim2.new(0.5,0,0,14); sbTitle.Position = UDim2.new(0,16,0,8)
@@ -973,7 +973,7 @@ local barFill = Instance.new("Frame", barTrack)
 barFill.Size = UDim2.new(0,0,1,0); barFill.BackgroundColor3 = C_YSLEM
 barFill.BorderSizePixel = 0; barFill.ZIndex = 102
 addCorner(barFill,5)
-addGradient(barFill, C_YSLEM, C_PINK, 0)
+local barFillGrad = addGradient(barFill, C_YSLEM, C_PINK, 0)
 
 AutoSteal.ProgressFill = barFill
 AutoSteal.ProgressText = pctLbl
@@ -984,7 +984,19 @@ main.Name = "Main"; main.Size = UDim2.new(0,260,0,450)
 main.Position = UDim2.new(0,20,0,20)
 main.BackgroundColor3 = C_BG; main.BorderSizePixel = 0; main.Active = true; main.ClipsDescendants = true
 addCorner(main,16)
-addStroke(main, C_YSLEM, 1.5, 0.3)
+local mainStroke = addStroke(main, C_YSLEM, 1.5, 0.3)
+
+-- IMAGE DE FOND (background décoratif, semi-transparent)
+local bgImage = Instance.new("ImageLabel", main)
+bgImage.Name = "BgImage"
+bgImage.Size = UDim2.new(1,0,1,0)
+bgImage.Position = UDim2.new(0,0,0,0)
+bgImage.BackgroundTransparency = 1
+bgImage.Image = "rbxassetid://116324254515657"
+bgImage.ImageTransparency = 0.6
+bgImage.ScaleType = Enum.ScaleType.Crop
+bgImage.ZIndex = 0
+addCorner(bgImage, 16)
 
 local function makeDraggable(frame, handle)
 	handle = handle or frame
@@ -1015,12 +1027,12 @@ makeDraggable(main, header)
 local accentBar = Instance.new("Frame", main)
 accentBar.Size = UDim2.new(1,0,0,2); accentBar.Position = UDim2.new(0,0,0,52)
 accentBar.BackgroundColor3 = C_YSLEM; accentBar.BorderSizePixel = 0; accentBar.ZIndex = 6
-addGradient(accentBar, C_YSLEM, C_PINK, 0)
+local accentBarGrad = addGradient(accentBar, C_YSLEM, C_PINK, 0)
 
 local logoDot = Instance.new("Frame", header)
 logoDot.Size = UDim2.new(0,8,0,8); logoDot.Position = UDim2.new(0,14,0.5,-4)
 logoDot.BackgroundColor3 = C_YSLEM; logoDot.BorderSizePixel = 0; logoDot.ZIndex = 7
-addCorner(logoDot,4); addGradient(logoDot, C_YSLEM, C_PINK, 45)
+addCorner(logoDot,4); local logoDotGrad = addGradient(logoDot, C_YSLEM, C_PINK, 45)
 
 local titleLbl = Instance.new("TextLabel", header)
 titleLbl.Size = UDim2.new(1,-80,0,20); titleLbl.Position = UDim2.new(0,28,0,10)
@@ -1048,7 +1060,7 @@ miniBtn.BackgroundColor3 = C_YSLEM; miniBtn.BorderSizePixel = 0
 miniBtn.Text = "YSLEM HUB"; miniBtn.TextColor3 = C_WHITE
 miniBtn.Font = Enum.Font.GothamBlack; miniBtn.TextSize = 11
 miniBtn.Visible = false; miniBtn.ZIndex = 50
-addCorner(miniBtn,10); addGradient(miniBtn, C_YSLEM, C_PINK, 25)
+addCorner(miniBtn,10); local miniBtnGrad = addGradient(miniBtn, C_YSLEM, C_PINK, 25)
 makeDraggable(miniBtn)
 
 closeBtn.MouseButton1Click:Connect(function() main.Visible=false; closeBtn.Visible=false; miniBtn.Visible=true end)
@@ -1276,6 +1288,99 @@ setAutoRight = makeToggleRow("Auto Right", false, function(on)
 		stopAutoRight()
 	end
 end, "keyAutoRight")
+
+makeGap(6)
+makeSectionLabel("Personnalise")
+
+-- Ligne accent : swatches de couleur + toggle image de fond
+local pAccentRow = Instance.new("Frame", scroll)
+pAccentRow.Size = UDim2.new(1,0,0,36); pAccentRow.BackgroundColor3 = C_ROW
+pAccentRow.BorderSizePixel = 0; pAccentRow.LayoutOrder = LO()
+Instance.new("UICorner", pAccentRow).CornerRadius = UDim.new(0,8)
+local pAccentLbl = Instance.new("TextLabel", pAccentRow)
+pAccentLbl.Size = UDim2.new(0.4,0,1,0); pAccentLbl.Position = UDim2.new(0,12,0,0)
+pAccentLbl.BackgroundTransparency = 1; pAccentLbl.Text = "Couleur"
+pAccentLbl.TextColor3 = C_ACCENT; pAccentLbl.Font = Enum.Font.GothamBold; pAccentLbl.TextSize = 12
+pAccentLbl.TextXAlignment = Enum.TextXAlignment.Left
+
+-- Palettes d'accent disponibles : {c1 (principal), c2 (secondaire/rose)}
+local ACCENT_PALETTES = {
+	{Color3.fromRGB(168,85,247),  Color3.fromRGB(236,72,153)},   -- Violet + Rose (défaut)
+	{Color3.fromRGB(34,211,238),  Color3.fromRGB(59,130,246)},   -- Cyan + Bleu
+	{Color3.fromRGB(74,222,128),  Color3.fromRGB(16,185,129)},   -- Vert + Émeraude
+	{Color3.fromRGB(239,68,68),   Color3.fromRGB(249,115,22)},   -- Rouge + Orange
+	{Color3.fromRGB(234,179,8),   Color3.fromRGB(249,115,22)},   -- Or + Orange
+}
+local SW = 20; local SG = 6
+local totalSwW = #ACCENT_PALETTES * (SW + SG) - SG
+
+-- Swatch actif (highlight)
+local activeSwatchStroke = nil
+
+local function applyAccent(c1, c2, swStroke)
+	-- Mettre à jour les couleurs des éléments visuels clés
+	C_YSLEM = c1; C_PINK = c2
+	TweenService:Create(mainStroke,    TweenInfo.new(0.25), {Color=c1}):Play()
+	TweenService:Create(stealStroke,   TweenInfo.new(0.25), {Color=c1}):Play()
+	TweenService:Create(accentBar,     TweenInfo.new(0.25), {BackgroundColor3=c1}):Play()
+	TweenService:Create(logoDot,       TweenInfo.new(0.25), {BackgroundColor3=c1}):Play()
+	TweenService:Create(miniBtn,       TweenInfo.new(0.25), {BackgroundColor3=c1}):Play()
+	TweenService:Create(barFill,       TweenInfo.new(0.25), {BackgroundColor3=c1}):Play()
+	scroll.ScrollBarImageColor3 = c1
+	accentBarGrad.Color  = ColorSequence.new(c1, c2)
+	logoDotGrad.Color    = ColorSequence.new(c1, c2)
+	miniBtnGrad.Color    = ColorSequence.new(c1, c2)
+	barFillGrad.Color    = ColorSequence.new(c1, c2)
+	-- Highlight du swatch sélectionné
+	if activeSwatchStroke then activeSwatchStroke.Transparency = 1 end
+	activeSwatchStroke = swStroke
+	if swStroke then swStroke.Transparency = 0 end
+end
+
+for i, pal in ipairs(ACCENT_PALETTES) do
+	local sw = Instance.new("TextButton", pAccentRow)
+	sw.Size = UDim2.new(0,SW,0,SW)
+	sw.Position = UDim2.new(1, -totalSwW - 8 + (i-1)*(SW+SG), 0.5, -SW/2)
+	sw.BackgroundColor3 = pal[1]; sw.BorderSizePixel = 0; sw.Text = ""; sw.ZIndex = 5
+	Instance.new("UICorner", sw).CornerRadius = UDim.new(1,0)
+	local swStroke = Instance.new("UIStroke", sw)
+	swStroke.Color = Color3.fromRGB(255,255,255); swStroke.Thickness = 2
+	swStroke.Transparency = (i == 1) and 0 or 1  -- violet sélectionné par défaut
+	if i == 1 then activeSwatchStroke = swStroke end
+	local c1, c2 = pal[1], pal[2]
+	sw.MouseButton1Click:Connect(function() applyAccent(c1, c2, swStroke) end)
+end
+
+-- Ligne opacité du fond : slider (toggle simple entre 3 niveaux)
+local bgOpRow = Instance.new("Frame", scroll)
+bgOpRow.Size = UDim2.new(1,0,0,30); bgOpRow.BackgroundColor3 = C_ROW
+bgOpRow.BorderSizePixel = 0; bgOpRow.LayoutOrder = LO()
+Instance.new("UICorner", bgOpRow).CornerRadius = UDim.new(0,8)
+local bgOpLbl = Instance.new("TextLabel", bgOpRow)
+bgOpLbl.Size = UDim2.new(0.55,0,1,0); bgOpLbl.Position = UDim2.new(0,12,0,0)
+bgOpLbl.BackgroundTransparency = 1; bgOpLbl.Text = "Fond image"
+bgOpLbl.TextColor3 = C_ACCENT; bgOpLbl.Font = Enum.Font.GothamBold; bgOpLbl.TextSize = 12
+bgOpLbl.TextXAlignment = Enum.TextXAlignment.Left
+-- Boutons : Caché / Léger / Visible
+local BG_STEPS = {
+	{label="Off",    tr=1.0},
+	{label="Léger",  tr=0.75},
+	{label="Fort",   tr=0.45},
+}
+local bgStepIdx = 2  -- Léger par défaut
+local bgStepBtn = Instance.new("TextButton", bgOpRow)
+bgStepBtn.Size = UDim2.new(0,72,0,20); bgStepBtn.Position = UDim2.new(1,-78,0.5,-10)
+bgStepBtn.BackgroundColor3 = Color3.fromRGB(0,0,0); bgStepBtn.BorderSizePixel = 0
+bgStepBtn.Text = BG_STEPS[bgStepIdx].label; bgStepBtn.TextColor3 = C_ACCENT2
+bgStepBtn.Font = Enum.Font.GothamBold; bgStepBtn.TextSize = 11; bgStepBtn.ZIndex = 5
+Instance.new("UICorner", bgStepBtn).CornerRadius = UDim.new(0,6)
+Instance.new("UIStroke", bgStepBtn).Color = C_BORDER2
+bgStepBtn.MouseButton1Click:Connect(function()
+	bgStepIdx = bgStepIdx % #BG_STEPS + 1
+	local step = BG_STEPS[bgStepIdx]
+	bgStepBtn.Text = step.label
+	TweenService:Create(bgImage, TweenInfo.new(0.3), {ImageTransparency = step.tr}):Play()
+end)
 
 makeGap(8)
 local footerLbl = Instance.new("TextLabel", scroll)
