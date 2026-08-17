@@ -2264,9 +2264,20 @@ end
 _G["_MH_GUI"] = gui
 
 -- ===================================================================
+-- INSTANT UI LOAD — quand activé, saute entièrement la cinématique
+-- d'intro ci-dessous (~4.2s) : le hub est utilisable immédiatement au
+-- chargement, sans aucune frame perdue à attendre l'animation. Activé
+-- par défaut. Le bloc intro reste 100% intact plus bas, juste non
+-- exécuté quand ce flag est vrai — zéro risque de casser l'animation
+-- elle-même, aucune de ses variables locales n'est utilisée ailleurs
+-- dans le fichier (bloc do..end totalement autonome, vérifié).
+-- ===================================================================
+local INSTANT_UI_LOAD = true
+
+-- ===================================================================
 -- INTRO CUTSCENE — crescent moon reveal, orbit ring, cinematic zoom (~4.2s)
 -- ===================================================================
-do
+if not INSTANT_UI_LOAD then
 	local introGui = Instance.new("Frame", gui)
 	introGui.Name = tostring(math.random(0x10000, 0xFFFFFF))
 	introGui.Size = UDim2.new(1,0,1,0)
@@ -5404,25 +5415,62 @@ _floatDefs.battp = {
 
 
 -- ===================================================================
--- INSTANT RESET — copie exacte de la logique Ace Duels (100%, zéro trace
--- des anciennes méthodes locales). Hookfunction capture le remote RE/,
--- fallback scan ReplicatedStorage, boucle 10x/0.05s, stop sur resetDetected.
+-- INSTANT RESET — fling + void + force-kill (porté depuis "insta reset
+-- by forest"). Remplace l'ancienne logique (capture d'un remote "RE/…"
+-- spécifique à ce jeu + FireServer répété d'un payload "balloon") par
+-- une méthode universelle qui ne dépend d'AUCUN remote du jeu :
+--   1. Gèle la caméra (Scriptable + BindToRenderStep) pour éviter le
+--      vertige visuel pendant la catapulte
+--   2. Cache le personnage localement (LocalTransparencyModifier) —
+--      invisible pour SOI uniquement, zéro effet sur les autres joueurs
+--   3. Débloque puis catapulte le HumanoidRootPart vers le haut
+--      (AssemblyLinearVelocity/Velocity) pendant FLING_TIME
+--   4. Si toujours pas respawn, l'envoie sous FallenPartsDestroyHeight
+--      pendant VOID_TIME — le moteur Roblox lui-même s'occupe de tuer
+--      le personnage, aucune dépendance au jeu
+--   5. Dernier recours : force Health=0 + ChangeState(Dead) +
+--      BreakJoints en boucle jusqu'à TIMEOUT
+--   6. Nettoie tout (bind caméra, connexions) et restaure la caméra
+--      sur le nouveau personnage dès qu'il apparaît
+--
+-- Point d'intégration inchangé : _G.AceCursedInstaReset() reste le nom
+-- appelé par tout le reste du hub (_GH.MH_instareset, le bouton
+-- flottant "INSTANT RESET", le keybind Settings > Keybind, Auto Reset
+-- on Death, Auto Reset Medusa) — rien d'autre à toucher ailleurs dans
+-- le fichier. _irResetting empêche un double-déclenchement si le
+-- bouton/touche est pressé plusieurs fois pendant une catapulte en cours
+-- (l'ancienne version n'avait aucune protection contre ça).
+--
+-- Compromis assumé : si le personnage est DÉJÀ mort (Health<=0) au
+-- moment de l'appel, cette version ne fait rien — contrairement à
+-- l'ancienne qui tentait un FireServer de secours sur son remote
+-- spécifique. Cette méthode universelle n'a pas d'équivalent générique
+-- pour ce cas précis ; le respawn normal du jeu prend le relais.
 -- ===================================================================
-_G.AceCursedResetRemote = _G.AceCursedResetRemote or nil
-_G.AceCursedResetGuid   = _G.AceCursedResetGuid or "f888ee6e-c86d-46e1-93d7-0639d6635d42"
-pcall(function()
-	if not _G.AceCursedResetHooked and hookfunction and newcclosure then
-		_G.AceCursedResetHooked = true
-		local oldFire
-		oldFire = hookfunction(Instance.new("RemoteEvent").FireServer, newcclosure(function(self, ...)
-			if not _G.AceCursedResetRemote and typeof(self) == "Instance" and self:IsA("RemoteEvent") and self.Name:sub(1,3) == "RE/" then
-				_G.AceCursedResetRemote = self
-			end
-			return oldFire(self, ...)
-		end))
+local _IR_CAM_BIND = _NS .. "InstaResetCam"
+local _IR_CFG = {
+	FLING_TIME  = 0.4,
+	FLING_POWER = 50000,
+	USE_VOID    = true,
+	VOID_TIME   = 0.6,
+	TIMEOUT     = 6,
+}
+local _irResetting = false
+
+local function _irHideLocally(obj)
+	if obj:IsA("BasePart") or obj:IsA("Decal") then
+		obj.LocalTransparencyModifier = 1
 	end
-end)
+end
+
 function _G.AceCursedInstaReset()
+	if _irResetting then return end
+	local char = LP.Character
+	if not char or not char.Parent then return end
+	local hum = char:FindFirstChildOfClass("Humanoid")
+	if not hum or hum.Health <= 0 then return end
+	local hrp = hum.RootPart or char:FindFirstChild("HumanoidRootPart")
+
 	-- The forced kill/respawn below ragdolls the character just like a real
 	-- stun would, which would otherwise falsely flash the "READY!!" speed
 	-- billboard into a stun countdown right after a self-reset. Suppressed
@@ -5432,41 +5480,98 @@ function _G.AceCursedInstaReset()
 	if _GH.setStunSuppressed then _GH.setStunSuppressed(true) end
 	task.delay(3.0, function() if _GH.setStunSuppressed then _GH.setStunSuppressed(false) end end)
 
-	if not _G.AceCursedResetRemote then
-		for _, desc in ipairs(game:GetService("ReplicatedStorage"):GetDescendants()) do
-			if desc:IsA("RemoteEvent") and desc.Name:sub(1,3) == "RE/" then
-				_G.AceCursedResetRemote = desc
-				break
+	_irResetting = true
+	task.spawn(function()
+		local cam = workspace.CurrentCamera
+		local frozen = cam.CFrame
+		local old_type = cam.CameraType
+		pcall(function()
+			cam.CameraType = Enum.CameraType.Scriptable
+			RunService:BindToRenderStep(_IR_CAM_BIND, Enum.RenderPriority.Camera.Value + 1, function()
+				cam.CFrame = frozen
+			end)
+		end)
+
+		local added
+		pcall(function()
+			for _, obj in ipairs(char:GetDescendants()) do pcall(_irHideLocally, obj) end
+			added = char.DescendantAdded:Connect(function(obj) pcall(_irHideLocally, obj) end)
+		end)
+
+		local new_char
+		local respawned = LP.CharacterAdded:Connect(function(c) new_char = c end)
+
+		local function unlock()
+			pcall(function() hum.PlatformStand = false end)
+			pcall(function() hum.Sit = false end)
+			pcall(function() hum.AutoRotate = true end)
+		end
+		unlock()
+
+		for _, obj in ipairs(char:GetDescendants()) do
+			if obj:IsA("BasePart") then
+				pcall(function() obj.Anchored = false end)
+				pcall(function() obj.CanCollide = false end)
+			elseif obj.Name == "SeatWeld" then
+				pcall(function() obj:Destroy() end)
 			end
 		end
-	end
-	if not _G.AceCursedResetRemote then return end
-	local character = LP.Character
-	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-	if humanoid and humanoid.Health <= 0 then
-		pcall(function() _G.AceCursedResetRemote:FireServer(_G.AceCursedResetGuid, LP, "balloon") end)
-		return
-	end
-	local resetDetected = false
-	local resetConns = {}
-	if humanoid then
-		table.insert(resetConns, humanoid.Died:Connect(function() resetDetected = true end))
-		table.insert(resetConns, humanoid:GetPropertyChangedSignal("Health"):Connect(function()
-			if humanoid.Health <= 0 then resetDetected = true end
-		end))
-	end
-	if character then
-		table.insert(resetConns, character.AncestryChanged:Connect(function(_, parent)
-			if not parent then resetDetected = true end
-		end))
-	end
-	task.spawn(function()
-		for _ = 1, 10 do
-			if resetDetected then break end
-			pcall(function() _G.AceCursedResetRemote:FireServer(_G.AceCursedResetGuid, LP, "balloon") end)
-			task.wait(0.05)
+
+		local started = os.clock()
+		local function alive_hrp()
+			if hrp and hrp.Parent then return hrp end
+			hrp = hum.RootPart or char:FindFirstChild("HumanoidRootPart")
+			if hrp and hrp.Parent then return hrp end
+			return nil
 		end
-		for _, conn in ipairs(resetConns) do pcall(function() conn:Disconnect() end) end
+
+		local fling_until = os.clock() + _IR_CFG.FLING_TIME
+		while not new_char and os.clock() < fling_until and hum.Parent do
+			unlock()
+			pcall(function() hum.HipHeight = 1e30 end)
+			local root = alive_hrp()
+			if root then
+				pcall(function() root.Anchored = false end)
+				pcall(function() root.AssemblyLinearVelocity = Vector3.new(0, _IR_CFG.FLING_POWER, 0) end)
+				pcall(function() root.Velocity = Vector3.new(0, _IR_CFG.FLING_POWER, 0) end)
+			end
+			RunService.Heartbeat:Wait()
+		end
+
+		if _IR_CFG.USE_VOID and not new_char then
+			local floor = -500
+			pcall(function() floor = workspace.FallenPartsDestroyHeight end)
+			local void_until = os.clock() + _IR_CFG.VOID_TIME
+			while not new_char and os.clock() < void_until do
+				local root = alive_hrp()
+				if not root then break end
+				pcall(function() root.CFrame = CFrame.new(0, floor - 500, 0) end)
+				pcall(function() root.AssemblyLinearVelocity = Vector3.new(0, -_IR_CFG.FLING_POWER, 0) end)
+				RunService.Heartbeat:Wait()
+			end
+		end
+
+		while not new_char and os.clock() - started < _IR_CFG.TIMEOUT do
+			if hum.Parent then
+				pcall(function() hum.Health = 0 end)
+				pcall(function() hum:ChangeState(Enum.HumanoidStateType.Dead) end)
+			end
+			if char.Parent then pcall(function() char:BreakJoints() end) end
+			task.wait(0.1)
+		end
+
+		pcall(function() respawned:Disconnect() end)
+		if added then pcall(function() added:Disconnect() end) end
+		pcall(function() RunService:UnbindFromRenderStep(_IR_CAM_BIND) end)
+		pcall(function()
+			cam.CameraType = old_type == Enum.CameraType.Scriptable and Enum.CameraType.Custom or old_type
+			if new_char then
+				local new_hum = new_char:FindFirstChildOfClass("Humanoid")
+					or new_char:WaitForChild("Humanoid", 5)
+				if new_hum then cam.CameraSubject = new_hum end
+			end
+		end)
+		_irResetting = false
 	end)
 end
 
