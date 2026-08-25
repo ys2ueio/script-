@@ -8,9 +8,19 @@ Un seul fichier, aucune dépendance : ouvre `index.html` dans un navigateur.
 Tu joues contre 5 adversaires aux profils distincts (serré-agressif, suiveur passif,
 large-agressif, imprévisible…), 100 blindes de tapis, blindes 25/50, recave automatique.
 
-À **chaque** décision, le coach te parle en une phrase claire sous la table
-(« Tu gagnes ce coup 62 fois sur 100, et il te suffit d'en gagner 25 pour que payer
-soit rentable. Suis les 375. »). Un repli **Voir les chiffres** donne le détail :
+À **chaque** décision, le coach t'explique la situation en mots simples, sans jargon
+non défini — il nomme tes cartes et leur valeur, dit ce que vaut ta main et ce qui la bat,
+traduit le prix demandé en « il te suffit de gagner 1 fois sur 4 », puis conclut :
+
+> Tes 2 cartes plus les 3 du tableau : ta meilleure main de 5 cartes, c'est **deux paires**
+> (deux fois deux cartes de même valeur). Un brelan ou mieux te bat. Tu gagnes ce coup
+> **9 fois sur 10**. Il y a 900 au milieu et on te demande 300 : tu risques 1 pour en gagner 3.
+> Autrement dit, il te suffit de gagner **1 fois sur 4** pour rentrer dans tes frais — c'est ça,
+> la **cote du pot**. Tu gagnes plus souvent que ce que le prix exige : **relance à 750**.
+
+Après ton choix, il explique ce qui était juste ou faux dans le raisonnement — jamais dans
+le résultat. Entre deux décisions, il glisse un rappel (ordre des cartes, classement des
+mains, kicker, outs, position). Un repli **Voir les chiffres** donne le détail :
 
 - ton **équité réelle**, calculée par simulation Monte-Carlo (2 200 tirages) contre le
   nombre exact d'adversaires encore en jeu ;

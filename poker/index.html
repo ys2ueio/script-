@@ -1555,59 +1555,137 @@ const REC_LABEL = {fold:'te coucher', check:'checker', call:'suivre', raise:'mis
 function judge(a, kind, target){
   const fam = k => k === 'raise' ? 2 : (k === 'call' || k === 'check') ? 1 : 0;
   const r = fam(a.rec.kind), g = fam(kind);
-  const sur = n => Math.round(n*100);
-  if (r === g) return {tone:'good', text:'<b>Bien joué.</b> C\'est exactement la ligne que je conseillais.'};
+  const sur = n => Math.round(1/Math.max(n, 0.02));
+  if (r === g) return {tone:'good', text:'<b>C\'est ça.</b> Retiens le raisonnement : on compare toujours <i>la fréquence à laquelle on gagne</i> au <i>prix demandé</i>. Tout le poker tient là-dedans.'};
   if (g === 0 && r >= 1){
-    if (a.toCall === 0) return {tone:'bad', text:'<b>Tu te couches alors que c\'était gratuit !</b> Checker ne coûte rien : ne jette jamais une main quand personne n\'a misé.'};
-    return {tone:'bad', text:'<b>Trop prudent.</b> Tu gagnais ce coup <span class="num">' + sur(a.eq) + '</span> fois sur 100 et il t\'en fallait seulement <span class="num">' + sur(a.need) + '</span> : suivre te rapportait <span class="num">' + fmt(a.ev) + '</span> jetons en moyenne.'};
+    if (a.toCall === 0) return {tone:'bad', text:'<b>Tu viens de jeter une main sans rien devoir !</b> Quand personne n\'a misé, la <b>parole</b> est gratuite : tu gardes ta main et tu vois la carte suivante sans payer. On ne se couche jamais dans cette situation.'};
+    return {tone:'bad', text:'<b>Un peu trop prudent.</b> Le prix demandait de gagner 1 fois sur ' + sur(a.need) + ', et tu gagnais ' + surDix(a.eq) + '. Se coucher quand on gagne <i>plus souvent</i> que le prix exigé, c\'est laisser filer ' + fmt(a.ev) + ' jetons en moyenne.'};
   }
-  if (g === 1 && r === 0) return {tone:'bad', text:'<b>Ce suivi coûte cher.</b> Il te fallait <span class="num">' + sur(a.need) + '</span> chances sur 100, tu n\'en avais que <span class="num">' + sur(a.eq) + '</span>. Sur la durée, ce genre de suivi perd <span class="num">' + fmt(Math.abs(a.ev)) + '</span> jetons à chaque fois.'};
-  if (g === 1 && r === 2) return {tone:'warn', text:'<b>Trop gentil.</b> Avec <span class="num">' + sur(a.eq) + '</span> chances sur 100, il fallait miser : tu laisses les tirages adverses voir la carte suivante gratuitement.'};
-  if (g === 2 && r <= 1) return {tone:'warn', text:'<b>Bluff osé.</b> Ça peut passer, mais avec <span class="num">' + sur(a.eq) + '</span> chances sur 100, ' + REC_LABEL[a.rec.kind] + ' était plus sûr.'};
-  return {tone:'warn', text:'Je conseillais plutôt de <b>' + REC_LABEL[a.rec.kind] + '</b>.'};
+  if (g === 1 && r === 0) return {tone:'bad', text:'<b>Là tu as payé trop cher.</b> Le prix exigeait de gagner 1 fois sur ' + sur(a.need) + ' et tu ne gagnais que ' + surDix(a.eq) + '. Gagner le coup de temps en temps ne change rien : répété, ce suivi perd <b>' + fmt(Math.abs(a.ev)) + '</b> jetons à chaque fois.'};
+  if (g === 1 && r === 2) return {tone:'warn', text:'<b>Trop gentil.</b> Quand tu es devant ' + surDix(a.eq) + ', payer laisse les autres voir la carte suivante gratuitement. Miser, c\'est leur <i>faire payer</i> leurs chances de te dépasser — et grossir le pot que tu gagneras le plus souvent.'};
+  if (g === 2 && r <= 1) return {tone:'warn', text:'<b>Coup osé.</b> Un bluff, ça peut marcher, mais il doit gagner assez souvent pour se financer : miser la moitié du pot doit faire coucher l\'adversaire <b>1 fois sur 3</b>. Avec ' + surDix(a.eq) + ' de chances de gagner à l\'abattage, la ligne prudente était plus sûre.'};
+  return {tone:'warn', text:'Autre ligne possible, mais je te conseillais plutôt de <b>' + REC_LABEL[a.rec.kind] + '</b> — relis le raisonnement au coup suivant.'};
 }
 
-/* ── le coach parle : des phrases, pas un tableau de bord ────── */
-const CARTES = cs => cs.map(c => '<b>' + cardTxt(c) + '</b>').join(' ');
+/* ── le coach enseigne : on nomme, on explique, on conclut ───── */
+const NOM_S = {s:'pique', h:'cœur', d:'carreau', c:'trèfle'};
+const nomCarte = c => RLAB_G[c.r] + ' de ' + NOM_S[c.s];
+const artCarte = r => r === 14 ? 'l\'As' : r === 12 ? 'la Dame' : 'le ' + RLAB_G[r];
+const plurCarte = r => r === 14 ? 'As' : r >= 11 ? RLAB_G[r] + 's' : RLAB_G[r];
+
+/* Où se situe une carte dans l'échelle des valeurs, en mots simples. */
+function rangTxte(r){
+  if (r === 14) return 'l\'As est la carte la plus forte du jeu';
+  if (r === 13) return 'le Roi vient juste après l\'As';
+  if (r === 12) return 'la Dame est la 3<sup>e</sup> plus forte, après l\'As et le Roi';
+  if (r === 11) return 'le Valet est la 4<sup>e</sup> plus forte, après l\'As, le Roi et la Dame';
+  if (r >= 9)  return 'c\'est une carte moyenne : sept cartes la battent';
+  return 'ce sont des cartes basses — l\'ordre va de l\'As, le plus fort, jusqu\'au 2, le plus faible';
+}
+
+/* Ce que vaut une main faite, et ce qui la bat. */
+const VALEURS = [
+  {nom:'rien de fait',   quoi:'aucune combinaison : c\'est ta carte la plus haute qui compte', perd:'la moindre paire te bat'},
+  {nom:'une paire',      quoi:'deux cartes de même valeur',                                    perd:'deux paires ou mieux te battent'},
+  {nom:'deux paires',    quoi:'deux fois deux cartes de même valeur',                          perd:'un brelan ou mieux te bat'},
+  {nom:'un brelan',      quoi:'trois cartes de même valeur',                                   perd:'seules une quinte, une couleur ou mieux te battent'},
+  {nom:'une quinte',     quoi:'cinq cartes qui se suivent',                                    perd:'une couleur, un full ou mieux te battent'},
+  {nom:'une couleur',    quoi:'cinq cartes de la même famille',                                perd:'seuls un full, un carré ou une quinte flush te battent'},
+  {nom:'un full',        quoi:'un brelan plus une paire',                                      perd:'presque imbattable'},
+  {nom:'un carré',       quoi:'les quatre cartes d\'une même valeur',                          perd:'quasiment imbattable'},
+  {nom:'une quinte flush', quoi:'cinq cartes qui se suivent dans la même famille',             perd:'la meilleure main du poker'},
+];
+
+/* « 62 % » → « 6 fois sur 10 » : plus parlant qu'un pourcentage. */
+function surDix(eq){
+  if (eq >= 0.28) return '<b>' + Math.round(eq*10) + ' fois sur 10</b>';
+  return '<b>1 fois sur ' + Math.max(2, Math.round(1/Math.max(eq, 0.02))) + '</b>';
+}
+
+/* La cote du pot expliquée comme un rapport, pas comme un pourcentage. */
+function cotePhrase(toCall, pot){
+  const r = pot / toCall;
+  const rTxt = r >= 4 ? Math.round(r) : (Math.round(r*2)/2).toString().replace('.',',');
+  const sur = Math.round(1/(toCall/(pot+toCall)));
+  return 'Il y a <b>' + fmt(pot) + '</b> au milieu et on te demande <b>' + fmt(toCall) +
+    '</b> : tu risques 1 pour en gagner ' + rTxt + '. Autrement dit, il te suffit de gagner ce coup <b>1 fois sur ' +
+    sur + '</b> pour rentrer dans tes frais — c\'est ça, la <b>cote du pot</b>.';
+}
 
 function adviceSpeech(a){
-  const sur = n => '<span class="num">' + Math.round(n*100) + '</span>';
-  const jet = n => '<span class="num">' + fmt(n) + '</span>';
+  const p = hero();
+  const T = [];
   const nom = a.rec.kind === 'raise'
-    ? (G.currentBet === 0 ? 'Mise ' : 'Relance à ') + fmt(a.rec.target)
-    : {fold:'Couche-toi', check:'Parole', call:'Suis'}[a.rec.kind];
-  let t = '';
+    ? (G.currentBet === 0 ? '<b>mise ' + fmt(a.rec.target) + '</b>' : '<b>relance à ' + fmt(a.rec.target) + '</b>')
+    : {fold:'<b>couche-toi</b>', check:'<b>parole</b> (tu restes sans payer)', call:'<b>suis les ' + fmt(a.toCall) + '</b>'}[a.rec.kind];
 
   if (G.street === 'preflop'){
-    const main = CARTES(hero().cards) + ' en <b>' + a.pos + '</b>';
-    if (a.rec.kind === 'raise' && G.streetRaises === 0)
-      t = main + ', c\'est dans ta zone d\'ouverture. <b>Ouvre à ' + fmt(a.rec.target) + '</b> — et on ouvre toujours en relançant, jamais en suivant : le simple suivi offre une cote imbattable à tous ceux qui parlent après toi.';
-    else if (a.rec.kind === 'raise')
-      t = main + ' face à une relance, c\'est le haut du panier. <b>Re-relance à ' + fmt(a.rec.target) + '</b> pour prendre l\'initiative du coup.';
-    else if (a.rec.kind === 'call')
-      t = main + ' : jouable, mais pas assez fort pour relancer. <b>Suis les ' + fmt(a.toCall) + '</b> et vois ce que donne le flop.';
-    else if (a.rec.kind === 'check')
-      t = main + ' n\'a rien d\'excitant, mais tu es déjà en blinde : <b>parole</b>, tu vois le flop gratuitement.';
+    const hi = Math.max(p.cards[0].r, p.cards[1].r), lo = Math.min(p.cards[0].r, p.cards[1].r);
+    const suited = p.cards[0].s === p.cards[1].s;
+    const ecart = hi - lo - 1;
+
+    /* 1. on nomme les cartes et on situe leur valeur */
+    if (hi === lo)
+      T.push('Tu as <b>deux ' + plurCarte(hi) + '</b> : une <b>paire servie</b>, c\'est-à-dire deux cartes de même valeur — une main déjà faite avant même le tableau.');
     else
-      t = main + ' : ' + a.desc + ', trop faible d\'ici. <b>Couche-toi</b> — jeter ces mains-là est ce qui sépare un joueur gagnant d\'un perdant, ' + POS_INFO[a.pos].note.toLowerCase();
+      T.push('Tu as <b>' + artCarte(p.cards[0].r) + ' de ' + NOM_S[p.cards[0].s] + '</b> et <b>' +
+        artCarte(p.cards[1].r) + ' de ' + NOM_S[p.cards[1].s] + '</b> : ' + rangTxte(hi) + '.');
+
+    /* 2. ce que ces deux cartes peuvent construire */
+    if (hi !== lo){
+      if (suited && ecart <= 2)
+        T.push('Même famille <i>et</i> proches : elles peuvent construire une <b>couleur</b> (5 cartes de ' + NOM_S[p.cards[0].s] + ') ou une <b>quinte</b> (5 cartes qui se suivent).');
+      else if (suited)
+        T.push('Même famille : 5 cartes de ' + NOM_S[p.cards[0].s] + ' en tout feraient une <b>couleur</b>, une main très forte.');
+      else if (ecart <= 1)
+        T.push('Elles se suivent : 5 cartes qui se suivent forment une <b>quinte</b>. C\'est leur principal atout.');
+      else
+        T.push('Familles différentes et valeurs éloignées : elles ne peuvent construire ni couleur ni quinte, seulement une paire.');
+    }
+
+    /* 3. la position, puis la conclusion */
+    const inf = POS_INFO[a.pos];
+    T.push('Tu es en <b>' + a.pos + '</b>, ' + inf.full.toLowerCase() + '. ' + inf.note +
+      ' Avec cette main d\'ici, ' + nom + '.' +
+      (a.rec.kind === 'raise' && G.streetRaises === 0 ? ' On ouvre toujours en <b>relançant</b> : suivre laisserait entrer tout le monde à bas prix.' : ''));
   }
   else {
-    const combi = a.made ? handName(a.made).toLowerCase() : '';
-    const nOuts = a.outs ? a.outs.n : 0;
+    /* 1. ce que valent tes 5 meilleures cartes, en clair */
+    const v = VALEURS[a.made.cat];
+    T.push(a.made.cat === 0
+      ? 'Tes 2 cartes plus les ' + G.board.length + ' du tableau ne forment <b>rien de fait</b> : la plus haute carte en jeu est ' +
+        artCarte(a.made.tb[0]) + ', et ' + v.perd + '.'
+      : 'Tes 2 cartes plus les ' + G.board.length + ' du tableau : ta meilleure main de 5 cartes, c\'est <b>' +
+        v.nom + '</b> (' + v.quoi + '). ' + v.perd.charAt(0).toUpperCase() + v.perd.slice(1) + '.');
+
+    /* 2. tes chances, et le prix demandé */
     if (a.toCall > 0){
-      if (a.rec.kind === 'call')
-        t = 'Tu gagnes ce coup ' + sur(a.eq) + ' fois sur 100, et il te suffit d\'en gagner ' + sur(a.need) + ' pour que payer soit rentable. <b>Suis les ' + fmt(a.toCall) + '</b> : ce suivi te rapporte ' + jet(a.ev) + ' jetons en moyenne.';
-      else if (a.rec.kind === 'raise')
-        t = 'Avec ' + combi + ' tu gagnes ' + sur(a.eq) + ' fois sur 100 — bien plus que les ' + sur(a.need) + ' demandées pour suivre. Ne te contente pas de payer : <b>relance à ' + fmt(a.rec.target) + '</b>, il y a de l\'argent à prendre.';
-      else
-        t = 'Tu ne gagnes que ' + sur(a.eq) + ' fois sur 100 et il t\'en faudrait ' + sur(a.need) + '. <b>Couche-toi</b> : payer ici te coûte ' + jet(Math.abs(a.ev)) + ' jetons en moyenne, même les fois où tu gagnes le coup.';
+      T.push('Tu gagnes ce coup ' + surDix(a.eq) + '. ' + cotePhrase(a.toCall, a.potTotal));
+      T.push(a.rec.kind === 'fold'
+        ? 'Tu gagnes moins souvent que ce que le prix exige : ' + nom + '. Payer ici coûte <b>' + fmt(Math.abs(a.ev)) + '</b> jetons en moyenne, même les fois où tu remportes le coup.'
+        : 'Tu gagnes plus souvent que ce que le prix exige : ' + nom + (a.rec.kind === 'raise' ? ' — inutile de te contenter de payer, il y a de l\'argent à prendre.' : ', ce suivi te rapporte <b>' + fmt(a.ev) + '</b> jetons en moyenne.'));
     } else {
+      T.push('Personne n\'a misé : tu gagnes ce coup ' + surDix(a.eq) + '.');
       if (a.rec.kind === 'raise' && a.eq > 0.62)
-        t = 'Tu as ' + combi + ' et tu es devant ' + sur(a.eq) + ' fois sur 100. <b>Mise ' + fmt(a.rec.target) + '</b> — environ deux tiers du pot — pour faire payer ceux qui cherchent leur tirage.';
+        T.push('Quand tu es devant aussi souvent, tu <b>mises pour la valeur</b> : les mains plus faibles paient, et celles qui cherchent une carte doivent payer pour la voir. Donc ' + nom + '.');
       else if (a.rec.kind === 'raise')
-        t = 'Rien de fait pour l\'instant, mais <b>' + nOuts + ' cartes</b> t\'améliorent nettement. <b>Mise ' + fmt(a.rec.target) + '</b> : c\'est un semi-bluff, tu gagnes tout de suite s\'ils se couchent, et il te reste tes outs sinon.';
+        T.push('Ta main est encore faible, mais assez de cartes peuvent la transformer : on appelle ça un <b>semi-bluff</b> — tu gagnes tout de suite s\'ils se couchent, et il te reste tes chances sinon. Donc ' + nom + '.');
+      else if (a.eq >= 0.5)
+        T.push('Tu es devant, mais pas assez nettement pour faire grossir le pot sans risque : ' + nom +
+          (G.street === 'river' ? ' et tu vas à l\'abattage sans un jeton de plus.' : ' et tu vois la carte suivante gratuitement.'));
       else
-        t = 'Tu as ' + combi + ' : ' + sur(a.eq) + ' chances sur 100, pas de quoi miser pour la valeur ni assez de tirages pour bluffer. <b>Parole</b> — la carte suivante est gratuite.';
+        T.push('Trop faible pour faire payer, pas assez de cartes pour tenter un coup : ' + nom +
+          (G.street === 'river' ? ' et tu vas à l\'abattage sans un jeton de plus.' : ' et tu vois la carte suivante gratuitement.'));
+    }
+
+    /* 3. les outs, expliqués */
+    if (a.outs && a.outs.n >= 5 && G.street !== 'river' && a.made.cat < 4 && a.eq < 0.6){
+      const chance = Math.min(a.outs.n * (G.street === 'flop' ? 4 : 2), 95);
+      T.push(G.hand <= 3
+        ? '<b>' + a.outs.n + ' cartes</b> peuvent encore sauver ta main : on les appelle tes <b>outs</b>. Astuce de table : ' +
+          (G.street === 'flop' ? 'multiplie-les par 4 au flop' : 'multiplie-les par 2 au turn') +
+          ' pour tes chances de les toucher, soit environ <b>' + chance + ' %</b> ici.'
+        : '<b>' + a.outs.n + ' outs</b> peuvent encore sauver ta main, soit environ <b>' + chance + ' %</b>.');
     }
   }
 
@@ -1617,20 +1695,28 @@ function adviceSpeech(a){
     nums.push(['Il te faut', pct0(a.need), a.eq >= a.need ? 'ok' : 'no']);
     nums.push(['À suivre', fmt(a.toCall), '']);
     nums.push(['Gain moyen', (a.ev >= 0 ? '+' : '−') + fmt(Math.abs(a.ev)), a.ev >= 0 ? 'ok' : 'no']);
-  } else {
-    nums.push(['Pot', fmt(a.potTotal), 'hl']);
-  }
+  } else nums.push(['Pot', fmt(a.potTotal), 'hl']);
   if (G.street === 'preflop') nums.push(['Score de Chen', String(a.chen), '']);
   else if (a.outs) nums.push(['Outs', String(a.outs.n), '']);
-  return {text: t, nums};
+  return {text: T.join(' '), nums};
 }
+
+const ASTUCES = [
+  'Les valeurs, de la plus forte à la plus faible : <b>As, Roi, Dame, Valet, 10, 9…</b> jusqu\'au <b>2</b>. Les quatre familles (pique, cœur, carreau, trèfle) ont toutes la même valeur.',
+  'L\'ordre des mains : <b>paire</b> &lt; <b>deux paires</b> &lt; <b>brelan</b> (3 identiques) &lt; <b>quinte</b> (5 qui se suivent) &lt; <b>couleur</b> (5 de la même famille) &lt; <b>full</b> &lt; <b>carré</b> &lt; <b>quinte flush</b>.',
+  'À égalité de combinaison, c\'est la carte d\'appoint qui départage : on l\'appelle le <b>kicker</b>. Paire d\'As avec un Roi bat paire d\'As avec un 7.',
+  'Tu formes ta main avec les <b>5 meilleures cartes</b> parmi tes 2 cartes et les 5 du tableau. Tu peux en utiliser 2, 1, ou même aucune.',
+  'La <b>cote du pot</b> : si le pot fait 900 et qu\'on te demande 300, tu risques 1 pour gagner 3 — il te suffit de gagner 1 fois sur 4.',
+  'Les <b>outs</b> sont les cartes qui sauvent ta main. Tirage couleur = 9 outs, quinte ouverte des deux côtés = 8 outs, quinte par le milieu = 4 outs.',
+  'La <b>position</b> décide plus de coups que les cartes : parler en dernier, c\'est décider en sachant ce que les autres ont fait.',
+  'Une bonne décision peut perdre le coup, une mauvaise peut le gagner. On juge le <b>raisonnement</b>, jamais le résultat d\'une main.',
+];
 
 function waitingSpeech(){
   const p = hero();
-  if (!G.hand) return {text:'Je te guide à chaque décision : tes chances de gagner, le prix à payer, et quoi faire. <b>Distribue</b> quand tu veux — ou ouvre <b>Leçons</b> si « cote du pot » ne te dit rien.'};
-  if (p.folded) return {text:'Tu es couché. Regarde comment le coup se termine : observer les mains des autres, c\'est de la lecture gratuite.'};
-  const info = POS_INFO[posOf(0)];
-  return {text:'Les autres réfléchissent. Toi, tu es en <b>' + posOf(0) + '</b> — ' + info.note.charAt(0).toLowerCase() + info.note.slice(1)};
+  if (!G.hand) return {text:'Je t\'explique chaque situation : ce que valent tes cartes, ce que ça vaut face aux autres, et pourquoi telle décision rapporte. ' + ASTUCES[0] + ' <b>Distribue</b> quand tu veux.'};
+  if (p.folded) return {text:'Tu es couché, regarde la suite : voir les autres jouer coûte zéro jeton. ' + ASTUCES[(G.hand + 3) % ASTUCES.length]};
+  return {text:'Les autres réfléchissent. ' + ASTUCES[G.hand % ASTUCES.length]};
 }
 
 function reviewSpeech(){
