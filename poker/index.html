@@ -58,8 +58,8 @@
   --fs-xs:11px; --fs-sm:13px; --fs-base:14.5px; --fs-md:16px;
   --fs-lg:21px; --fs-xl:30px;
 
-  --card-w:clamp(34px, 4.4vw, 52px);
-  --seat-card-w:clamp(22px, 2.6vw, 30px);
+  --card-w:clamp(40px, 5vw, 64px);
+  --seat-card-w:clamp(27px, 3.1vw, 40px);
 }
 
 @media (prefers-color-scheme: dark){
@@ -137,6 +137,8 @@
 }
 
 *{ box-sizing:border-box; }
+/* sans ça, un display:flex sur .btn ou .bet-marker annule l'attribut hidden */
+[hidden]{ display:none !important; }
 
 body{
   margin:0;
@@ -162,20 +164,13 @@ button:focus-visible, [tabindex]:focus-visible, select:focus-visible, input:focu
 /* ============================ Cadre ============================ */
 
 .app{
-  max-width:1440px; margin:0 auto; padding:14px clamp(10px,2vw,24px) 24px;
-  display:grid; gap:16px;
-  grid-template-columns:minmax(0,1fr) 386px;
-  grid-template-areas:"head head" "table coach";
-  align-items:start;
-}
-@media (max-width:1080px){
-  .app{ grid-template-columns:minmax(0,1fr); grid-template-areas:"head" "table" "coach"; }
+  max-width:1180px; margin:0 auto; padding:14px clamp(10px,2vw,22px) 20px;
+  display:flex; flex-direction:column; gap:14px;
 }
 
 /* ============================ En-tête ============================ */
 
 .head{
-  grid-area:head;
   display:flex; flex-wrap:wrap; align-items:center; gap:10px 18px;
   padding-bottom:12px; border-bottom:1px solid var(--line);
 }
@@ -206,10 +201,10 @@ button:focus-visible, [tabindex]:focus-visible, select:focus-visible, input:focu
 
 /* ============================ Table ============================ */
 
-.tablewrap{ grid-area:table; display:flex; flex-direction:column; gap:12px; min-width:0; }
+.tablewrap{ display:flex; flex-direction:column; gap:12px; min-width:0; }
 
 .felt-outer{
-  position:relative; width:100%; aspect-ratio:16/10.6; min-height:390px;
+  position:relative; width:100%; height:clamp(380px, 56vh, 620px);
   border-radius:50%/40%;
   background:linear-gradient(165deg, var(--rail-hi), var(--rail));
   padding:clamp(16px,2.4vw,30px);
@@ -227,12 +222,7 @@ button:focus-visible, [tabindex]:focus-visible, select:focus-visible, input:focu
   content:""; position:absolute; inset:0; border-radius:inherit; pointer-events:none;
   background:radial-gradient(ellipse 40% 34% at 50% 30%, rgba(216,169,74,.16), transparent 70%);
 }
-.felt-mark{
-  position:absolute; left:50%; top:23%; transform:translate(-50%,-50%);
-  font-family:"Bodoni Moda", Georgia, serif; font-size:clamp(11px,1.4vw,15px);
-  letter-spacing:.34em; text-transform:uppercase; color:rgba(216,169,74,.30);
-  white-space:nowrap; pointer-events:none;
-}
+
 
 /* --- centre : board + pot --- */
 .center{
@@ -291,6 +281,9 @@ button:focus-visible, [tabindex]:focus-visible, select:focus-visible, input:focu
 }
 .seat.turn .plate{ border-color:var(--brass-hi); box-shadow:0 0 0 1px var(--brass-hi), 0 0 22px rgba(216,169,74,.34); }
 .seat.folded{ opacity:.42; }
+/* siège du haut : plaque au-dessus, cartes en dessous, sinon elles sortent du tapis */
+.seat.top{ flex-direction:column-reverse; }
+.seat.top .act-bubble{ top:auto; bottom:-11px; }
 .seat.winner .plate{ border-color:var(--good); box-shadow:0 0 0 1px var(--good), 0 0 26px rgba(78,158,114,.45); }
 
 .act-bubble{
@@ -368,6 +361,28 @@ button:focus-visible, [tabindex]:focus-visible, select:focus-visible, input:focu
   *{ transition-duration:.01ms !important; }
 }
 
+/* --- écrans étroits : on resserre tout pour que le board respire --- */
+@media (max-width:640px){
+  :root{
+    --card-w:clamp(29px, 7.4vw, 40px);
+    --seat-card-w:clamp(17px, 4.4vw, 23px);
+  }
+  .felt-outer{ height:clamp(330px, 47vh, 430px); padding:11px; }
+  .seat{ width:clamp(78px, 23vw, 106px); gap:3px; }
+  .plate{ padding:3px 5px; border-radius:6px; }
+  .plate .nm{ font-size:11.5px; }
+  .plate .st{ font-size:11.5px; }
+  .plate .pos{ font-size:8px; letter-spacing:.08em; }
+  .act-bubble{ font-size:8.5px; padding:1px 6px; top:-9px; }
+  .bet-marker{ font-size:10px; padding:1px 6px 1px 4px; }
+  .dealer-btn{ width:18px; height:18px; font-size:9px; }
+  .board{ gap:4px; }
+  .brand h1{ font-size:23px; }
+  .coachbar{ padding:11px 13px; gap:10px; }
+  .coachbar .avatar{ width:28px; height:28px; font-size:14px; }
+  .btn{ flex:1 1 92px; padding:10px 8px; font-size:14px; }
+}
+
 /* ============================ Barre d'action ============================ */
 
 .actionbar{
@@ -415,117 +430,98 @@ input[type=range]{ width:100%; accent-color:var(--brass); }
 .hint{ font-size:var(--fs-sm); color:var(--ink-2); min-height:1.2em; }
 .hint b{ color:var(--ink); }
 
-/* ============================ Rail du coach ============================ */
+/* ============================ Le coach parle ============================ */
 
-.coach{
-  grid-area:coach; position:sticky; top:14px;
-  background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
-  box-shadow:var(--shadow-1); overflow:hidden;
-  display:flex; flex-direction:column; max-height:calc(100vh - 28px);
+.coachbar{
+  display:flex; gap:12px; align-items:flex-start;
+  background:var(--panel); border:1px solid var(--line); border-left:3px solid var(--brass);
+  border-radius:var(--radius); padding:13px 16px; box-shadow:var(--shadow-1);
+  min-height:76px;
 }
-@media (max-width:1080px){ .coach{ position:static; max-height:none; } }
+.coachbar[data-tone="good"]{ border-left-color:var(--good); background:var(--good-bg); }
+.coachbar[data-tone="warn"]{ border-left-color:var(--warn); background:var(--warn-bg); }
+.coachbar[data-tone="bad"]{  border-left-color:var(--bad);  background:var(--bad-bg); }
+.coachbar[hidden]{ display:none; }
 
-.coach-head{
-  padding:11px 14px; border-bottom:1px solid var(--line);
-  display:flex; align-items:center; gap:9px; background:var(--panel-2);
+.coachbar .avatar{
+  width:34px; height:34px; border-radius:99px; flex:none; margin-top:1px;
+  background:var(--felt); color:var(--brass-hi); border:1px solid var(--brass);
+  display:grid; place-items:center; font-size:16px;
 }
-.coach-head .badge{
-  width:24px; height:24px; border-radius:99px; background:var(--felt); color:var(--brass-hi);
-  display:grid; place-items:center; font-size:12px; flex:none;
-  border:1px solid var(--brass);
+.coachbar .speech{ display:flex; flex-direction:column; gap:7px; min-width:0; flex:1; }
+.coachbar .say{
+  margin:0; font-size:clamp(15px, 1.5vw, 17.5px); line-height:1.5; color:var(--ink);
+  text-wrap:pretty; max-width:74ch;
 }
-.coach-head h2{ margin:0; font-size:var(--fs-md); font-weight:600; letter-spacing:.01em; }
-.coach-head .sub{ font-size:var(--fs-xs); color:var(--ink-3); margin-left:auto; }
+.coachbar .say b{ font-weight:700; }
+.coachbar .say .num{ font-family:"IBM Plex Mono", monospace; font-weight:600; font-variant-numeric:tabular-nums; }
 
-.tabs{ display:flex; border-bottom:1px solid var(--line); background:var(--panel-2); }
-.tab{
-  flex:1; border:0; background:transparent; padding:9px 4px; font-size:var(--fs-sm);
-  font-weight:600; color:var(--ink-3); border-bottom:2px solid transparent;
+.eqline{ display:flex; align-items:center; gap:9px; font-size:var(--fs-xs); color:var(--ink-3); }
+.eqline .bar{ flex:1; max-width:260px; height:7px; border-radius:99px; background:var(--panel-2);
+  border:1px solid var(--line-soft); overflow:hidden; position:relative; }
+.eqline .bar i{ display:block; height:100%; background:var(--brass); }
+.eqline .bar u{ position:absolute; top:-3px; width:2px; height:13px; background:var(--ink-2); border-radius:1px; }
+
+details.figures{ font-size:var(--fs-sm); }
+details.figures > summary{
+  cursor:pointer; color:var(--ink-3); list-style:none; display:inline-flex; align-items:center; gap:5px;
+  font-size:var(--fs-xs); letter-spacing:.08em; text-transform:uppercase; font-weight:600;
 }
-.tab[aria-selected="true"]{ color:var(--ink); border-bottom-color:var(--brass); background:var(--panel); }
-
-.panes{ overflow-y:auto; padding:14px; display:flex; flex-direction:column; gap:14px; }
-.pane[hidden]{ display:none; }
-.pane{ display:flex; flex-direction:column; gap:13px; }
-
-.verdict{
-  border-radius:8px; padding:11px 13px; border:1px solid var(--line);
-  background:var(--panel-2); display:flex; flex-direction:column; gap:5px;
+details.figures > summary::-webkit-details-marker{ display:none; }
+details.figures > summary::after{ content:"▾"; font-size:10px; }
+details.figures[open] > summary::after{ content:"▴"; }
+details.figures .grid{
+  display:grid; grid-template-columns:repeat(auto-fit,minmax(118px,1fr)); gap:7px; margin-top:9px;
 }
-.verdict[data-tone="good"]{ background:var(--good-bg); border-color:var(--good); }
-.verdict[data-tone="warn"]{ background:var(--warn-bg); border-color:var(--warn); }
-.verdict[data-tone="bad"]{ background:var(--bad-bg); border-color:var(--bad); }
-.verdict .vt{ font-weight:700; font-size:var(--fs-md); display:flex; align-items:center; gap:8px; }
-.verdict .vb{ font-size:var(--fs-sm); color:var(--ink-2); }
-.verdict .vb b{ color:var(--ink); }
 
-.metrics{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
 .metric{
-  border:1px solid var(--line-soft); border-radius:8px; padding:8px 10px;
-  background:var(--panel-2); display:flex; flex-direction:column; gap:1px;
+  border:1px solid var(--line-soft); border-radius:8px; padding:7px 10px;
+  background:var(--panel); display:flex; flex-direction:column; gap:1px;
 }
 .metric .lbl{ font-size:9.5px; letter-spacing:.12em; text-transform:uppercase; color:var(--ink-3); font-weight:600; }
-.metric .val{
-  font-family:"IBM Plex Mono", monospace; font-size:19px; font-weight:600;
-  font-variant-numeric:tabular-nums; line-height:1.2;
-}
+.metric .val{ font-family:"IBM Plex Mono", monospace; font-size:17px; font-weight:600;
+  font-variant-numeric:tabular-nums; line-height:1.2; }
 .metric .val small{ font-size:11px; color:var(--ink-3); font-weight:400; }
-.metric.hl .val{ color:var(--brass); }
 .metric.ok .val{ color:var(--good); }
 .metric.no .val{ color:var(--bad); }
+.metric.hl .val{ color:var(--brass); }
 
-.bar{ height:6px; border-radius:99px; background:var(--panel-2); overflow:hidden; border:1px solid var(--line-soft); }
-.bar i{ display:block; height:100%; background:var(--brass); }
-.bar.split{ position:relative; }
-.bar.split u{ position:absolute; top:-3px; width:2px; height:12px; background:var(--ink); border-radius:1px; }
-
-.note{
-  font-size:var(--fs-sm); color:var(--ink-2); border-left:2px solid var(--brass);
-  padding-left:11px;
-}
+.note{ font-size:var(--fs-sm); color:var(--ink-2); border-left:2px solid var(--brass); padding-left:11px; }
 .note b{ color:var(--ink); }
 
-.log{ display:flex; flex-direction:column; gap:3px; font-size:var(--fs-sm); }
+.log{ display:flex; flex-direction:column; gap:2px; font-size:var(--fs-sm); }
 .log .ln{ display:flex; gap:8px; color:var(--ink-2); padding:2px 0; border-bottom:1px dotted var(--line-soft); }
-.log .ln .who{ font-weight:600; color:var(--ink); min-width:74px; }
-.log .ln.street{ color:var(--brass); font-weight:600; border:0; margin-top:6px; letter-spacing:.1em; text-transform:uppercase; font-size:var(--fs-xs); }
+.log .ln .who{ font-weight:600; color:var(--ink); min-width:78px; }
+.log .ln.street{ color:var(--brass); font-weight:600; border:0; margin-top:6px;
+  letter-spacing:.1em; text-transform:uppercase; font-size:var(--fs-xs); }
 
-h3.sec{
-  margin:0; font-family:"Bodoni Moda", Georgia, serif; font-size:var(--fs-lg); font-weight:600;
-  text-wrap:balance;
-}
+h3.sec{ margin:0; font-family:"Bodoni Moda", Georgia, serif; font-size:var(--fs-lg); font-weight:600; text-wrap:balance; }
 h4.sub{ margin:0; font-size:var(--fs-base); font-weight:700; }
-.pane p{ margin:0; font-size:var(--fs-sm); color:var(--ink-2); max-width:62ch; }
-.pane p b{ color:var(--ink); }
-.pane ul{ margin:0; padding-left:17px; font-size:var(--fs-sm); color:var(--ink-2); display:flex; flex-direction:column; gap:4px; }
-.pane li b{ color:var(--ink); }
+.modal-body p{ margin:0; font-size:var(--fs-sm); color:var(--ink-2); max-width:66ch; }
+.modal-body p b{ color:var(--ink); }
+.modal-body ul{ margin:0; padding-left:17px; font-size:var(--fs-sm); color:var(--ink-2);
+  display:flex; flex-direction:column; gap:4px; }
+.modal-body li b{ color:var(--ink); }
 .divider{ height:1px; background:var(--line); }
 
-.lesson{
-  border:1px solid var(--line); border-radius:8px; background:var(--panel-2); overflow:hidden;
-}
-.lesson > summary{
-  padding:9px 12px; font-weight:600; cursor:pointer; list-style:none;
-  display:flex; align-items:center; gap:9px; font-size:var(--fs-sm);
-}
+.lesson{ border:1px solid var(--line); border-radius:8px; background:var(--panel-2); overflow:hidden; }
+.lesson > summary{ padding:10px 13px; font-weight:600; cursor:pointer; list-style:none;
+  display:flex; align-items:center; gap:9px; font-size:var(--fs-base); }
 .lesson > summary::-webkit-details-marker{ display:none; }
 .lesson > summary::after{ content:"+"; margin-left:auto; color:var(--brass); font-family:"IBM Plex Mono",monospace; }
 .lesson[open] > summary::after{ content:"–"; }
-.lesson > summary .num{
-  font-family:"IBM Plex Mono", monospace; font-size:11px; color:var(--brass);
-  border:1px solid var(--brass); border-radius:3px; padding:0 4px;
-}
-.lesson .body{ padding:0 12px 12px; display:flex; flex-direction:column; gap:9px; }
+.lesson > summary .num{ font-family:"IBM Plex Mono", monospace; font-size:11px; color:var(--brass);
+  border:1px solid var(--brass); border-radius:3px; padding:0 4px; }
+.lesson .body{ padding:0 13px 13px; display:flex; flex-direction:column; gap:9px; }
 
 table.tbl{ width:100%; border-collapse:collapse; font-size:var(--fs-sm); }
-table.tbl th, table.tbl td{ text-align:left; padding:4px 7px; border-bottom:1px solid var(--line-soft); }
+table.tbl th, table.tbl td{ text-align:left; padding:5px 7px; border-bottom:1px solid var(--line-soft); }
 table.tbl th{ font-size:var(--fs-xs); letter-spacing:.08em; text-transform:uppercase; color:var(--ink-3); }
 table.tbl td.n{ font-family:"IBM Plex Mono", monospace; font-variant-numeric:tabular-nums; text-align:right; }
 .tbl-wrap{ overflow-x:auto; }
-.suitrow{ font-family:"Bodoni Moda", serif; font-size:15px; letter-spacing:1px; }
+.suitrow{ font-family:"Bodoni Moda", serif; font-size:15px; letter-spacing:1px; white-space:nowrap; }
 .sp-s{ color:var(--s-s); } .sp-h{ color:var(--s-h); } .sp-d{ color:var(--s-d); } .sp-c{ color:var(--s-c); }
-
-.statgrid{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+.statgrid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:8px; }
 
 /* ============================ Résumé de main ============================ */
 
@@ -536,13 +532,19 @@ table.tbl td.n{ font-family:"IBM Plex Mono", monospace; font-variant-numeric:tab
 .showdown[hidden]{ display:none; }
 .sd-card{
   background:var(--panel); border:1px solid var(--line); border-radius:12px;
-  max-width:520px; width:100%; box-shadow:var(--shadow-2); overflow:hidden;
+  max-width:560px; width:100%; box-shadow:var(--shadow-2); overflow:hidden;
   max-height:90vh; display:flex; flex-direction:column;
 }
-.sd-head{ padding:13px 16px; border-bottom:1px solid var(--line); background:var(--panel-2); }
+.sd-card.wide{ max-width:720px; }
+.sd-head{ padding:13px 16px; border-bottom:1px solid var(--line); background:var(--panel-2);
+  display:flex; align-items:center; gap:12px; }
 .sd-head h3{ margin:0; font-family:"Bodoni Moda",serif; font-size:var(--fs-lg); font-weight:600; }
 .sd-head .sub{ font-size:var(--fs-sm); color:var(--ink-2); }
-.sd-body{ padding:14px 16px; display:flex; flex-direction:column; gap:11px; overflow-y:auto; }
+.sd-head .x{ margin-left:auto; border:1px solid var(--line); background:var(--panel);
+  border-radius:8px; width:30px; height:30px; font-size:15px; line-height:1; flex:none; }
+.sd-body, .modal-body{ padding:14px 16px; display:flex; flex-direction:column; gap:11px; overflow-y:auto; }
+/* sans quoi les enfants se compriment au lieu de faire défiler la fenêtre */
+.sd-body > *, .modal-body > *{ flex:none; }
 .sd-row{
   display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:8px;
   border:1px solid var(--line-soft); background:var(--panel-2);
@@ -579,7 +581,6 @@ table.tbl td.n{ font-family:"IBM Plex Mono", monospace; font-variant-numeric:tab
     </div>
     <div class="head-stats">
       <div class="hstat"><b id="hs-hand">—</b><span>Main</span></div>
-      <div class="hstat"><b id="hs-blinds">25 / 50</b><span>Blindes</span></div>
       <div class="hstat"><b id="hs-stack">5 000</b><span>Ton tapis</span></div>
       <div class="hstat"><b id="hs-pnl">0</b><span>Résultat</span></div>
     </div>
@@ -587,6 +588,7 @@ table.tbl td.n{ font-family:"IBM Plex Mono", monospace; font-variant-numeric:tab
       <button class="tgl" id="t-coach" aria-pressed="true"><i class="dot"></i>Coach</button>
       <button class="tgl" id="t-open" aria-pressed="false"><i class="dot"></i>Cartes ouvertes</button>
       <button class="tgl plain" id="t-speed" aria-pressed="false">Rapide</button>
+      <button class="tgl plain" id="t-lessons">Leçons</button>
       <button class="tgl plain" id="t-new">Nouvelle partie</button>
     </div>
   </header>
@@ -594,13 +596,28 @@ table.tbl td.n{ font-family:"IBM Plex Mono", monospace; font-variant-numeric:tab
   <section class="tablewrap">
     <div class="felt-outer">
       <div class="felt" id="felt">
-        <div class="felt-mark">Tapis &amp; Cotes</div>
         <div class="center">
           <div class="street-tag" id="street-tag">Préflop</div>
           <div class="board" id="board"></div>
           <div class="pot"><i class="chipicon"></i><span>Pot</span> <b id="pot">0</b></div>
         </div>
         <!-- sièges, marqueurs de mise et bouton donneur injectés ici -->
+      </div>
+    </div>
+
+    <div class="coachbar" id="coachbar">
+      <div class="avatar">♠</div>
+      <div class="speech">
+        <p class="say" id="coach-say">Clique sur « Distribuer » pour lancer la première main.</p>
+        <div class="eqline" id="coach-eq" hidden>
+          <span>Tes chances</span>
+          <span class="bar"><i id="eq-fill"></i><u id="eq-mark"></u></span>
+          <span class="mono" id="eq-txt"></span>
+        </div>
+        <details class="figures" id="coach-figs" hidden>
+          <summary>Voir les chiffres</summary>
+          <div class="grid" id="coach-nums"></div>
+        </details>
       </div>
     </div>
 
@@ -623,25 +640,6 @@ table.tbl td.n{ font-family:"IBM Plex Mono", monospace; font-variant-numeric:tab
     </div>
   </section>
 
-  <aside class="coach">
-    <div class="coach-head">
-      <span class="badge">♠</span>
-      <h2>Le Coach</h2>
-      <span class="sub" id="coach-sub">6-max · 100 bb</span>
-    </div>
-    <nav class="tabs" role="tablist">
-      <button class="tab" id="tab-conseil" role="tab" aria-selected="true" aria-controls="pane-conseil">Conseil</button>
-      <button class="tab" id="tab-main" role="tab" aria-selected="false" aria-controls="pane-main">Main</button>
-      <button class="tab" id="tab-lecons" role="tab" aria-selected="false" aria-controls="pane-lecons">Leçons</button>
-      <button class="tab" id="tab-stats" role="tab" aria-selected="false" aria-controls="pane-stats">Stats</button>
-    </nav>
-    <div class="panes">
-      <div class="pane" id="pane-conseil" role="tabpanel" aria-labelledby="tab-conseil"></div>
-      <div class="pane" id="pane-main" role="tabpanel" aria-labelledby="tab-main" hidden></div>
-      <div class="pane" id="pane-lecons" role="tabpanel" aria-labelledby="tab-lecons" hidden></div>
-      <div class="pane" id="pane-stats" role="tabpanel" aria-labelledby="tab-stats" hidden></div>
-    </div>
-  </aside>
 
   <footer class="foot">
     <span>Argent fictif. Les équités sont calculées par simulation Monte-Carlo à chaque décision.</span>
@@ -660,6 +658,16 @@ table.tbl td.n{ font-family:"IBM Plex Mono", monospace; font-variant-numeric:tab
       <button class="btn btn-raise" id="sd-next">Main suivante <span class="k">Espace</span></button>
       <button class="btn" id="sd-review">Revoir la main</button>
     </div>
+  </div>
+</div>
+
+<div class="showdown" id="lessons" hidden>
+  <div class="sd-card wide">
+    <div class="sd-head">
+      <h3>Apprendre le Hold'em</h3>
+      <button class="x" id="lessons-close" aria-label="Fermer">✕</button>
+    </div>
+    <div class="modal-body" id="lessons-body"></div>
   </div>
 </div>
 
@@ -1234,8 +1242,8 @@ function botAct(i){
 }
 
 /* ═════════════════════ 8 · Rendu de la table ═════════════════════ */
-const SEAT_POS = [{x:50,y:87},{x:15,y:74},{x:9,y:33},{x:50,y:9},{x:91,y:33},{x:85,y:74}];
-const BET_POS  = [{x:50,y:70},{x:27,y:63},{x:25,y:39},{x:50,y:24},{x:75,y:39},{x:73,y:63}];
+const SEAT_POS = [{x:50,y:85},{x:15,y:74},{x:9,y:33},{x:50,y:9},{x:91,y:33},{x:85,y:74}];
+const BET_POS  = [{x:50,y:66},{x:27,y:63},{x:25,y:39},{x:50,y:24},{x:75,y:39},{x:73,y:63}];
 const DLR_POS  = [{x:63,y:80},{x:28,y:82},{x:18,y:44},{x:62,y:17},{x:82,y:44},{x:72,y:82}];
 
 function buildSeats(){
@@ -1244,7 +1252,7 @@ function buildSeats(){
   G.els = {seats:[], bets:[]};
   G.players.forEach((p,i) => {
     const s = document.createElement('div');
-    s.className = 'seat' + (p.isHero ? ' hero' : '');
+    s.className = 'seat' + (p.isHero ? ' hero' : '') + (SEAT_POS[i].y < 20 ? ' top' : '');
     s.style.left = SEAT_POS[i].x + '%';
     s.style.top  = SEAT_POS[i].y + '%';
     s.innerHTML =
@@ -1339,8 +1347,6 @@ function render(){
   const el = $('#hs-pnl');
   el.textContent = (pnl >= 0 ? '+' : '−') + fmt(Math.abs(pnl));
   el.style.color = pnl > 0 ? 'var(--good)' : pnl < 0 ? 'var(--bad)' : 'var(--ink)';
-
-  renderHandPane();
 }
 
 /* ═════════════════════ 9 · Contrôles du joueur ═════════════════════ */
@@ -1386,10 +1392,11 @@ function enableHero(){
 
   $('#actionbar').dataset.idle = 'false';
   $('#b-deal').hidden = true;
-  $('#b-fold').hidden = false;  $('#b-fold').disabled = false;
-  $('#b-check').hidden = toCall > 0;
-  $('#b-call').hidden  = toCall === 0;
-  $('#b-raise').hidden = !canRaise;
+  /* on ré-active systématiquement : ces boutons ont été désactivés au tour précédent */
+  $('#b-fold').hidden  = false;         $('#b-fold').disabled  = false;
+  $('#b-check').hidden = toCall > 0;    $('#b-check').disabled = false;
+  $('#b-call').hidden  = toCall === 0;  $('#b-call').disabled  = false;
+  $('#b-raise').hidden = !canRaise;     $('#b-raise').disabled = false;
 
   $('#b-call').innerHTML = (toCall >= p.stack ? 'Tapis ' : 'Suivre ') +
     '<amount>' + fmt(Math.min(toCall, p.stack)) + '</amount> <span class="k">C</span>';
@@ -1543,187 +1550,169 @@ function computeAdvice(){
   return a;
 }
 
-const REC_LABEL = {fold:'Se coucher', check:'Parole', call:'Suivre', raise:'Miser / relancer'};
+const REC_LABEL = {fold:'te coucher', check:'checker', call:'suivre', raise:'miser'};
 
 function judge(a, kind, target){
   const fam = k => k === 'raise' ? 2 : (k === 'call' || k === 'check') ? 1 : 0;
   const r = fam(a.rec.kind), g = fam(kind);
-  if (r === g) return {tone:'good', title:'Bien joué', text:'C\'est aussi la ligne que je recommandais : <b>' + REC_LABEL[a.rec.kind] + '</b>.'};
+  const sur = n => Math.round(n*100);
+  if (r === g) return {tone:'good', text:'<b>Bien joué.</b> C\'est exactement la ligne que je conseillais.'};
   if (g === 0 && r >= 1){
-    if (a.toCall === 0) return {tone:'bad', title:'Coucher gratuitement', text:'Tu n\'avais rien à payer : <b>parole</b> ne coûte rien, se coucher jette une main vivante.'};
-    return {tone:'bad', title:'Trop serré ici', text:'Avec <b>' + pct(a.eq) + '</b> d\'équité pour <b>' + pct0(a.need) + '</b> demandés, suivre gagnait <b>' + fmt(a.ev) + '</b> en moyenne.'};
+    if (a.toCall === 0) return {tone:'bad', text:'<b>Tu te couches alors que c\'était gratuit !</b> Checker ne coûte rien : ne jette jamais une main quand personne n\'a misé.'};
+    return {tone:'bad', text:'<b>Trop prudent.</b> Tu gagnais ce coup <span class="num">' + sur(a.eq) + '</span> fois sur 100 et il t\'en fallait seulement <span class="num">' + sur(a.need) + '</span> : suivre te rapportait <span class="num">' + fmt(a.ev) + '</span> jetons en moyenne.'};
   }
-  if (g === 1 && r === 0) return {tone:'bad', title:'Suivi non rentable', text:'La cote exigeait <b>' + pct0(a.need) + '</b> et tu n\'avais que <b>' + pct(a.eq) + '</b> : sur la durée, ce suivi perd <b>' + fmt(Math.abs(a.ev)) + '</b> par coup.'};
-  if (g === 1 && r === 2) return {tone:'warn', title:'Trop passif', text:'Avec <b>' + pct(a.eq) + '</b>, l\'agression rapportait davantage : miser fait payer les tirages et grossit le pot.'};
-  if (g === 2 && r <= 1) return {tone:'warn', title:'Agression optionnelle', text:'Ça peut passer comme bluff, mais <b>' + REC_LABEL[a.rec.kind] + '</b> était la ligne la plus sûre avec <b>' + pct(a.eq) + '</b>.'};
-  return {tone:'warn', title:'Ligne différente', text:'Je conseillais <b>' + REC_LABEL[a.rec.kind] + '</b>.'};
+  if (g === 1 && r === 0) return {tone:'bad', text:'<b>Ce suivi coûte cher.</b> Il te fallait <span class="num">' + sur(a.need) + '</span> chances sur 100, tu n\'en avais que <span class="num">' + sur(a.eq) + '</span>. Sur la durée, ce genre de suivi perd <span class="num">' + fmt(Math.abs(a.ev)) + '</span> jetons à chaque fois.'};
+  if (g === 1 && r === 2) return {tone:'warn', text:'<b>Trop gentil.</b> Avec <span class="num">' + sur(a.eq) + '</span> chances sur 100, il fallait miser : tu laisses les tirages adverses voir la carte suivante gratuitement.'};
+  if (g === 2 && r <= 1) return {tone:'warn', text:'<b>Bluff osé.</b> Ça peut passer, mais avec <span class="num">' + sur(a.eq) + '</span> chances sur 100, ' + REC_LABEL[a.rec.kind] + ' était plus sûr.'};
+  return {tone:'warn', text:'Je conseillais plutôt de <b>' + REC_LABEL[a.rec.kind] + '</b>.'};
 }
 
-function metric(lbl, val, cls){
-  return '<div class="metric ' + (cls||'') + '"><span class="lbl">' + lbl + '</span><span class="val">' + val + '</span></div>';
-}
+/* ── le coach parle : des phrases, pas un tableau de bord ────── */
+const CARTES = cs => cs.map(c => '<b>' + cardTxt(c) + '</b>').join(' ');
 
-function adviceHTML(a){
-  const recTxt = a.rec.kind === 'raise'
-    ? (G.currentBet === 0 ? 'Miser ' : 'Relancer à ') + fmt(a.rec.target)
-    : REC_LABEL[a.rec.kind];
-  let h = '';
-  h += '<div class="verdict" data-tone="good"><div class="vt">→ ' + recTxt + '</div>' +
-       '<div class="vb">' + a.headline + ' · ' + a.code + ' — ' + a.desc + '</div></div>';
-
-  h += '<div class="metrics">';
-  h += metric('Ton équité', pct(a.eq), a.eq >= a.share ? 'ok' : '');
-  if (a.toCall > 0){
-    h += metric('Cote requise', pct0(a.need), a.eq >= a.need ? 'ok' : 'no');
-    h += metric('À suivre', fmt(a.toCall));
-    h += metric('EV du suivi', (a.ev >= 0 ? '+' : '−') + fmt(Math.abs(a.ev)), a.ev >= 0 ? 'ok' : 'no');
-  } else {
-    h += metric('Part équitable', pct0(a.share));
-    h += metric('Pot', fmt(a.potTotal), 'hl');
-    h += metric(G.street === 'preflop' ? 'Score de Chen' : 'Ta main', G.street === 'preflop' ? String(a.chen) : CAT_SHORT[a.made.cat]);
-  }
-  h += '</div>';
-
-  h += '<div class="bar split"><i style="width:' + Math.round(a.eq*100) + '%"></i>' +
-       '<u style="left:' + Math.round(a.share*100) + '%" title="part équitable"></u></div>';
-  h += '<p style="font-size:var(--fs-xs);color:var(--ink-3)">Barre : ton équité. Le repère marque la <b>part équitable</b> (' +
-       pct0(a.share) + ' à ' + (a.nOpp+1) + ' joueurs) — au-dessus, tu as l\'avantage.</p>';
-
-  if (a.made) h += '<div class="note">Main actuelle : <b>' + handName(a.made) + '</b>' +
-    (a.outs && a.outs.n ? ' · <b>' + a.outs.n + ' outs</b> pour l\'améliorer' : '') + '</div>';
-
-  h += '<div class="divider"></div>';
-  h += '<h4 class="sub">Pourquoi</h4><ul>' + a.why.map(w => '<li>' + w + '</li>').join('') + '</ul>';
+function adviceSpeech(a){
+  const sur = n => '<span class="num">' + Math.round(n*100) + '</span>';
+  const jet = n => '<span class="num">' + fmt(n) + '</span>';
+  const nom = a.rec.kind === 'raise'
+    ? (G.currentBet === 0 ? 'Mise ' : 'Relance à ') + fmt(a.rec.target)
+    : {fold:'Couche-toi', check:'Parole', call:'Suis'}[a.rec.kind];
+  let t = '';
 
   if (G.street === 'preflop'){
-    h += '<div class="note"><b>' + a.pos + '</b> — ' + a.info.full + '. Range d\'ouverture ' + a.info.pctOpen + '. ' + a.info.note + '</div>';
+    const main = CARTES(hero().cards) + ' en <b>' + a.pos + '</b>';
+    if (a.rec.kind === 'raise' && G.streetRaises === 0)
+      t = main + ', c\'est dans ta zone d\'ouverture. <b>Ouvre à ' + fmt(a.rec.target) + '</b> — et on ouvre toujours en relançant, jamais en suivant : le simple suivi offre une cote imbattable à tous ceux qui parlent après toi.';
+    else if (a.rec.kind === 'raise')
+      t = main + ' face à une relance, c\'est le haut du panier. <b>Re-relance à ' + fmt(a.rec.target) + '</b> pour prendre l\'initiative du coup.';
+    else if (a.rec.kind === 'call')
+      t = main + ' : jouable, mais pas assez fort pour relancer. <b>Suis les ' + fmt(a.toCall) + '</b> et vois ce que donne le flop.';
+    else if (a.rec.kind === 'check')
+      t = main + ' n\'a rien d\'excitant, mais tu es déjà en blinde : <b>parole</b>, tu vois le flop gratuitement.';
+    else
+      t = main + ' : ' + a.desc + ', trop faible d\'ici. <b>Couche-toi</b> — jeter ces mains-là est ce qui sépare un joueur gagnant d\'un perdant, ' + POS_INFO[a.pos].note.toLowerCase();
   }
-  return h;
-}
-
-function feedbackHTML(){
-  const f = G.feedback;
-  return '<div class="verdict" data-tone="' + f.tone + '"><div class="vt">' +
-    (f.tone === 'good' ? '✓' : f.tone === 'warn' ? '≈' : '✗') + ' ' + f.title +
-    '</div><div class="vb">' + f.text + '</div></div>';
-}
-
-function waitingHTML(){
-  const p = hero();
-  const pos = posOf(0), info = POS_INFO[pos];
-  let h = '';
-  if (!G.hand){
-    h += '<h3 class="sec">Bienvenue à la table</h3>';
-    h += '<p>Tu joues 6-max en <b>No-Limit Hold\'em</b> avec 100 blindes de tapis. À chaque décision, ce rail te donne ton équité réelle, la cote du pot et la ligne recommandée — puis il note ton choix.</p>';
-    h += '<p>Commence par l\'onglet <b>Leçons</b> si les mots « range », « outs » ou « cote du pot » sont flous.</p>';
-    h += '<div class="note">Raccourcis : <b>F</b> se coucher · <b>C</b> parole/suivre · <b>R</b> relancer · <b>Espace</b> main suivante.</div>';
-    return h;
+  else {
+    const combi = a.made ? handName(a.made).toLowerCase() : '';
+    const nOuts = a.outs ? a.outs.n : 0;
+    if (a.toCall > 0){
+      if (a.rec.kind === 'call')
+        t = 'Tu gagnes ce coup ' + sur(a.eq) + ' fois sur 100, et il te suffit d\'en gagner ' + sur(a.need) + ' pour que payer soit rentable. <b>Suis les ' + fmt(a.toCall) + '</b> : ce suivi te rapporte ' + jet(a.ev) + ' jetons en moyenne.';
+      else if (a.rec.kind === 'raise')
+        t = 'Avec ' + combi + ' tu gagnes ' + sur(a.eq) + ' fois sur 100 — bien plus que les ' + sur(a.need) + ' demandées pour suivre. Ne te contente pas de payer : <b>relance à ' + fmt(a.rec.target) + '</b>, il y a de l\'argent à prendre.';
+      else
+        t = 'Tu ne gagnes que ' + sur(a.eq) + ' fois sur 100 et il t\'en faudrait ' + sur(a.need) + '. <b>Couche-toi</b> : payer ici te coûte ' + jet(Math.abs(a.ev)) + ' jetons en moyenne, même les fois où tu gagnes le coup.';
+    } else {
+      if (a.rec.kind === 'raise' && a.eq > 0.62)
+        t = 'Tu as ' + combi + ' et tu es devant ' + sur(a.eq) + ' fois sur 100. <b>Mise ' + fmt(a.rec.target) + '</b> — environ deux tiers du pot — pour faire payer ceux qui cherchent leur tirage.';
+      else if (a.rec.kind === 'raise')
+        t = 'Rien de fait pour l\'instant, mais <b>' + nOuts + ' cartes</b> t\'améliorent nettement. <b>Mise ' + fmt(a.rec.target) + '</b> : c\'est un semi-bluff, tu gagnes tout de suite s\'ils se couchent, et il te reste tes outs sinon.';
+      else
+        t = 'Tu as ' + combi + ' : ' + sur(a.eq) + ' chances sur 100, pas de quoi miser pour la valeur ni assez de tirages pour bluffer. <b>Parole</b> — la carte suivante est gratuite.';
+    }
   }
-  h += '<div class="verdict"><div class="vt">Les adversaires jouent…</div><div class="vb">Tu es en <b>' + pos + '</b> (' + info.full + ').</div></div>';
-  if (p.cards.length && !p.folded){
-    h += '<div class="note">Ta main : <b>' + p.cards.map(cardTxt).join(' ') + '</b> — ' + handDesc(p.cards) +
-         (G.street === 'preflop' ? ' · Chen <b>' + chen(p.cards) + '</b>' : '') + '</div>';
-  } else if (p.folded){
-    h += '<div class="note">Tu t\'es couché : observe comment les autres jouent le coup, c\'est du temps de lecture gratuit.</div>';
-  }
-  h += '<p style="font-size:var(--fs-sm)">' + info.note + '</p>';
-  return h;
-}
 
-function reviewHTML(){
-  const d = G.showdownData;
-  if (!d) return waitingHTML();
-  const heroRow = d.rows.find(r => r.id === 0);
-  let h = '<h3 class="sec">Fin de la main</h3>';
-  if (heroRow){
-    const net = heroRow.net;
-    h += '<div class="verdict" data-tone="' + (net > 0 ? 'good' : net < 0 ? 'bad' : '') + '">' +
-      '<div class="vt">' + (net > 0 ? '+' : net < 0 ? '−' : '') + fmt(Math.abs(net)) + ' jetons</div>' +
-      '<div class="vb">' + (heroRow.hand ? 'Ta main à l\'abattage : <b>' + heroRow.hand + '</b>' : 'Main terminée sans abattage.') + '</div></div>';
+  const nums = [];
+  nums.push(['Tes chances', pct(a.eq), a.eq >= a.share ? 'ok' : '']);
+  if (a.toCall > 0){
+    nums.push(['Il te faut', pct0(a.need), a.eq >= a.need ? 'ok' : 'no']);
+    nums.push(['À suivre', fmt(a.toCall), '']);
+    nums.push(['Gain moyen', (a.ev >= 0 ? '+' : '−') + fmt(Math.abs(a.ev)), a.ev >= 0 ? 'ok' : 'no']);
   } else {
-    h += '<div class="verdict"><div class="vt">Tu étais couché</div><div class="vb">Le pot s\'est joué sans toi.</div></div>';
+    nums.push(['Pot', fmt(a.potTotal), 'hl']);
   }
-  h += '<div class="log">' + d.rows.map(r =>
-    '<div class="ln"><span class="who">' + r.name + '</span><span>' +
-    (r.hand ? r.hand : 'main non montrée') + (r.won ? ' — remporte ' + fmt(r.won) : '') + '</span></div>').join('') + '</div>';
-  h += '<div class="note">Ouvre l\'onglet <b>Main</b> pour relire l\'historique complet des mises, puis <b>Espace</b> pour la suivante.</div>';
-  return h;
+  if (G.street === 'preflop') nums.push(['Score de Chen', String(a.chen), '']);
+  else if (a.outs) nums.push(['Outs', String(a.outs.n), '']);
+  return {text: t, nums};
+}
+
+function waitingSpeech(){
+  const p = hero();
+  if (!G.hand) return {text:'Je te guide à chaque décision : tes chances de gagner, le prix à payer, et quoi faire. <b>Distribue</b> quand tu veux — ou ouvre <b>Leçons</b> si « cote du pot » ne te dit rien.'};
+  if (p.folded) return {text:'Tu es couché. Regarde comment le coup se termine : observer les mains des autres, c\'est de la lecture gratuite.'};
+  const info = POS_INFO[posOf(0)];
+  return {text:'Les autres réfléchissent. Toi, tu es en <b>' + posOf(0) + '</b> — ' + info.note.charAt(0).toLowerCase() + info.note.slice(1)};
+}
+
+function reviewSpeech(){
+  const d = G.showdownData;
+  if (!d) return {text:'Main terminée.'};
+  const r = d.rows.find(x => x.id === 0);
+  if (!r) return {text:'Le coup s\'est joué sans toi — tu n\'as rien perdu de plus que ce que tu avais déjà misé.', tone:''};
+  if (r.net > 0) return {tone:'good', text:'<b>Tu remportes ' + fmt(r.net) + ' jetons</b>' + (r.hand ? ' avec ' + r.hand.toLowerCase() : ' — personne n\'a osé te suivre') + '. <b>Espace</b> pour la main suivante.'};
+  if (r.net < 0) return {tone:'bad', text:'<b>Coup perdu : ' + fmt(Math.abs(r.net)) + ' jetons.</b> ' + (r.hand ? 'Ta main : ' + r.hand.toLowerCase() + '. ' : '') + 'Juge tes décisions, pas le résultat d\'une main — même le meilleur joueur perd un coup sur trois.'};
+  return {text:'Pot partagé, personne ne perd rien.'};
+}
+
+function logHTML(){
+  return '<div class="log">' + G.log.map(l => l.kind === 'street'
+      ? '<div class="ln street">' + l.txt + '</div>'
+      : '<div class="ln"><span class="who">' + l.who + '</span><span>' + l.txt + '</span></div>').join('') + '</div>';
+}
+
+function say(text, tone, nums, eq){
+  const bar = $('#coachbar');
+  bar.dataset.tone = tone || '';
+  $('#coach-say').innerHTML = text;
+  const line = $('#coach-eq');
+  if (eq){
+    line.hidden = false;
+    $('#eq-fill').style.width = Math.round(eq.eq*100) + '%';
+    $('#eq-mark').style.left = Math.round(eq.share*100) + '%';
+    $('#eq-txt').textContent = pct0(eq.eq);
+  } else line.hidden = true;
+  const figs = $('#coach-figs');
+  if (nums && nums.length){
+    figs.hidden = false;
+    $('#coach-nums').innerHTML = nums.map(n =>
+      '<div class="metric ' + n[2] + '"><span class="lbl">' + n[0] + '</span><span class="val">' + n[1] + '</span></div>').join('');
+  } else figs.hidden = true;
 }
 
 function renderCoach(){
-  const pane = $('#pane-conseil');
   if (!G.coachOn){
-    pane.innerHTML = '<div class="note">Coach désactivé — tu joues à l\'aveugle, comme en vraie partie. Réactive-le en haut à droite pour retrouver équités et conseils.</div>' +
-      (G.over ? reviewHTML() : '');
-    renderHandPane();
+    say(G.over ? reviewSpeech().text : 'Coach en veille — à toi de juger seul, comme en vraie partie.', '', null, null);
     return;
   }
-  let h = G.feedback ? feedbackHTML() : '';
   if (G.awaiting){
     const a = computeAdvice();
     G.lastAdvice = a;
-    h += adviceHTML(a);
-  } else if (G.over){
-    h += reviewHTML();
-  } else {
-    h += waitingHTML();
+    const sp = adviceSpeech(a);
+    say(sp.text, '', sp.nums, {eq:a.eq, share:a.share});
+    return;
   }
-  pane.innerHTML = h;
-  renderHandPane();
+  if (G.over){ const r = reviewSpeech(); say(r.text, r.tone, null, null); return; }
+  if (G.feedback){ say(G.feedback.text, G.feedback.tone, null, null); return; }
+  const w = waitingSpeech();
+  say(w.text, '', null, null);
 }
 
-/* ── onglet « Main » : historique ─────────────────────────────── */
-function renderHandPane(){
-  const pane = $('#pane-main');
-  if (pane.hidden && pane.dataset.built === String(G.log.length) + G.hand) return;
-  pane.dataset.built = String(G.log.length) + G.hand;
-  const p = hero();
-  let h = '';
-  h += '<h3 class="sec">Main n°' + (G.hand || '—') + '</h3>';
-  if (p.cards.length){
-    h += '<div class="note">Tes cartes : <b>' + p.cards.map(cardTxt).join(' ') + '</b>' +
-      (G.board.length ? ' · Board : <b>' + G.board.map(cardTxt).join(' ') + '</b>' : '') + '</div>';
-  }
-  if (G.board.length >= 3 && !p.folded && p.cards.length){
-    h += '<div class="note">Ta meilleure combinaison : <b>' + handName(evaluate(p.cards.concat(G.board))) + '</b></div>';
-  }
-  h += '<div class="log">' + G.log.map(l => l.kind === 'street'
-      ? '<div class="ln street">' + l.txt + '</div>'
-      : '<div class="ln"><span class="who">' + l.who + '</span><span>' + l.txt + '</span></div>').join('') + '</div>';
-  if (G.showdownData && G.showdownData.pots.length > 1){
-    h += '<div class="divider"></div><h4 class="sub">Pots</h4><div class="log">' +
-      G.showdownData.pots.map(x => '<div class="ln"><span class="who">' + x.name + '</span><span>' + fmt(x.amount) +
-      ' → ' + x.winners.map(id => G.players[id].name).join(', ') + '</span></div>').join('') + '</div>';
-  }
-  pane.innerHTML = h;
-}
-
-/* ── onglet « Stats » ─────────────────────────────────────────── */
-function renderStats(){
+/* ── la fenêtre « Leçons » : session + cours ─────────────────── */
+function statsHTML(){
   const s = G.stats;
   const pnl = hero().stack - s.invested;
-  const bbWon = pnl / BB;
-  const per100 = s.hands ? (bbWon / s.hands * 100) : 0;
+  const per100 = s.hands ? (pnl / BB / s.hands * 100) : 0;
+  const m = (l, v, c) => '<div class="metric ' + (c||'') + '"><span class="lbl">' + l + '</span><span class="val">' + v + '</span></div>';
   let h = '<h3 class="sec">Ta session</h3><div class="statgrid">';
-  h += metric('Mains jouées', String(s.hands));
-  h += metric('Résultat', (pnl >= 0 ? '+' : '−') + bb(Math.abs(pnl)) + ' <small>bb</small>', pnl >= 0 ? 'ok' : 'no');
-  h += metric('bb / 100 mains', (per100 >= 0 ? '+' : '−') + Math.abs(per100).toFixed(1).replace('.',','), per100 >= 0 ? 'ok' : 'no');
-  h += metric('VPIP', s.hands ? Math.round(s.vpip / s.hands * 100) + ' <small>%</small>' : '—');
-  h += metric('Pots gagnés', String(s.won));
-  h += metric('Accord coach', s.decisions ? Math.round(s.agree / s.decisions * 100) + ' <small>%</small>' : '—',
+  h += m('Mains jouées', String(s.hands));
+  h += m('Résultat', (pnl >= 0 ? '+' : '−') + bb(Math.abs(pnl)) + ' <small>bb</small>', pnl >= 0 ? 'ok' : 'no');
+  h += m('bb / 100 mains', (per100 >= 0 ? '+' : '−') + Math.abs(per100).toFixed(1).replace('.',','), per100 >= 0 ? 'ok' : 'no');
+  h += m('Mains jouées volontairement', s.hands ? Math.round(s.vpip / s.hands * 100) + ' <small>%</small>' : '—');
+  h += m('Pots gagnés', String(s.won));
+  h += m('Accord avec le coach', s.decisions ? Math.round(s.agree / s.decisions * 100) + ' <small>%</small>' : '—',
        s.decisions && s.agree / s.decisions >= 0.7 ? 'ok' : '');
   h += '</div>';
-  h += '<p><b>VPIP</b> = pourcentage de mains où tu mets volontairement des jetons. En 6-max, un bon repère est <b>20-27 %</b> : en dessous tu es trop serré, au-dessus tu paies trop de mains marginales.</p>';
-  h += '<p><b>bb/100</b> est l\'unité de mesure du poker : un gagnant régulier en ligne tourne entre <b>+3</b> et <b>+10</b> bb/100. Il faut des milliers de mains pour que ce chiffre veuille dire quelque chose — sur 50 mains, c\'est du bruit.</p>';
+  h += '<p>Un bon repère en 6-max : jouer <b>20 à 27 %</b> des mains. En dessous tu es trop serré, au-dessus tu paies trop de mains marginales. Et <b>bb/100</b> ne veut rien dire avant plusieurs milliers de mains — sur cinquante, c\'est du hasard.</p>';
   h += '<div class="divider"></div><h4 class="sub">Tes adversaires</h4>';
   h += '<div class="tbl-wrap"><table class="tbl"><tr><th>Joueur</th><th>Style</th><th class="n">Tapis</th></tr>';
   G.players.slice(1).forEach(p => {
     h += '<tr><td>' + p.name + '</td><td>' + p.style.label + '</td><td class="n">' + fmt(p.stack) + '</td></tr>';
   });
   h += '</table></div>';
-  h += '<p>Adapte-toi : on <b>bluffe peu</b> contre un suiveur passif (Mireille) et on <b>paie plus large</b> contre un joueur imprévisible (Bruno), dont la range de mise est très ouverte.</p>';
-  $('#pane-stats').innerHTML = h;
+  h += '<p>On <b>bluffe peu</b> contre Mireille, qui suit tout, et on <b>paie plus large</b> contre Bruno, qui mise n\'importe quoi.</p><div class="divider"></div>';
+  return h;
 }
+
+function renderStats(){ if (!$('#lessons').hidden) $('#lessons-body').innerHTML = statsHTML() + G.lessonsHTML; }
 
 /* ═════════════════════ 11 · Abattage ═════════════════════ */
 function showShowdown(){
@@ -1755,6 +1744,11 @@ function showShowdown(){
   info.innerHTML = 'Pot : <b>' + fmt(d.total) + '</b>' +
     (G.board.length ? ' · Board : <b>' + G.board.map(cardTxt).join(' ') + '</b>' : '');
   body.appendChild(info);
+
+  const det = document.createElement('details');
+  det.className = 'figures';
+  det.innerHTML = '<summary>Revoir le déroulé de la main</summary>' + logHTML();
+  body.appendChild(det);
   $('#showdown').hidden = false;
   $('#sd-next').focus();
 }
@@ -1784,8 +1778,8 @@ function buildLessons(){
   const L = (n, title, body) =>
     '<details class="lesson"><summary><span class="num">' + n + '</span>' + title + '</summary><div class="body">' + body + '</div></details>';
 
-  let h = '<h3 class="sec">Apprendre le Hold\'em</h3>' +
-    '<p>Neuf leçons, dans l\'ordre où elles servent à la table. Reviens ici pendant une main : rien ne se perd.</p>';
+  let h = '<h3 class="sec">Les neuf leçons</h3>' +
+    '<p>Dans l\'ordre où elles servent à la table. Reviens ici pendant une main : rien ne se perd.</p>';
 
   h += L(1, 'Le déroulé d\'une main',
     '<p>Six joueurs, un <b>bouton</b> (le donneur) qui tourne d\'un siège à chaque main. À sa gauche : <b>petite blinde</b> (25) et <b>grosse blinde</b> (50) — des mises forcées qui créent quelque chose à gagner.</p>' +
@@ -1887,7 +1881,7 @@ function buildLessons(){
      ['bb/100','Gain moyen en blindes sur 100 mains']].map(r => '<tr><td><b>' + r[0] + '</b></td><td>' + r[1] + '</td></tr>').join('') +
     '</table></div>';
 
-  $('#pane-lecons').innerHTML = h;
+  G.lessonsHTML = h;
 }
 
 /* ═════════════════════ 13 · Branchements ═════════════════════ */
@@ -1907,19 +1901,16 @@ function initUI(){
   $('#slider').oninput  = syncSizer;
 
   $('#sd-next').onclick   = () => { G.feedback = null; newHand(); };
-  $('#sd-review').onclick = () => { hideShowdown(); showDealButton(); setHint('Relis la main dans l\'onglet <b>Main</b>, puis <b>Espace</b> pour la suivante.'); };
+  $('#sd-review').onclick = () => { hideShowdown(); showDealButton(); setHint('Table figée sur la fin du coup — <b>Espace</b> pour la main suivante.'); };
 
-  const tabs = ['conseil','main','lecons','stats'];
-  tabs.forEach(t => {
-    $('#tab-' + t).onclick = () => {
-      tabs.forEach(u => {
-        $('#tab-' + u).setAttribute('aria-selected', String(u === t));
-        $('#pane-' + u).hidden = u !== t;
-      });
-      if (t === 'main') renderHandPane();
-      if (t === 'stats') renderStats();
-    };
-  });
+  const lessons = $('#lessons');
+  $('#t-lessons').onclick = () => {
+    $('#lessons-body').innerHTML = statsHTML() + G.lessonsHTML;
+    lessons.hidden = false;
+    $('#lessons-close').focus();
+  };
+  $('#lessons-close').onclick = () => { lessons.hidden = true; };
+  lessons.onclick = e => { if (e.target === lessons) lessons.hidden = true; };
 
   $('#t-coach').onclick = e => {
     G.coachOn = !G.coachOn;
@@ -1942,6 +1933,8 @@ function initUI(){
   document.addEventListener('keydown', ev => {
     if (ev.target.tagName === 'INPUT' || ev.metaKey || ev.ctrlKey) return;
     const k = ev.key.toLowerCase();
+    if (k === 'escape'){ $('#lessons').hidden = true; return; }
+    if (!$('#lessons').hidden) return;
     if (k === ' ' || k === 'spacebar'){
       const canDeal = !$('#b-deal').hidden || !$('#showdown').hidden;
       if (canDeal){ ev.preventDefault(); G.feedback = null; newHand(); }

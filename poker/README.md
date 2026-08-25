@@ -8,7 +8,9 @@ Un seul fichier, aucune dépendance : ouvre `index.html` dans un navigateur.
 Tu joues contre 5 adversaires aux profils distincts (serré-agressif, suiveur passif,
 large-agressif, imprévisible…), 100 blindes de tapis, blindes 25/50, recave automatique.
 
-À **chaque** décision, le rail de droite affiche :
+À **chaque** décision, le coach te parle en une phrase claire sous la table
+(« Tu gagnes ce coup 62 fois sur 100, et il te suffit d'en gagner 25 pour que payer
+soit rentable. Suis les 375. »). Un repli **Voir les chiffres** donne le détail :
 
 - ton **équité réelle**, calculée par simulation Monte-Carlo (2 200 tirages) contre le
   nombre exact d'adversaires encore en jeu ;
@@ -19,8 +21,8 @@ large-agressif, imprévisible…), 100 blindes de tapis, blindes 25/50, recave a
 - la **ligne recommandée** et pourquoi, puis une **note de ta décision** une fois jouée.
 
 Neuf leçons progressives (déroulé d'une main, classement, position, cote du pot, règle des
-2 et 4, ranges d'ouverture et score de Chen, sizing, bluff/semi-bluff, erreurs classiques)
-et un glossaire sont dans l'onglet **Leçons**.
+2 et 4, ranges d'ouverture et score de Chen, sizing, bluff/semi-bluff, erreurs classiques),
+un glossaire et tes statistiques de session sont derrière le bouton **Leçons**.
 
 Raccourcis : `F` se coucher · `C` parole/suivre · `R` relancer · `Espace` main suivante.
 
