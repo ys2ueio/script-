@@ -8,27 +8,16 @@ Un seul fichier, aucune dépendance : ouvre `index.html` dans un navigateur.
 Tu joues contre 5 adversaires aux profils distincts (serré-agressif, suiveur passif,
 large-agressif, imprévisible…), 100 blindes de tapis, blindes 25/50, recave automatique.
 
-À **chaque** décision, le coach t'explique la situation en mots simples, sans jargon
-non défini — il nomme tes cartes et leur valeur, dit ce que vaut ta main et ce qui la bat,
-traduit le prix demandé en « il te suffit de gagner 1 fois sur 4 », puis conclut :
+À **chaque** décision, le coach explique en phrases courtes, une idée par ligne :
 
-> Tes 2 cartes plus les 3 du tableau : ta meilleure main de 5 cartes, c'est **deux paires**
-> (deux fois deux cartes de même valeur). Un brelan ou mieux te bat. Tu gagnes ce coup
-> **9 fois sur 10**. Il y a 900 au milieu et on te demande 300 : tu risques 1 pour en gagner 3.
-> Autrement dit, il te suffit de gagner **1 fois sur 4** pour rentrer dans tes frais — c'est ça,
-> la **cote du pot**. Tu gagnes plus souvent que ce que le prix exige : **relance à 750**.
+> Tu as **deux paires**.
+> *Deux fois deux cartes de même valeur. Un brelan ou mieux te bat.*
+> Tu gagnes **7 fois sur 10**. Le prix demande **1 fois sur 4**.
+> **→ Relance à 750.**
 
-Après ton choix, il explique ce qui était juste ou faux dans le raisonnement — jamais dans
-le résultat. Entre deux décisions, il glisse un rappel (ordre des cartes, classement des
-mains, kicker, outs, position). Un repli **Voir les chiffres** donne le détail :
-
-- ton **équité réelle**, calculée par simulation Monte-Carlo (2 200 tirages) contre le
-  nombre exact d'adversaires encore en jeu ;
-- la **cote du pot** — le pourcentage d'équité qu'il te faut pour que suivre soit rentable ;
-- l'**espérance de gain** du suivi en jetons ;
-- tes **outs**, comptés comme un joueur les compte vraiment (une paire sur le board ne
-  compte pas, une surcarte oui) ;
-- la **ligne recommandée** et pourquoi, puis une **note de ta décision** une fois jouée.
+Après ton choix, il dit en deux lignes ce qui était juste ou faux dans le raisonnement.
+Entre deux décisions, il glisse un rappel court (ordre des cartes, kicker, outs, position).
+Un repli **Voir les chiffres** donne le détail :
 
 Neuf leçons progressives (déroulé d'une main, classement, position, cote du pot, règle des
 2 et 4, ranges d'ouverture et score de Chen, sizing, bluff/semi-bluff, erreurs classiques),
@@ -36,8 +25,12 @@ un glossaire et tes statistiques de session sont derrière le bouton **Leçons**
 
 Raccourcis : `F` se coucher · `C` parole/suivre · `R` relancer · `Espace` main suivante.
 
-Deux réglages utiles pour apprendre : **Cartes ouvertes** (voir le jeu des adversaires
-pendant la main) et **Coach** (le couper pour se tester en conditions réelles).
+Trois réglages utiles : **Cartes ouvertes** (voir le jeu des adversaires pendant la main),
+**Coach** (le couper pour se tester en conditions réelles) et **Son**.
+
+Les bruitages — cartes distribuées, jetons, coup frappé sur le tapis pour la parole, cloche
+quand c'est à toi, arpège sur un pot gagné — sont **synthétisés en WebAudio** : aucun fichier
+audio, aucune requête réseau.
 
 ## Vérifications
 
