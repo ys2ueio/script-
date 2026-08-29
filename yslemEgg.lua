@@ -6,14 +6,182 @@
 
 if not game:IsLoaded() then game.Loaded:Wait() end
 
-local Players      = game:GetService("Players")
-local RunService   = game:GetService("RunService")
-local UIS          = game:GetService("UserInputService")
-local TweenService = game:GetService("TweenService")
-local HttpService  = game:GetService("HttpService")
-local Lighting     = game:GetService("Lighting")
-local LP           = Players.LocalPlayer
+local Players           = game:GetService("Players")
+local RunService        = game:GetService("RunService")
+local UIS                = game:GetService("UserInputService")
+local TweenService      = game:GetService("TweenService")
+local HttpService        = game:GetService("HttpService")
+local Lighting           = game:GetService("Lighting")
+local ReplicatedStorage  = game:GetService("ReplicatedStorage")
+local LP                 = Players.LocalPlayer
 if not LP.Character then LP.CharacterAdded:Wait() end
+
+-- ============================================================
+-- MODULES DU JEU (Steal An Egg) — chemins confirmés par la source
+-- originale du jeu (Toolbox Hub) ET par le rapport d'analyse
+-- yslemEgg (workspace.__OBJECTS.Areas.GuardAreas.Forest/Desert/
+-- Prehistoric déjà vu dans le scan). pcall englobant : si un chemin
+-- change après une mise à jour, chaque feature qui en dépend vérifie
+-- la présence du module avant de s'en servir — jamais de plantage
+-- global, juste cette feature précise qui devient un no-op signalé.
+-- ============================================================
+local EggCmds, Ragdoll, Network, NM, PlotCmds, GEP, GCP, RGSR, SPP, GuardsD, AreasD, SlotId
+local Save, Constants, Bases, Treadmills, Trails
+local PlotsNet, TreadmillsNet, TrailsNet
+pcall(function()
+	EggCmds    = require(ReplicatedStorage.Library.Client.EggCmds)
+	Ragdoll    = require(ReplicatedStorage.Library.Modules.Ragdoll)
+	Network    = require(ReplicatedStorage.Library.Client.Network)
+	NM         = Network and Network.NET_MAP
+	PlotCmds   = require(ReplicatedStorage.Library.Client.PlotCmds)
+	GEP        = require(ReplicatedStorage.Library.Modules.GuardAreas.GuardEscapePrediction)
+	GCP        = require(ReplicatedStorage.Library.Modules.GuardAreas.GuardChasePolicy)
+	RGSR       = require(ReplicatedStorage.Library.Functions.ResolveGuardSpeedRequirement)
+	SPP        = require(ReplicatedStorage.Library.Client.SpeedPowerProjection)
+	GuardsD    = require(ReplicatedStorage.Directory.Guards)
+	AreasD     = require(ReplicatedStorage.Directory.Areas)
+	SlotId     = require(ReplicatedStorage.Library.Util.AreaEggSlotIdentity)
+
+	Save       = require(ReplicatedStorage.Library.Client.Save)
+	Constants  = require(ReplicatedStorage.Library.Globals.Constants)
+	Bases      = require(ReplicatedStorage.Directory.Bases)
+	Treadmills = require(ReplicatedStorage.Directory.Treadmills)
+	Trails     = require(ReplicatedStorage.Directory.Trails)
+
+	PlotsNet      = Constants and Constants.NETWORK_MAP and Constants.NETWORK_MAP.Plots
+	TreadmillsNet = Constants and Constants.NETWORK_MAP and Constants.NETWORK_MAP.Treadmills
+	TrailsNet     = Constants and Constants.NETWORK_MAP and Constants.NETWORK_MAP.Trails
+end)
+
+-- ── ZONES GARDÉES : Speed Power requis par zone ─────────────
+-- Reproduit le calcul du jeu lui-même (RGSR = ResolveGuardSpeedRequirement)
+-- pour savoir si une zone (Forest/Desert/Prehistoric/...) est
+-- franchissable sans se faire rattraper par son garde, selon la Speed
+-- Power actuelle du joueur. Alimente Auto Farm (cible "Best Unlocked")
+-- et Egg ESP (couleur verte/rouge locked-unlocked).
+local EXIT_DIR = Vector3.new(-1,0,0)
+local AREA = {}
+pcall(function()
+	EXIT_DIR = -workspace.__OBJECTS.Areas.SeparationLine.CFrame.LookVector
+end)
+do
+	local folder = workspace:FindFirstChild("__OBJECTS")
+	folder = folder and folder:FindFirstChild("Areas")
+	folder = folder and folder:FindFirstChild("GuardAreas")
+	if folder and GuardsD and AreasD and GCP then
+		for _, a in ipairs(folder:GetChildren()) do
+			pcall(function()
+				local d = GuardsD.Directory[AreasD.Directory[a.Name].GuardId]
+				local rec = {
+					cf = a.Bounds.CFrame, size = a.Bounds.Size,
+					guardPos = a.Guard:GetPivot().Position,
+					speed = d.WalkSpeed, radius = d.FlatRadius,
+					hit = GCP.ResolveHitDistance(d.HitDistance),
+					reqSP = nil,
+				}
+				if GEP and RGSR then
+					pcall(function()
+						local exitPos = a.ClosestExitPoint.Position
+						rec.reqSP = RGSR({
+							BaseGuardWalkSpeed = rec.speed,
+							ExitDirection = EXIT_DIR,
+							ExitDistance = GEP.ResolveExitDistance(rec.cf, rec.size, exitPos, EXIT_DIR),
+							FlatRadius = rec.radius,
+							GuardStartPosition = rec.guardPos,
+							HitDistance = rec.hit,
+							PlayerStartPosition = exitPos,
+						})
+					end)
+				end
+				AREA[a.Name] = rec
+			end)
+		end
+	end
+end
+
+local curSP = 0
+task.spawn(function()
+	while true do
+		if SPP then pcall(function() curSP = SPP.GetSpeedPower() or curSP end) end
+		task.wait(1)
+	end
+end)
+
+local function areaUnlocked(areaId)
+	local A = AREA[areaId]
+	if not A or not A.reqSP then return true end
+	return curSP >= A.reqSP
+end
+
+-- ── SCAN D'ŒUFS EN DIRECT ────────────────────────────────────
+-- Utilise le vrai snapshot serveur (EggCmds.GetAreaEggSnapshot) quand
+-- disponible — bien plus fiable qu'une recherche par nom "egg" dans
+-- workspace — avec repli sur les ProximityPrompt physiques (œufs
+-- tombés au sol, hors snapshot). Tourne en continu (comme la source
+-- d'origine) pour que la donnée soit déjà chaude dès qu'une feature
+-- l'utilise, pas seulement pendant qu'Auto Farm/ESP est actif.
+local cachedEggs = {}
+task.spawn(function()
+	while true do
+		local eggs = {}
+		if EggCmds and EggCmds.GetAreaEggSnapshot then
+			local ok, snap = pcall(function() return EggCmds.GetAreaEggSnapshot() end)
+			if ok and snap and snap.Records then
+				for _, r in ipairs(snap.Records) do
+					if r.State ~= "Equipped" and r.State ~= "Hatched" and r.State ~= "Claimed" and r.State ~= "Incubating" then
+						local eggCF
+						if typeof(r.BoundsCFrame) == "CFrame" then eggCF = r.BoundsCFrame
+						elseif typeof(r.CFrame) == "CFrame" then eggCF = r.CFrame
+						elseif r.Model and typeof(r.Model) == "Instance" and r.Model:IsA("Model") then eggCF = r.Model:GetPivot()
+						elseif r.Model and typeof(r.Model) == "Instance" and r.Model:IsA("BasePart") then eggCF = r.Model.CFrame end
+						local eggSize
+						if typeof(r.BoundsSize) == "Vector3" then eggSize = r.BoundsSize
+						elseif typeof(r.Size) == "Vector3" then eggSize = r.Size
+						elseif r.Model and typeof(r.Model) == "Instance" and r.Model:IsA("Model") then
+							local _, sz = r.Model:GetBoundingBox(); eggSize = sz
+						end
+						if eggCF then
+							eggs[#eggs+1] = {
+								uid = r.Uid, cf = eggCF, pos = eggCF.Position, size = eggSize,
+								area = r.AreaId, cat = r.AssetCategory, nest = r.NestId,
+							}
+						end
+					end
+				end
+			end
+		end
+		pcall(function()
+			for _, prompt in ipairs(workspace:GetDescendants()) do
+				if prompt:IsA("ProximityPrompt") and prompt.Enabled then
+					local action = prompt.ActionText:lower()
+					local objTxt = prompt.ObjectText:lower()
+					local parentName = (prompt.Parent and prompt.Parent.Name or ""):lower()
+					if action:find("grab") or action:find("steal") or action:find("take")
+						or action:find("pick") or action:find("collect")
+						or objTxt:find("egg") or parentName:find("egg") or parentName:find("drop") then
+						local part = prompt.Parent
+						if part and part:IsA("BasePart") then
+							local isDupe = false
+							for _, e in ipairs(eggs) do
+								if (e.pos - part.Position).Magnitude < 3 then isDupe = true; break end
+							end
+							if not isDupe then
+								eggs[#eggs+1] = {
+									uid = "Phys_"..tostring(prompt:GetDebugId()),
+									cf = part.CFrame, pos = part.Position, size = part.Size,
+									area = "Dropped", cat = objTxt ~= "" and prompt.ObjectText or part.Name,
+									isPhysical = true, prompt = prompt,
+								}
+							end
+						end
+					end
+				end
+			end
+		end)
+		cachedEggs = eggs
+		task.wait(0.35)
+	end
+end)
 
 -- kill previous instance
 pcall(function()
@@ -43,24 +211,26 @@ local C_RED    = Color3.fromRGB(220,60,60)
 -- STATE
 -- ============================================================
 local St = {
-	instantGrab     = false,
-	autoFarm        = false,
-	autoHatch       = false,
-	autoEquip       = false,
-	autoUpgradePen  = false,
-	autoUpgradeTM   = false,
-	autoUpgradeTrail= false,
-	antiRagdoll     = false,
-	fly             = false,
-	esp             = false,
-	antiAFK         = false,
-	antiTrap        = false,
-	fullbright      = false,
-	fpsBoost        = false,
-	speed           = 16,
-	flySpeed        = 50,
-	farmRadius      = 40,
-	guiVisible      = true,
+	instantGrab      = false,
+	autoFarm         = false,
+	farmTier         = "Best Unlocked",
+	autoHatch        = false,
+	autoEquip        = false,
+	autoClaim        = false,
+	autoUpgradePen   = false,
+	autoUpgradeTM    = false,
+	autoBuyTrails    = false,
+	autoRunTreadmill = false,
+	antiRagdoll      = false,
+	fly              = false,
+	esp              = false,
+	antiAFK          = false,
+	antiTrap         = false,
+	fullbright       = false,
+	fpsBoost         = false,
+	speed            = 16,
+	flySpeed         = 50,
+	guiVisible       = true,
 }
 
 -- ============================================================
@@ -407,214 +577,308 @@ makeRow(farmPage, "instantGrab", "Instant Grab", function(on)
 	setInstantGrab(on)
 end)
 
--- ── AUTO FARM ───────────────────────────────────────────────
-local _farmConn = nil
-local function stopFarm()
-	if _farmConn then _farmConn:Disconnect(); _farmConn = nil end
-end
-local function startFarm()
-	stopFarm()
-	local _t = 0
-	_farmConn = RunService.Heartbeat:Connect(function()
-		if not St.autoFarm then return end
-		local now = tick(); if now - _t < 0.08 then return end; _t = now
-		local char = LP.Character
-		local hrp  = char and char:FindFirstChild("HumanoidRootPart")
-		if not hrp then return end
-		-- scan workspace for ProximityPrompts near egg-like objects
-		local best, bestDist = nil, St.farmRadius
-		for _, obj in ipairs(workspace:GetDescendants()) do
-			if obj:IsA("ProximityPrompt") then
-				pcall(function()
-					local part = obj.Parent
-					if not part or not part:IsA("BasePart") then return end
-					-- filter: egg prompts usually have action text with keywords
-					local act = obj.ActionText:lower()
-					local isEgg = act:find("egg") or act:find("hatch") or act:find("grab")
-						or act:find("steal") or act:find("collect") or act:find("pick")
-						or obj.ObjectText:lower():find("egg")
-					if not isEgg then return end
-					local dist = (part.Position - hrp.Position).Magnitude
-					if dist < bestDist then bestDist = dist; best = obj end
-				end)
-			end
-		end
-		if best then
-			if fireproximityprompt then
-				pcall(function() fireproximityprompt(best) end)
-			else
-				pcall(function() best:InputHoldBegin(); task.wait(best.HoldDuration + 0.05); best:InputHoldEnd() end)
-			end
-			setStatus("Farm → "..tostring(best.Parent and best.Parent.Name or "?"), C_GREEN)
-		else
-			setStatus("Farm: scanning...", C_DIM)
-		end
+-- ── FARM TIER (cible) ────────────────────────────────────────
+-- Mêmes valeurs que le dropdown "Target Farm Tier" de la source
+-- d'origine. Bouton-cycle plutôt qu'un vrai dropdown (composant UI
+-- lourd à construire pour ce hub) — un clic passe à la valeur
+-- suivante, le texte affiche toujours la sélection courante.
+local FARM_TIERS = {
+	"Best Unlocked", "All Tiers (Highest First)", "Dropped",
+	"Snow", "Jungle", "Lake", "Abyss Ocean", "Prehistoric",
+	"Cosmic", "Cherry Blossom",
+}
+local _farmTierIdx = 1
+do
+	local row = Instance.new("Frame", farmPage)
+	row.Size = UDim2.new(1,-12,0,30)
+	row.BackgroundColor3 = C_ROW; row.BorderSizePixel = 0; corner(row, 6)
+	local pad = Instance.new("UIPadding", row)
+	pad.PaddingLeft = UDim.new(0,8); pad.PaddingRight = UDim.new(0,8)
+	label(row, "Farm Tier", UDim2.new(0.36,0,1,0), C_WHITE, Enum.Font.GothamMedium).TextSize = 12
+	local btn = Instance.new("TextButton", row)
+	btn.Size = UDim2.new(0.62,0,0,20)
+	btn.Position = UDim2.new(0.38,0,0.5,-10)
+	btn.BackgroundColor3 = C_ON_BG; btn.TextColor3 = C_MOON2
+	btn.Text = St.farmTier; btn.TextSize = 10; btn.Font = Enum.Font.GothamBold
+	btn.BorderSizePixel = 0; corner(btn, 8)
+	btn.MouseButton1Click:Connect(function()
+		_farmTierIdx = (_farmTierIdx % #FARM_TIERS) + 1
+		St.farmTier = FARM_TIERS[_farmTierIdx]
+		btn.Text = St.farmTier
 	end)
 end
+
+-- ── AUTO FARM — motif "swoop" de la source d'origine ────────
+-- 1) Choisit le meilleur œuf valide dans cachedEggs (filtré par
+--    farmTier ; "Best Unlocked" ne garde que les zones où
+--    areaUnlocked() est vrai selon la Speed Power actuelle).
+-- 2) Tween aller (PlatformStand=true le temps du trajet, pas de
+--    vélocité manuelle donc pas de rollback), spam fireproximityprompt
+--    + Network.Invoke(NM.Eggs.BUY,...) pendant le trajet ET sur place,
+--    micro-pause pour laisser la réplication réseau rattraper, tween
+--    retour à la position de départ exacte.
+-- Boucle unique démarrée une fois au chargement (comme la source
+-- d'origine) — gate interne sur St.autoFarm, pas de start/stop de
+-- connexion à chaque toggle.
+task.spawn(function()
+	local isFarmingEgg = false
+	while true do
+		task.wait(0.2)
+		local char = LP.Character
+		local rootPart = char and char:FindFirstChild("HumanoidRootPart")
+		local hum = char and char:FindFirstChildOfClass("Humanoid")
+
+		if St.autoFarm and not isFarmingEgg and rootPart then
+			local validEggs = {}
+			for _, r in ipairs(cachedEggs) do
+				local areaStr = tostring(r.area or "")
+				if St.farmTier == "Best Unlocked" then
+					if areaUnlocked(r.area) then validEggs[#validEggs+1] = r end
+				elseif St.farmTier == "All Tiers (Highest First)" then
+					validEggs[#validEggs+1] = r
+				else
+					if areaStr:lower() == St.farmTier:lower() then validEggs[#validEggs+1] = r end
+				end
+			end
+
+			if #validEggs == 0 then
+				setStatus("Farm: aucun oeuf valide ("..St.farmTier..")", C_DIM)
+			else
+				table.sort(validEggs, function(a, b)
+					local aA, bA = tostring(a.area or ""), tostring(b.area or "")
+					if aA ~= bA then return aA > bA end
+					return a.pos.Z < b.pos.Z
+				end)
+				local bestEgg = validEggs[1]
+
+				isFarmingEgg = true
+				local originalPos = rootPart.CFrame
+				if hum then hum.PlatformStand = true end
+				local flightSpeed = math.max(St.speed, 40)  -- swoop toujours fluide même à vitesse de marche basse
+				local targetPos = bestEgg.cf + Vector3.new(0, 1.5, 0)
+				local distToEgg = (rootPart.Position - targetPos.Position).Magnitude
+				local timeToEgg = math.max(distToEgg / flightSpeed, 0.02)
+
+				local spamming = true
+				task.spawn(function()
+					local lastBuy = 0
+					while spamming do
+						pcall(function()
+							if bestEgg.isPhysical and bestEgg.prompt then
+								if fireproximityprompt then fireproximityprompt(bestEgg.prompt) end
+							else
+								for _, obj in ipairs(workspace:GetDescendants()) do
+									if obj:IsA("ProximityPrompt") and obj.Parent
+										and (obj.Parent.Position - bestEgg.pos).Magnitude < 10 then
+										if fireproximityprompt then fireproximityprompt(obj) end
+									end
+								end
+							end
+							if not bestEgg.isPhysical and (os.clock() - lastBuy) > 0.1 then
+								lastBuy = os.clock()
+								task.spawn(function()
+									if Network and NM and NM.Eggs and NM.Eggs.BUY then
+										Network.Invoke(NM.Eggs.BUY, bestEgg.uid, 1)
+									end
+								end)
+							end
+						end)
+						task.wait(0.05)
+					end
+				end)
+
+				local tweenTo = TweenService:Create(rootPart, TweenInfo.new(timeToEgg, Enum.EasingStyle.Linear), {CFrame = targetPos})
+				tweenTo:Play(); tweenTo.Completed:Wait()
+
+				rootPart.AssemblyLinearVelocity = Vector3.zero
+				task.wait(0.15)
+
+				local distBack = (rootPart.Position - originalPos.Position).Magnitude
+				local timeBack = math.max(distBack / flightSpeed, 0.02)
+				local tweenBack = TweenService:Create(rootPart, TweenInfo.new(timeBack, Enum.EasingStyle.Linear), {CFrame = originalPos})
+				tweenBack:Play(); tweenBack.Completed:Wait()
+
+				spamming = false
+				rootPart.AssemblyLinearVelocity = Vector3.zero
+				rootPart.AssemblyAngularVelocity = Vector3.zero
+				if hum and not St.fly and not St.antiRagdoll then
+					hum.PlatformStand = false
+					pcall(function() hum:ChangeState(Enum.HumanoidStateType.Landed) end)
+				end
+				isFarmingEgg = false
+				setStatus("Farm → "..tostring(bestEgg.cat or "?"), C_GREEN)
+			end
+		end
+	end
+end)
 
 makeRow(farmPage, "autoFarm", "Auto Farm Eggs", function(on)
-	if on then startFarm() else stopFarm(); setStatus("Farm OFF", C_DIM) end
+	if not on then setStatus("Farm OFF", C_DIM) end
 end)
 
--- ── AUTO HATCH ──────────────────────────────────────────────
-local _hatchConn = nil
-local function stopHatch()
-	if _hatchConn then _hatchConn:Disconnect(); _hatchConn = nil end
-end
-local function startHatch()
-	stopHatch()
-	local _t = 0
-	_hatchConn = RunService.Heartbeat:Connect(function()
-		if not St.autoHatch then return end
-		local now = tick(); if now - _t < 0.5 then return end; _t = now
-		local char = LP.Character
-		local hrp  = char and char:FindFirstChild("HumanoidRootPart")
-		if not hrp then return end
-		for _, obj in ipairs(workspace:GetDescendants()) do
-			if obj:IsA("ProximityPrompt") then
-				pcall(function()
-					local act = obj.ActionText:lower()
-					local isHatch = act:find("hatch") or act:find("open") or act:find("crack")
-					if not isHatch then return end
-					local part = obj.Parent
-					if part and part:IsA("BasePart") then
-						local dist = (part.Position - hrp.Position).Magnitude
-						if dist < St.farmRadius then
-							if fireproximityprompt then
-								pcall(function() fireproximityprompt(obj) end)
-							else
-								pcall(function() obj:InputHoldBegin(); task.wait(obj.HoldDuration+0.05); obj:InputHoldEnd() end)
+-- ── AUTO HATCH — vrais appels EggCmds (source d'origine) ────
+-- EggCmds.GetOwnerRuntimeRecords(userId) donne les œufs possédés ;
+-- IsLocalEggReady(uid) dit si son timer d'incubation est fini ;
+-- RequestHatchEgg puis RequestCompleteHatchEgg (avec un court délai
+-- entre les deux, comme la source d'origine) déclenchent l'éclosion
+-- réelle — bien plus fiable qu'un scan de prompt par mot-clé.
+task.spawn(function()
+	local lastHatch = 0
+	while true do
+		task.wait(0.5)
+		if St.autoHatch and (os.clock() - lastHatch) >= 2 then
+			lastHatch = os.clock()
+			pcall(function()
+				if EggCmds and EggCmds.GetOwnerRuntimeRecords then
+					local ok, recs = pcall(function() return EggCmds.GetOwnerRuntimeRecords(LP.UserId) end)
+					if ok and type(recs) == "table" then
+						for uid, rec in pairs(recs) do
+							local ready = false
+							pcall(function() ready = EggCmds.IsLocalEggReady(uid) end)
+							if rec.Placement ~= nil and ready then
+								local st = pcall(function() return EggCmds.RequestHatchEgg(uid) end)
+								if st then
+									task.wait(0.15)
+									pcall(function() EggCmds.RequestCompleteHatchEgg(uid) end)
+									setStatus("Hatch → "..tostring(uid), C_GREEN)
+								end
 							end
 						end
 					end
-				end)
+				end
+			end)
+		end
+	end
+end)
+
+makeRow(farmPage, "autoHatch", "Auto Hatch", function(on) end)
+
+-- ── AUTO EQUIP BEST ──────────────────────────────────────────
+task.spawn(function()
+	local lastEquip = 0
+	while true do
+		task.wait(1)
+		if St.autoEquip and (os.clock() - lastEquip) >= 3 then
+			lastEquip = os.clock()
+			pcall(function()
+				if Network and NM and NM.Backpack and NM.Backpack.EQUIP_BEST then
+					Network.Invoke(NM.Backpack.EQUIP_BEST)
+				end
+			end)
+		end
+	end
+end)
+
+makeRow(farmPage, "autoEquip", "Auto Equip Best", function(on) end)
+
+-- ── AUTO CLAIM — index/free gifts/offline assets/group reward ──
+task.spawn(function()
+	local lastClaim = 0
+	while true do
+		task.wait(1)
+		if St.autoClaim and (os.clock() - lastClaim) >= 5 then
+			lastClaim = os.clock()
+			pcall(function()
+				if Network and NM then
+					if NM.Index and NM.Index.REQUEST_CLAIM_ALL then Network.Invoke(NM.Index.REQUEST_CLAIM_ALL) end
+					if NM.FreeGifts and NM.FreeGifts.REQUEST_CLAIM then Network.Invoke(NM.FreeGifts.REQUEST_CLAIM) end
+					if NM.OfflineAssets and NM.OfflineAssets.REQUEST_REDEEM then Network.Invoke(NM.OfflineAssets.REQUEST_REDEEM) end
+					if NM.GroupReward and NM.GroupReward.CLAIM_REWARD then Network.Invoke(NM.GroupReward.CLAIM_REWARD) end
+				end
+			end)
+		end
+	end
+end)
+
+makeRow(farmPage, "autoClaim", "Auto Claim", function(on) end)
+
+-- ── AUTO UPGRADE — vraies conditions d'argent (Save.Get + Directory) ──
+-- Reproduit exactement tryUpgradePen / tryUpgradeTreadmill / tryBuyTrails
+-- de la source d'origine : lit le vrai solde du joueur (Save.Get()) et
+-- le vrai coût du prochain palier (Bases/Treadmills/Trails directory)
+-- avant d'acheter — jamais de tentative gaspillée sur un remote générique.
+local function tryUpgradePen(data)
+	local nextLevel = data.BaseUpgradeLevel + 1
+	local nextConfig = Bases and Bases.BASES and Bases.BASES[nextLevel]
+	if nextConfig == nil then return end
+	if data.Money >= nextConfig.Cost then
+		pcall(function() Network.Fire(PlotsNet.REQUEST_BASE_UPGRADE) end)
+	end
+end
+
+local function tryUpgradeTreadmill(data)
+	local nextLevel = data.TreadmillUpgradeLevel + 1
+	local nextConfig = Treadmills and Treadmills.GetByUpgradeLevel and Treadmills.GetByUpgradeLevel(nextLevel)
+	if nextConfig == nil then return end
+	if data.Money >= nextConfig.Price then
+		pcall(function() Network.Invoke(TreadmillsNet.REQUEST_UPGRADE, nextConfig._id) end)
+	end
+end
+
+local function tryBuyTrails(data)
+	if not Trails or not Trails.Directory then return end
+	local affordable = {}
+	for name, cfg in pairs(Trails.Directory) do
+		if cfg.DisplayInShop and not data.TrailInventory[name] then
+			if data.Money >= cfg.Price then
+				table.insert(affordable, {name = name, price = cfg.Price})
 			end
 		end
-		-- also try RemoteEvents named "Hatch" / "HatchEgg"
-		pcall(function()
-			local RS = game:GetService("ReplicatedStorage")
-			for _, v in ipairs(RS:GetDescendants()) do
-				if v:IsA("RemoteEvent") then
-					local n = v.Name:lower()
-					if n:find("hatch") or n:find("crackopen") then
-						v:FireServer()
-					end
-				end
-			end
-		end)
-	end)
+	end
+	table.sort(affordable, function(a, b) return a.price < b.price end)
+	if #affordable > 0 then
+		local target = affordable[#affordable]
+		pcall(function() Network.Invoke(TrailsNet.REQUEST_PURCHASE, target.name) end)
+	end
 end
 
-makeRow(farmPage, "autoHatch", "Auto Hatch", function(on)
-	if on then startHatch() else stopHatch() end
-end)
-
--- ── AUTO EQUIP ──────────────────────────────────────────────
-local _equipConn = nil
-local function stopEquip() if _equipConn then _equipConn:Disconnect(); _equipConn = nil end end
-local function startEquip()
-	stopEquip()
-	local _t = 0
-	_equipConn = RunService.Heartbeat:Connect(function()
-		if not St.autoEquip then return end
-		local now = tick(); if now - _t < 1 then return end; _t = now
-		pcall(function()
-			local RS = game:GetService("ReplicatedStorage")
-			for _, v in ipairs(RS:GetDescendants()) do
-				if v:IsA("RemoteEvent") or v:IsA("RemoteFunction") then
-					local n = v.Name:lower()
-					if n:find("equip") or n:find("claim") or n:find("collect") then
-						if v:IsA("RemoteEvent") then v:FireServer()
-						else pcall(function() v:InvokeServer() end) end
-					end
+task.spawn(function()
+	local lastPen, lastTM, lastTrail = 0, 0, 0
+	while true do
+		task.wait(1.5)
+		if St.autoUpgradePen or St.autoUpgradeTM or St.autoBuyTrails then
+			local ok, data = pcall(function() return Save and Save.Get and Save.Get() end)
+			if ok and data then
+				local now = os.clock()
+				if St.autoUpgradePen and PlotsNet and (now - lastPen > 1.5) then
+					pcall(tryUpgradePen, data); lastPen = now
 				end
-			end
-		end)
-		-- ProximityPrompt fallback
-		local char = LP.Character
-		local hrp  = char and char:FindFirstChild("HumanoidRootPart")
-		if hrp then
-			for _, obj in ipairs(workspace:GetDescendants()) do
-				if obj:IsA("ProximityPrompt") then
-					pcall(function()
-						local act = obj.ActionText:lower()
-						if act:find("equip") or act:find("claim") or act:find("collect") then
-							local part = obj.Parent
-							if part and part:IsA("BasePart") and (part.Position - hrp.Position).Magnitude < St.farmRadius then
-								if fireproximityprompt then pcall(function() fireproximityprompt(obj) end)
-								else pcall(function() obj:InputHoldBegin(); task.wait(obj.HoldDuration+0.05); obj:InputHoldEnd() end) end
-							end
-						end
-					end)
+				if St.autoUpgradeTM and TreadmillsNet and (now - lastTM > 1.5) then
+					pcall(tryUpgradeTreadmill, data); lastTM = now
+				end
+				if St.autoBuyTrails and TrailsNet and (now - lastTrail > 3) then
+					pcall(tryBuyTrails, data); lastTrail = now
 				end
 			end
 		end
-	end)
-end
-
-makeRow(farmPage, "autoEquip", "Auto Equip / Claim", function(on)
-	if on then startEquip() else stopEquip() end
+	end
 end)
 
--- ── AUTO UPGRADE ────────────────────────────────────────────
-local _upgradeConns = {}
-local function stopUpgradeAll()
-	for _, c in ipairs(_upgradeConns) do pcall(function() c:Disconnect() end) end
-	_upgradeConns = {}
-end
+makeRow(farmPage, "autoUpgradePen", "Auto Upgrade Pen", function(on) end)
+makeRow(farmPage, "autoUpgradeTM", "Auto Upgrade Treadmill", function(on) end)
+makeRow(farmPage, "autoBuyTrails", "Auto Buy Trails", function(on) end)
 
-local function makeUpgradeLoop(keyword)
-	local _t = 0
-	return RunService.Heartbeat:Connect(function()
-		local now = tick(); if now - _t < 1.5 then return end; _t = now
-		pcall(function()
-			-- ProximityPrompts
-			local char = LP.Character
-			local hrp  = char and char:FindFirstChild("HumanoidRootPart")
-			if hrp then
-				for _, obj in ipairs(workspace:GetDescendants()) do
-					if obj:IsA("ProximityPrompt") then
-						local n = (obj.ActionText..obj.ObjectText):lower()
-						if n:find(keyword) then
-							local part = obj.Parent
-							if part and part:IsA("BasePart") and (part.Position - hrp.Position).Magnitude < 80 then
-								if fireproximityprompt then pcall(function() fireproximityprompt(obj) end)
-								else pcall(function() obj:InputHoldBegin(); task.wait(obj.HoldDuration+0.05); obj:InputHoldEnd() end) end
-							end
-						end
-					end
-				end
-			end
-			-- Remotes
-			local RS = game:GetService("ReplicatedStorage")
-			for _, v in ipairs(RS:GetDescendants()) do
-				if (v:IsA("RemoteEvent") or v:IsA("RemoteFunction")) and v.Name:lower():find("upgrade") then
-					if v.Name:lower():find(keyword) then
-						if v:IsA("RemoteEvent") then v:FireServer()
-						else pcall(function() v:InvokeServer() end) end
-					end
-				end
-			end
-		end)
-	end)
-end
+-- ── AUTO RUN TREADMILL ───────────────────────────────────────
+-- Désactive le mode "lent" du tapis roulant en continu (comme la
+-- source d'origine) — permet de rester en vitesse normale sur le
+-- tapis au lieu de la vitesse ralentie par défaut du jeu.
+task.spawn(function()
+	while true do
+		if St.autoRunTreadmill and TreadmillsNet then
+			pcall(function()
+				Network.Invoke(TreadmillsNet.REQUEST_SET_SLOW_TOGGLE_ENABLED, false)
+			end)
+		end
+		task.wait(10)
+	end
+end)
 
-makeRow(farmPage, "autoUpgradePen", "Auto Upgrade Pen", function(on)
-	if on then table.insert(_upgradeConns, makeUpgradeLoop("pen"))
-	else stopUpgradeAll() end
-end)
-makeRow(farmPage, "autoUpgradeTM", "Auto Upgrade Treadmill", function(on)
-	if on then table.insert(_upgradeConns, makeUpgradeLoop("treadmill"))
-	else stopUpgradeAll() end
-end)
-makeRow(farmPage, "autoUpgradeTrail", "Auto Upgrade Trail", function(on)
-	if on then table.insert(_upgradeConns, makeUpgradeLoop("trail"))
-	else stopUpgradeAll() end
-end)
+makeRow(farmPage, "autoRunTreadmill", "Auto Run Treadmill", function(on) end)
+-- Note: le slider "Farm Radius" a été retiré ici — Auto Farm cible
+-- maintenant le meilleur œuf du snapshot serveur (via farmTier),
+-- pas une proximité locale, donc un rayon n'a plus de sens.
 
 -- Farm radius slider
-makeSlider(farmPage, "farmRadius", "Farm Radius", 10, 150, "%d studs")
-
 -- ============================================================
 -- ── PAGE: SPEED ─────────────────────────────────────────────
 -- ============================================================
@@ -738,13 +1002,46 @@ end
 
 makeSlider(speedPage, "speed", "Walk Speed", 4, 500, "%d")
 
--- ── ANTI RAGDOLL ────────────────────────────────────────────
+-- ── ANTI RAGDOLL — override du module + filet réactif ───────
+-- Double couche : le jeu a son propre module Ragdoll (retrouvé dans
+-- la source d'origine) — l'écraser directement (Ragdoll.Ragdoll,
+-- IsRagdolled, NpcRagdoll → no-op) empêche le ragdoll de se déclencher
+-- DU TOUT, proactif plutôt que réactif. En complément, le filet
+-- Heartbeat existant (ChangeState + réactivation des Motor6D) reste
+-- actif si jamais le module n'a pas pu être chargé sur ce serveur.
+local _ragdollOriginal = {}
+local function _applyRagdollModuleOverride(on)
+	if not Ragdoll then return end
+	if on then
+		if _ragdollOriginal.Ragdoll == nil then
+			_ragdollOriginal.Ragdoll      = Ragdoll.Ragdoll
+			_ragdollOriginal.IsRagdolled  = Ragdoll.IsRagdolled
+			_ragdollOriginal.NpcRagdoll   = Ragdoll.NpcRagdoll
+		end
+		pcall(function()
+			Ragdoll.Ragdoll     = function() end
+			Ragdoll.IsRagdolled = function() return false end
+			Ragdoll.NpcRagdoll  = function() end
+		end)
+	else
+		if _ragdollOriginal.Ragdoll ~= nil then
+			pcall(function()
+				Ragdoll.Ragdoll     = _ragdollOriginal.Ragdoll
+				Ragdoll.IsRagdolled = _ragdollOriginal.IsRagdolled
+				Ragdoll.NpcRagdoll  = _ragdollOriginal.NpcRagdoll
+			end)
+		end
+	end
+end
+
 local _ragConn = nil
 local function stopAntiRag()
 	if _ragConn then _ragConn:Disconnect(); _ragConn = nil end
+	_applyRagdollModuleOverride(false)
 end
 local function startAntiRag()
 	stopAntiRag()
+	_applyRagdollModuleOverride(true)
 	local _t = 0
 	_ragConn = RunService.Heartbeat:Connect(function()
 		if not St.antiRagdoll then return end
@@ -869,12 +1166,29 @@ end)
 -- ============================================================
 local visualPage = pages["Visual"]
 
--- ── ESP ─────────────────────────────────────────────────────
-local _espHighlights = {}
+-- ── EGG ESP — basé sur le vrai snapshot serveur (cachedEggs) ────
+-- Remplace la recherche par nom "egg" dans workspace (pouvait louper
+-- des objets mal nommés) par les données déjà collectées par le
+-- scanner cachedEggs (EggCmds.GetAreaEggSnapshot + repli physique) —
+-- même source que Auto Farm, donc ESP montre exactement ce qu'Auto
+-- Farm est capable de cibler. Vert = zone accessible (Speed Power
+-- suffisante), rouge = zone verrouillée avec le Speed Power requis
+-- affiché, pour savoir en un coup d'œil où farmer.
+local function _shortNum(n)
+	if not n then return "?" end
+	local a = math.abs(n)
+	if a >= 1e12 then return string.format("%.1fT", n/1e12) end
+	if a >= 1e9  then return string.format("%.1fB", n/1e9)  end
+	if a >= 1e6  then return string.format("%.1fM", n/1e6)  end
+	if a >= 1e3  then return string.format("%.1fK", n/1e3)  end
+	return string.format("%d", n)
+end
+
+local _espParts = {}  -- liste de Part (détruire le Part détruit box+billboard enfants avec)
 local _espConn = nil
 local function clearESP()
-	for _, h in ipairs(_espHighlights) do pcall(function() h:Destroy() end) end
-	_espHighlights = {}
+	for _, p in ipairs(_espParts) do pcall(function() p:Destroy() end) end
+	_espParts = {}
 end
 local function stopESP()
 	if _espConn then _espConn:Disconnect(); _espConn = nil end
@@ -885,23 +1199,48 @@ local function startESP()
 	local _t = 0
 	_espConn = RunService.Heartbeat:Connect(function()
 		if not St.esp then return end
-		local now = tick(); if now - _t < 2 then return end; _t = now
+		local now = tick(); if now - _t < 1 then return end; _t = now
 		clearESP()
-		-- highlight egg-like objects in workspace
-		for _, obj in ipairs(workspace:GetDescendants()) do
+		for _, r in ipairs(cachedEggs) do
 			pcall(function()
-				local n = obj.Name:lower()
-				local isEgg = n:find("egg") or (obj:IsA("Model") and obj.Name:lower():find("egg"))
-				if isEgg and (obj:IsA("BasePart") or obj:IsA("Model")) then
-					local hi = Instance.new("SelectionBox")
-					hi.Adornee = obj
-					hi.Color3 = C_MOON
-					hi.LineThickness = 0.05
-					hi.SurfaceTransparency = 0.7
-					hi.SurfaceColor3 = C_MOON
-					hi.Parent = workspace
-					table.insert(_espHighlights, hi)
+				local unlocked = areaUnlocked(r.area)
+				local col = unlocked and C_GREEN or C_RED
+
+				local p = Instance.new("Part")
+				p.Anchored = true; p.CanCollide = false; p.CanQuery = false; p.Transparency = 1
+				p.Size = (typeof(r.size) == "Vector3" and r.size.Magnitude > 0.5) and r.size or Vector3.new(3.5,3.5,3.5)
+				p.CFrame = r.cf
+				p.Parent = workspace
+
+				local box = Instance.new("SelectionBox")
+				box.Adornee = p
+				box.Color3 = col
+				box.LineThickness = 0.05
+				box.SurfaceTransparency = 0.7
+				box.SurfaceColor3 = col
+				box.Parent = p
+
+				local bb = Instance.new("BillboardGui")
+				bb.Size = UDim2.fromOffset(200, 22)
+				bb.AlwaysOnTop = true
+				bb.MaxDistance = 800
+				bb.Parent = p
+				local tl = Instance.new("TextLabel", bb)
+				tl.Size = UDim2.fromScale(1,1)
+				tl.BackgroundTransparency = 1
+				tl.Font = Enum.Font.GothamBold
+				tl.TextSize = 12
+				tl.TextStrokeTransparency = 0.3
+				tl.TextColor3 = col
+				local areaLabel = tostring(r.area or "Dropped")
+				if unlocked then
+					tl.Text = tostring(r.cat or "Egg").."  ("..areaLabel..")"
+				else
+					local A = AREA[r.area]
+					tl.Text = areaLabel.."  LOCKED ".._shortNum(A and A.reqSP)
 				end
+
+				table.insert(_espParts, p)
 			end)
 		end
 	end)
@@ -1158,6 +1497,74 @@ do
 				hrp.CFrame = spawn.CFrame + Vector3.new(0, 5, 0)
 			end
 		end)
+	end)
+end
+
+-- ── GO TO MAIN STAND / STOP MOVEMENT ─────────────────────────
+-- Coordonnées exactes retrouvées dans la source d'origine du jeu
+-- (point de retour "stand" — shop/zone principale). Tween linéaire
+-- à vitesse constante (350 studs/s) façon la source d'origine, pas
+-- une téléportation instantanée — moins susceptible de déclencher
+-- un anti-cheat basé sur la distance parcourue par frame.
+local _mainStandTween = nil
+do
+	local MAIN_STAND_CF = CFrame.new(544.577637, 92.0762939, -364.869049, -1,0,0, 0,1,0, 0,0,-1)
+
+	local row = Instance.new("Frame", miscPage)
+	row.Size = UDim2.new(1,-12,0,30)
+	row.BackgroundColor3 = C_ROW; row.BorderSizePixel = 0; corner(row, 6)
+	local pad = Instance.new("UIPadding", row)
+	pad.PaddingLeft = UDim.new(0,8); pad.PaddingRight = UDim.new(0,8)
+	label(row, "Go To Main Stand", UDim2.new(1,-60,1,0), C_WHITE, Enum.Font.GothamMedium).TextSize = 12
+	local btn = Instance.new("TextButton", row)
+	btn.Size = UDim2.new(0,54,0,18)
+	btn.Position = UDim2.new(1,-54,0.5,-9)
+	btn.BackgroundColor3 = C_ON_BG; btn.TextColor3 = C_MOON
+	btn.Text = "Go"; btn.TextSize = 10; btn.Font = Enum.Font.GothamBold
+	btn.BorderSizePixel = 0; corner(btn, 9)
+	btn.MouseButton1Click:Connect(function()
+		local char = LP.Character
+		local rootPart = char and char:FindFirstChild("HumanoidRootPart")
+		local hum = char and char:FindFirstChildOfClass("Humanoid")
+		if not rootPart then return end
+		if _mainStandTween then _mainStandTween:Cancel() end
+
+		local dist = (rootPart.Position - MAIN_STAND_CF.Position).Magnitude
+		local travelTime = math.max(dist / 350, 0.1)
+		_mainStandTween = TweenService:Create(rootPart,
+			TweenInfo.new(travelTime, Enum.EasingStyle.Linear, Enum.EasingDirection.Out),
+			{CFrame = MAIN_STAND_CF})
+		_mainStandTween.Completed:Connect(function()
+			if hum then
+				pcall(function()
+					hum:ChangeState(Enum.HumanoidStateType.Landed)
+					hum.PlatformStand = false
+				end)
+			end
+		end)
+		_mainStandTween:Play()
+		setStatus("Retour au spawn...", C_MOON2)
+	end)
+
+	local row2 = Instance.new("Frame", miscPage)
+	row2.Size = UDim2.new(1,-12,0,30)
+	row2.BackgroundColor3 = C_ROW; row2.BorderSizePixel = 0; corner(row2, 6)
+	local pad2 = Instance.new("UIPadding", row2)
+	pad2.PaddingLeft = UDim.new(0,8); pad2.PaddingRight = UDim.new(0,8)
+	label(row2, "Stop Movement", UDim2.new(1,-60,1,0), C_WHITE, Enum.Font.GothamMedium).TextSize = 12
+	local btn2 = Instance.new("TextButton", row2)
+	btn2.Size = UDim2.new(0,54,0,18)
+	btn2.Position = UDim2.new(1,-54,0.5,-9)
+	btn2.BackgroundColor3 = Color3.fromRGB(60,15,15); btn2.TextColor3 = C_RED
+	btn2.Text = "Stop"; btn2.TextSize = 10; btn2.Font = Enum.Font.GothamBold
+	btn2.BorderSizePixel = 0; corner(btn2, 9)
+	btn2.MouseButton1Click:Connect(function()
+		if _mainStandTween then
+			_mainStandTween:Cancel(); _mainStandTween = nil
+			local hum = LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
+			if hum then hum.PlatformStand = false end
+			setStatus("Mouvement arrete", C_DIM)
+		end
 	end)
 end
 
