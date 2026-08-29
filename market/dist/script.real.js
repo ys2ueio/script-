@@ -544,14 +544,6 @@ setInterval(function(){
 },5000);
 document.getElementById('live-txt').style.transition='opacity .3s';
 
-/* ══ TRACK YOUR ORDER — real contact, not a simulated status ══ */
-document.getElementById('trk-dm').addEventListener('click',function(){
-  var btn=document.getElementById('trk-dm-go');
-  var done=function(){btn.textContent='Copied';btn.classList.add('copied');setTimeout(function(){btn.textContent='Copy';btn.classList.remove('copied');},1500);};
-  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(CONTACT.discord).then(done,done);}else{done();}
-});
-document.getElementById('trk-srv').addEventListener('click',joinDiscord);
-
 /* ══ CRYPTO CHECKOUT ══ */
 var RATES={'PayPal':null,'Bitcoin':98420,'Litecoin':112,'Ethereum':3640,'USDT':1,'Solana':218};
 var CSEL='PayPal';
