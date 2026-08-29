@@ -466,7 +466,7 @@ document.getElementById('ts-d').addEventListener('click',function(){
   document.getElementById('ticket').classList.remove('up');
   document.getElementById('tk-c').value='';document.getElementById('tk-m').value='';
 });
-document.getElementById('ts-msg').addEventListener('click',contactMsg);
+document.getElementById('ts-msg').addEventListener('click',joinDiscord);
 document.getElementById('ts-copy').addEventListener('click',function(){
   var id=document.getElementById('ts-id').textContent,btn=this;
   var done=function(){btn.textContent='✓';btn.classList.add('copied');setTimeout(function(){btn.textContent='⧉';btn.classList.remove('copied');},1500);};
@@ -495,7 +495,7 @@ document.getElementById('tk-sub').addEventListener('click',function(){
   if(pid==='other'){nm='General question';pr='—';}
   else{var pp=P.filter(function(x){return x.id===parseInt(pid,10);})[0];nm=pp.n;pr=money(computeTotal(pp));}
   document.getElementById('ts-id').textContent=id;
-  document.getElementById('ts-n').innerHTML='<strong>'+nm+'</strong> — '+pr+'<br>Payment: '+py+'<br>Contact: '+ct+'<br><br>Save this ticket ID and send it to <strong>'+CONTACT.discord+'</strong> on Discord (or '+CONTACT.telegram+' on Telegram) to complete your order.';
+  document.getElementById('ts-n').innerHTML='<strong>'+nm+'</strong> — '+pr+'<br>Payment: '+py+'<br>Contact: '+ct+'<br><br>Save this ticket ID, then DM <strong>'+CONTACT.discord+'</strong> on Discord or open a ticket in the <strong>moonn</strong> server to complete your order.';
   document.getElementById('tf').classList.remove('show');
   document.getElementById('ts').classList.add('show');
   var cc=document.getElementById('cc');cc.textContent=parseInt(cc.textContent,10)+1;
@@ -544,25 +544,13 @@ setInterval(function(){
 },5000);
 document.getElementById('live-txt').style.transition='opacity .3s';
 
-/* ══ ORDER TRACKER ══ */
-var TSTEPS=['Received','Confirmed','Processing','Delivered'];
-function drawTrk(stage){
-  document.getElementById('trk-steps').innerHTML=TSTEPS.map(function(s,i){
-    var cl=i<stage?'done':(i===stage?'now':'');
-    return '<div class="trk-s '+cl+'"><div class="trk-line"></div><div class="trk-c">'+(i<stage?'✓':(i+1))+'</div><div class="trk-l">'+s+'</div></div>';
-  }).join('');
-}
-drawTrk(0);
-document.getElementById('trk-go').addEventListener('click',function(){
-  var v=document.getElementById('trk-id').value.trim().toUpperCase();
-  if(!/^YSL-[A-Z0-9]{5}$/.test(v)){alert('Enter a valid ticket ID in the format YSL-XXXXX');return;}
-  var st=0;
-  drawTrk(0);
-  var iv=setInterval(function(){
-    st++;drawTrk(st);
-    if(st>=4){clearInterval(iv);document.getElementById('dl-1').textContent='0';}
-  },600);
+/* ══ TRACK YOUR ORDER — real contact, not a simulated status ══ */
+document.getElementById('trk-dm').addEventListener('click',function(){
+  var btn=document.getElementById('trk-dm-go');
+  var done=function(){btn.textContent='Copied';btn.classList.add('copied');setTimeout(function(){btn.textContent='Copy';btn.classList.remove('copied');},1500);};
+  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(CONTACT.discord).then(done,done);}else{done();}
 });
+document.getElementById('trk-srv').addEventListener('click',joinDiscord);
 
 /* ══ CRYPTO CHECKOUT ══ */
 var RATES={'PayPal':null,'Bitcoin':98420,'Litecoin':112,'Ethereum':3640,'USDT':1,'Solana':218};
@@ -921,5 +909,3 @@ openTicket=function(p){
   setTimeout(function(){updTkSummary();},50);
 };
 
-/* ══ PENDING COUNTER ══ */
-document.getElementById('dl-1').textContent=Math.floor(Math.random()*4)+1;

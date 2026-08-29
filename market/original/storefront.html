@@ -291,20 +291,17 @@ body{color:#ececf2 !important;font-family:'Inter',-apple-system,sans-serif;min-h
 .cryp.on .cryp-a{color:#ececf2}
 
 .trk-wrap{padding:16px;border:1px solid #16161c;border-radius:14px;background:rgba(7,7,10,.9);margin:0 16px 26px}
-.trk-steps{display:flex;align-items:center;margin-bottom:14px}
-.trk-s{flex:1;text-align:center;position:relative}
-.trk-c{width:26px;height:26px;border-radius:50%;border:1.5px solid #2a2a34;background:#08080b;margin:0 auto 7px;display:flex;align-items:center;justify-content:center;font-size:11px;color:#4a4a58;font-weight:700;position:relative;z-index:2}
-.trk-s.done .trk-c{background:#ececf2;border-color:#ececf2;color:#000}
-.trk-s.now .trk-c{border-color:#ececf2;color:#ececf2}
-.trk-l{font-size:9px;color:#4a4a58;letter-spacing:.4px}
-.trk-s.done .trk-l,.trk-s.now .trk-l{color:#9d9db0}
-.trk-line{position:absolute;top:13px;left:50%;width:100%;height:1.5px;background:#1f1f27;z-index:1}
-.trk-s.done .trk-line{background:#ececf2}
-.trk-s:last-child .trk-line{display:none}
-.trk-in{display:flex;gap:8px}
-.trk-in input{flex:1;padding:11px 13px;background:rgba(255,255,255,.03);border:1px solid #16161c;border-radius:10px;color:#ececf2;font-size:12.5px;font-family:'JetBrains Mono',monospace;outline:none;letter-spacing:1px}
-.trk-in input::placeholder{color:#42424d;letter-spacing:0}
-.trk-in button{padding:11px 18px;background:#ececf2;border:none;border-radius:10px;color:#000;font-size:12.5px;font-weight:700;font-family:inherit;cursor:pointer}
+.trk-note{font-size:12px;color:#8a8a9a;line-height:1.6;margin-bottom:14px}
+.trk-opts{display:flex;flex-direction:column;gap:8px}
+.trk-opt{display:flex;align-items:center;gap:11px;width:100%;padding:12px 13px;border:1px solid #16161c;border-radius:12px;background:rgba(255,255,255,.02);cursor:pointer;font-family:inherit;color:inherit;text-align:left;transition:border-color .2s}
+.trk-opt:hover{border-color:#2a2a34}
+.trk-opt-ic{width:34px;height:34px;border-radius:9px;background:rgba(255,255,255,.05);border:1px solid #1a1a22;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.trk-opt-ic svg{width:17px;height:17px}
+.trk-opt-t{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.trk-opt-n{font-size:12.5px;font-weight:700;color:#ececf2}
+.trk-opt-d{font-size:10.5px;color:#6b6b7d;font-family:'JetBrains Mono',monospace}
+.trk-opt-go{font-family:'JetBrains Mono',monospace;font-size:9.5px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:#8a8a9a;padding:5px 10px;border:1px solid #2a2a34;border-radius:100px;flex-shrink:0;transition:all .2s}
+.trk-opt-go.copied{background:#ececf2;color:#000;border-color:transparent}
 
 .dl-row{display:flex;gap:7px;margin-bottom:16px}
 .dl{flex:1;padding:12px 8px;border:1px solid #16161c;border-radius:11px;text-align:center;background:rgba(255,255,255,.02)}
@@ -466,15 +463,22 @@ body{color:#ececf2 !important;font-family:'Inter',-apple-system,sans-serif;min-h
 
 <div class="sec"><span class="sec-t">Track your order</span><span class="sec-l"></span></div>
 <div class="trk-wrap">
-  <div class="trk-steps" id="trk-steps"></div>
-  <div class="trk-in">
-    <input id="trk-id" placeholder="YSL-XXXXX">
-    <button id="trk-go">Track</button>
+  <p class="trk-note">There is no automated tracker — every order is confirmed by a person. Have your ticket ID ready and use whichever is faster for you.</p>
+  <div class="trk-opts">
+    <button class="trk-opt" id="trk-dm">
+      <span class="trk-opt-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8.5" r="3.3"/><path d="M5.2 19.5a7 7 0 0113.6 0"/></svg></span>
+      <span class="trk-opt-t"><span class="trk-opt-n">DM yslem_dxb</span><span class="trk-opt-d">Direct message on Discord</span></span>
+      <span class="trk-opt-go" id="trk-dm-go">Copy</span>
+    </button>
+    <button class="trk-opt" id="trk-srv">
+      <span class="trk-opt-ic"><svg viewBox="0 0 24 24" fill="#5865F2"><path d="M20.32 4.37a19.79 19.79 0 00-4.89-1.52.07.07 0 00-.08.04c-.21.37-.44.86-.6 1.25a18.27 18.27 0 00-5.49 0 12.6 12.6 0 00-.62-1.25.08.08 0 00-.08-.04A19.74 19.74 0 003.68 4.37a.07.07 0 00-.03.03C.53 9.05-.32 13.58.1 18.06a.08.08 0 00.03.06 19.9 19.9 0 006 3.03.08.08 0 00.08-.03c.46-.63.87-1.3 1.23-1.99a.08.08 0 00-.04-.11 13.1 13.1 0 01-1.88-.9.08.08 0 010-.12l.37-.3a.07.07 0 01.08 0c3.93 1.8 8.18 1.8 12.06 0a.07.07 0 01.08 0l.37.3a.08.08 0 010 .12c-.6.35-1.22.65-1.87.9a.08.08 0 00-.05.1c.36.7.78 1.37 1.23 2a.08.08 0 00.08.02 19.84 19.84 0 006-3.03.08.08 0 00.04-.05c.5-5.18-.84-9.68-3.55-13.67a.06.06 0 00-.03-.02zM8.02 15.33c-1.18 0-2.16-1.08-2.16-2.42s.96-2.42 2.16-2.42c1.21 0 2.18 1.1 2.16 2.42 0 1.34-.96 2.42-2.16 2.42zm7.98 0c-1.19 0-2.16-1.08-2.16-2.42s.95-2.42 2.16-2.42c1.2 0 2.17 1.1 2.15 2.42 0 1.34-.94 2.42-2.15 2.42z"/></svg></span>
+      <span class="trk-opt-t"><span class="trk-opt-n">Open a ticket in moonn</span><span class="trk-opt-d">discord.gg/moonn</span></span>
+      <span class="trk-opt-go">Open</span>
+    </button>
   </div>
   <div class="dl-row" style="margin-top:16px;margin-bottom:0">
-    <div class="dl"><div class="dl-n" id="dl-1">0</div><div class="dl-l">Pending</div></div>
     <div class="dl"><div class="dl-n">2.4K</div><div class="dl-l">Delivered</div></div>
-    <div class="dl"><div class="dl-n">42s</div><div class="dl-l">Avg time</div></div>
+    <div class="dl"><div class="dl-n">42s</div><div class="dl-l">Avg reply</div></div>
   </div>
 </div>
 
@@ -590,7 +594,7 @@ body{color:#ececf2 !important;font-family:'Inter',-apple-system,sans-serif;min-h
         <button class="ts-copy" id="ts-copy" title="Copy ticket ID" aria-label="Copy ticket ID">⧉</button>
       </div>
       <div class="ts-n" id="ts-n"></div>
-      <button class="s-cta" style="margin-top:20px" id="ts-msg">Message us on Discord / Telegram</button>
+      <button class="s-cta" style="margin-top:20px" id="ts-msg">Open a ticket in moonn</button>
       <button class="s-close" id="ts-d">Done</button>
     </div>
   </div>
