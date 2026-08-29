@@ -17,41 +17,52 @@ local LP                 = Players.LocalPlayer
 if not LP.Character then LP.CharacterAdded:Wait() end
 
 -- ============================================================
--- MODULES DU JEU (Steal An Egg) — chemins confirmés par la source
--- originale du jeu (Toolbox Hub) ET par le rapport d'analyse
--- yslemEgg (workspace.__OBJECTS.Areas.GuardAreas.Forest/Desert/
--- Prehistoric déjà vu dans le scan). pcall englobant : si un chemin
--- change après une mise à jour, chaque feature qui en dépend vérifie
--- la présence du module avant de s'en servir — jamais de plantage
--- global, juste cette feature précise qui devient un no-op signalé.
+-- MODULES DU JEU (Steal An Egg) — chemins tentés d'après la source
+-- originale du jeu (Toolbox Hub) ET le rapport d'analyse yslemEgg.
+-- [FIX] Chaque require() a maintenant SON PROPRE pcall — la version
+-- précédente les empilait tous dans UN SEUL pcall englobant : si le
+-- tout premier chemin (EggCmds) était faux, l'erreur coupait la
+-- fonction net et TOUS les require() suivants (Network, Save, Bases,
+-- Treadmills, Trails...) ne s'exécutaient jamais, même corrects —
+-- une seule mauvaise entrée tuait silencieusement 10+ features d'un
+-- coup. C'est très probablement la cause du "trop de feature marche
+-- mal". _ModuleStatus enregistre individuellement ce qui a chargé ou
+-- non, affiché en tête de l'onglet Farm — plus de panne invisible.
 -- ============================================================
 local EggCmds, Ragdoll, Network, NM, PlotCmds, GEP, GCP, RGSR, SPP, GuardsD, AreasD, SlotId
 local Save, Constants, Bases, Treadmills, Trails
 local PlotsNet, TreadmillsNet, TrailsNet
-pcall(function()
-	EggCmds    = require(ReplicatedStorage.Library.Client.EggCmds)
-	Ragdoll    = require(ReplicatedStorage.Library.Modules.Ragdoll)
-	Network    = require(ReplicatedStorage.Library.Client.Network)
-	NM         = Network and Network.NET_MAP
-	PlotCmds   = require(ReplicatedStorage.Library.Client.PlotCmds)
-	GEP        = require(ReplicatedStorage.Library.Modules.GuardAreas.GuardEscapePrediction)
-	GCP        = require(ReplicatedStorage.Library.Modules.GuardAreas.GuardChasePolicy)
-	RGSR       = require(ReplicatedStorage.Library.Functions.ResolveGuardSpeedRequirement)
-	SPP        = require(ReplicatedStorage.Library.Client.SpeedPowerProjection)
-	GuardsD    = require(ReplicatedStorage.Directory.Guards)
-	AreasD     = require(ReplicatedStorage.Directory.Areas)
-	SlotId     = require(ReplicatedStorage.Library.Util.AreaEggSlotIdentity)
 
-	Save       = require(ReplicatedStorage.Library.Client.Save)
-	Constants  = require(ReplicatedStorage.Library.Globals.Constants)
-	Bases      = require(ReplicatedStorage.Directory.Bases)
-	Treadmills = require(ReplicatedStorage.Directory.Treadmills)
-	Trails     = require(ReplicatedStorage.Directory.Trails)
+local _ModuleStatus = {}  -- nom -> true/false, pour diagnostic UI
+local function _tryRequire(name, path)
+	local ok, result = pcall(require, path)
+	_ModuleStatus[name] = ok and result ~= nil
+	if ok then return result end
+	return nil
+end
 
-	PlotsNet      = Constants and Constants.NETWORK_MAP and Constants.NETWORK_MAP.Plots
-	TreadmillsNet = Constants and Constants.NETWORK_MAP and Constants.NETWORK_MAP.Treadmills
-	TrailsNet     = Constants and Constants.NETWORK_MAP and Constants.NETWORK_MAP.Trails
-end)
+EggCmds    = _tryRequire("EggCmds",    ReplicatedStorage:FindFirstChild("Library") and ReplicatedStorage.Library:FindFirstChild("Client") and ReplicatedStorage.Library.Client:FindFirstChild("EggCmds"))
+Ragdoll    = _tryRequire("Ragdoll",    ReplicatedStorage:FindFirstChild("Library") and ReplicatedStorage.Library:FindFirstChild("Modules") and ReplicatedStorage.Library.Modules:FindFirstChild("Ragdoll"))
+Network    = _tryRequire("Network",    ReplicatedStorage:FindFirstChild("Library") and ReplicatedStorage.Library:FindFirstChild("Client") and ReplicatedStorage.Library.Client:FindFirstChild("Network"))
+NM         = Network and Network.NET_MAP
+PlotCmds   = _tryRequire("PlotCmds",   ReplicatedStorage:FindFirstChild("Library") and ReplicatedStorage.Library:FindFirstChild("Client") and ReplicatedStorage.Library.Client:FindFirstChild("PlotCmds"))
+GEP        = _tryRequire("GEP",        ReplicatedStorage:FindFirstChild("Library") and ReplicatedStorage.Library:FindFirstChild("Modules") and ReplicatedStorage.Library.Modules:FindFirstChild("GuardAreas") and ReplicatedStorage.Library.Modules.GuardAreas:FindFirstChild("GuardEscapePrediction"))
+GCP        = _tryRequire("GCP",        ReplicatedStorage:FindFirstChild("Library") and ReplicatedStorage.Library:FindFirstChild("Modules") and ReplicatedStorage.Library.Modules:FindFirstChild("GuardAreas") and ReplicatedStorage.Library.Modules.GuardAreas:FindFirstChild("GuardChasePolicy"))
+RGSR       = _tryRequire("RGSR",       ReplicatedStorage:FindFirstChild("Library") and ReplicatedStorage.Library:FindFirstChild("Functions") and ReplicatedStorage.Library.Functions:FindFirstChild("ResolveGuardSpeedRequirement"))
+SPP        = _tryRequire("SPP",        ReplicatedStorage:FindFirstChild("Library") and ReplicatedStorage.Library:FindFirstChild("Client") and ReplicatedStorage.Library.Client:FindFirstChild("SpeedPowerProjection"))
+GuardsD    = _tryRequire("GuardsD",    ReplicatedStorage:FindFirstChild("Directory") and ReplicatedStorage.Directory:FindFirstChild("Guards"))
+AreasD     = _tryRequire("AreasD",     ReplicatedStorage:FindFirstChild("Directory") and ReplicatedStorage.Directory:FindFirstChild("Areas"))
+SlotId     = _tryRequire("SlotId",     ReplicatedStorage:FindFirstChild("Library") and ReplicatedStorage.Library:FindFirstChild("Util") and ReplicatedStorage.Library.Util:FindFirstChild("AreaEggSlotIdentity"))
+
+Save       = _tryRequire("Save",       ReplicatedStorage:FindFirstChild("Library") and ReplicatedStorage.Library:FindFirstChild("Client") and ReplicatedStorage.Library.Client:FindFirstChild("Save"))
+Constants  = _tryRequire("Constants",  ReplicatedStorage:FindFirstChild("Library") and ReplicatedStorage.Library:FindFirstChild("Globals") and ReplicatedStorage.Library.Globals:FindFirstChild("Constants"))
+Bases      = _tryRequire("Bases",      ReplicatedStorage:FindFirstChild("Directory") and ReplicatedStorage.Directory:FindFirstChild("Bases"))
+Treadmills = _tryRequire("Treadmills", ReplicatedStorage:FindFirstChild("Directory") and ReplicatedStorage.Directory:FindFirstChild("Treadmills"))
+Trails     = _tryRequire("Trails",     ReplicatedStorage:FindFirstChild("Directory") and ReplicatedStorage.Directory:FindFirstChild("Trails"))
+
+PlotsNet      = Constants and Constants.NETWORK_MAP and Constants.NETWORK_MAP.Plots
+TreadmillsNet = Constants and Constants.NETWORK_MAP and Constants.NETWORK_MAP.Treadmills
+TrailsNet     = Constants and Constants.NETWORK_MAP and Constants.NETWORK_MAP.Trails
 
 -- ── ZONES GARDÉES : Speed Power requis par zone ─────────────
 -- Reproduit le calcul du jeu lui-même (RGSR = ResolveGuardSpeedRequirement)
@@ -206,6 +217,7 @@ local C_ON_BG  = Color3.fromRGB(20,45,80)
 local C_OFF_BG = Color3.fromRGB(0,0,0)
 local C_GREEN  = Color3.fromRGB(60,220,120)
 local C_RED    = Color3.fromRGB(220,60,60)
+local C_YELLOW = Color3.fromRGB(230,200,90)
 
 -- ============================================================
 -- STATE
@@ -539,6 +551,44 @@ end
 -- ── PAGE: FARM ──────────────────────────────────────────────
 -- ============================================================
 local farmPage = pages["Farm"]
+
+-- ── DIAGNOSTIC MODULES ───────────────────────────────────────
+-- Affiche en clair ce qui a chargé ou non (EggCmds/Network/Save/
+-- Bases/Treadmills/Trails/Ragdoll...). Si un module manque, les
+-- features qui en dépendent sont explicitement des no-op — plus de
+-- panne silencieuse à deviner. Un clic recopie le détail complet.
+do
+	local okCount, total = 0, 0
+	for _, ok in pairs(_ModuleStatus) do
+		total = total + 1
+		if ok then okCount = okCount + 1 end
+	end
+	local allOk = okCount == total
+
+	local row = Instance.new("Frame", farmPage)
+	row.Size = UDim2.new(1,-12,0,26)
+	row.BackgroundColor3 = C_ROW; row.BorderSizePixel = 0; corner(row, 6)
+	local pad = Instance.new("UIPadding", row)
+	pad.PaddingLeft = UDim.new(0,8); pad.PaddingRight = UDim.new(0,8)
+	local lbl = label(row, "Modules: "..okCount.."/"..total.." charges", UDim2.new(1,0,1,0),
+		allOk and C_GREEN or C_YELLOW, Enum.Font.GothamMedium)
+	lbl.TextSize = 11
+	if not allOk then
+		local btn = Instance.new("TextButton", row)
+		btn.Size = UDim2.new(1,0,1,0); btn.BackgroundTransparency = 1; btn.Text = ""
+		btn.MouseButton1Click:Connect(function()
+			local lines = {}
+			for name, ok in pairs(_ModuleStatus) do
+				table.insert(lines, (ok and "OK  " or "ECHEC  ")..name)
+			end
+			table.sort(lines)
+			local msg = table.concat(lines, "\n")
+			print("[yslemEgg] Statut modules:\n"..msg)
+			pcall(function() if setclipboard then setclipboard(msg) end end)
+			setStatus("Details copies / voir console (F9)", C_YELLOW)
+		end)
+	end
+end
 
 -- ── INSTANT GRAB ────────────────────────────────────────────
 -- Technique confirmée par la source originale du jeu (Toolbox Hub) :
@@ -1768,12 +1818,31 @@ local AB_HIT_CD   = false
 
 -- Noms de bat/gear connus (mêmes que Moon Hub — le jeu utilise déjà
 -- la convention "Slap" côté GearGiver, confirmé par l'analyse).
+-- Liste exacte prioritaire (motif Moon Hub) + repli substring (voir
+-- _abIsBatName) — la liste seule ratait tout tool nommé différemment
+-- dans ce jeu précis (ex: "FieldBat", entrevu dans le rapport
+-- d'analyse via RF/Codex/AskWearFieldBat).
 local BAT_NAMES = {
 	"Bat","Slap","Iron Slap","Gold Slap","Diamond Slap","Emerald Slap",
 	"Ruby Slap","Dark Matter Slap","Flame Slap","Nuclear Slap",
-	"Galaxy Slap","Glitched Slap",
+	"Galaxy Slap","Glitched Slap","FieldBat","Field Bat",
 }
 
+-- Vrai si le nom du tool ressemble à un bat/gear de frappe — testé sur
+-- la liste exacte D'ABORD (rapide, pas de faux positif), puis en
+-- repli sur un test de sous-chaîne "bat"/"slap" (attrape les variantes
+-- non listées, ex: "FieldBat_v2" ou un nom localisé).
+local function _abIsBatName(name)
+	if not name then return false end
+	for _, n in ipairs(BAT_NAMES) do
+		if name == n then return true end
+	end
+	local lower = name:lower()
+	return lower:find("bat", 1, true) ~= nil or lower:find("slap", 1, true) ~= nil
+end
+
+-- Cherche un bat déjà équipé (Character) EN PREMIER, puis dans le
+-- Backpack — priorité à la liste exacte, repli substring sur les deux.
 local function _abGetBat()
 	local char = LP.Character; if not char then return nil end
 	for _, name in ipairs(BAT_NAMES) do
@@ -1784,7 +1853,16 @@ local function _abGetBat()
 	if bp then
 		for _, name in ipairs(BAT_NAMES) do
 			local t = bp:FindFirstChild(name)
-			if t then return t end
+			if t and t:IsA("Tool") then return t end
+		end
+	end
+	-- Repli substring : n'importe quel Tool dont le nom contient bat/slap
+	for _, t in ipairs(char:GetChildren()) do
+		if t:IsA("Tool") and _abIsBatName(t.Name) then return t end
+	end
+	if bp then
+		for _, t in ipairs(bp:GetChildren()) do
+			if t:IsA("Tool") and _abIsBatName(t.Name) then return t end
 		end
 	end
 	return nil
@@ -1833,8 +1911,14 @@ local function startAimBat()
 		local char = LP.Character; if not char then return end
 		local root = char:FindFirstChild("HumanoidRootPart"); if not root then return end
 		local hum  = char:FindFirstChildOfClass("Humanoid"); if not hum then return end
-		if not char:FindFirstChildOfClass("Tool") then
-			local bat = _abGetBat(); if bat then pcall(function() hum:EquipTool(bat) end) end
+		-- [FIX] L'ancienne condition ("si AUCUN tool équipé") ne rééquipait
+		-- jamais le bat si un AUTRE tool était déjà en main — l'aimbot
+		-- pouvait tourner indéfiniment sans jamais "prendre" le bat.
+		-- Vérifie maintenant spécifiquement si le tool équipé EST le bat.
+		local equipped = char:FindFirstChildOfClass("Tool")
+		if not (equipped and _abIsBatName(equipped.Name)) then
+			local bat = _abGetBat()
+			if bat then pcall(function() hum:EquipTool(bat) end) end
 		end
 		local target, dist = _abGetClosest()
 		if not target or not target.Character then return end
