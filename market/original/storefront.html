@@ -205,10 +205,6 @@ body{color:#ececf2 !important;font-family:'Inter',-apple-system,sans-serif;min-h
 .ts-ic{display:flex;justify-content:center;margin-bottom:15px}
 .ts-ic svg{width:48px;height:48px}
 .ts-t{font-size:20px;font-weight:700;margin-bottom:8px;color:#fff}
-.ts-id-row{display:flex;align-items:center;justify-content:center;gap:8px;margin:14px 0}
-.ts-id{font-family:'JetBrains Mono',monospace;font-size:15px;color:#fff;padding:12px 20px;border:1px solid #2a2a34;border-radius:10px;background:rgba(255,255,255,.05);display:inline-block;letter-spacing:2px;font-weight:700}
-.ts-copy{width:42px;height:42px;flex-shrink:0;border-radius:10px;border:1px solid #2a2a34;background:rgba(255,255,255,.05);color:#ececf2;font-size:15px;cursor:pointer;transition:all .2s}
-.ts-copy.copied{background:#ececf2;color:#000;border-color:transparent}
 .ts-n{font-size:12.5px;color:#6b6b7d;line-height:1.7}
 .ts-n strong{color:#ececf2}
 
@@ -273,7 +269,7 @@ body{color:#ececf2 !important;font-family:'Inter',-apple-system,sans-serif;min-h
 @media (prefers-reduced-motion:reduce){
   .announce-track,.tick-track,.rev-track,.live-dot{animation:none}
   .sheet{animation:none}
-  .var-row,.filt,.qty-btn,.step-btn,.chip,.opt,.ts-copy{transition:none}
+  .var-row,.filt,.qty-btn,.step-btn,.chip,.opt{transition:none}
 }
 .live-txt{font-size:11.5px;color:#8a8a9a;flex:1}
 .live-txt b{color:#ececf2;font-weight:600}
@@ -550,11 +546,7 @@ body{color:#ececf2 !important;font-family:'Inter',-apple-system,sans-serif;min-h
     </div>
     <div class="tsuc" id="ts">
       <span class="ts-ic"><svg viewBox="0 0 24 24" fill="none" stroke="#ececf2" stroke-width="1.6"><circle cx="12" cy="12" r="9.4"/><path d="M7.8 12.4l2.7 2.7L16.4 9" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
-      <div class="ts-t">Ticket created</div>
-      <div class="ts-id-row">
-        <div class="ts-id" id="ts-id"></div>
-        <button class="ts-copy" id="ts-copy" title="Copy ticket ID" aria-label="Copy ticket ID">⧉</button>
-      </div>
+      <div class="ts-t">Order ready</div>
       <div class="ts-n" id="ts-n"></div>
       <button class="s-cta" style="margin-top:20px" id="ts-msg">Open a ticket in moonn</button>
       <button class="s-close" id="ts-d">Done</button>

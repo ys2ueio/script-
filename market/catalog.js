@@ -77,7 +77,7 @@
       price: o.p, retail: o.w || 0, flag: o.f || null,
       stock: o.stock === undefined ? null : o.stock, /* number, or 'instock' for unmetered availability */
       int: o.int || 'basic', smm: o.smm || null,
-      opts: o.opts || null,
+      opts: o.opts || null, prices: o.prices || null,
       desc: desc, warn: warn, sp: sp
     };
   }
@@ -117,10 +117,9 @@
       d: ['Billed once for the full month, no daily top-ups needed.'] },
 
     /* ════════ DISCORD SHOP ════════ */
-    { i: 16, s: 'discord', b: 'discord', n: '14x Server Boosts (1 semaine)', k: 'SERVICE', dur: '1 week', p: 1.57, stock: 11,
-      d: ['Send your server invite link in the ticket message.'], sp: { Amount: '14 boosts' } },
-    { i: 17, s: 'discord', b: 'discord', n: '14x Server Boosts (1 mois)', k: 'SERVICE', dur: '1 month', mo: 1, p: 2.49, stock: 'instock', f: 'best',
-      d: ['Send your server invite link in the ticket message.'], sp: { Amount: '14 boosts' } },
+    { i: 16, s: 'discord', b: 'discord', n: '14x Server Boosts', k: 'SERVICE', dur: '1 week', p: 1.57, stock: 11, f: 'best', int: 'duration',
+      prices: [['1 week', 1.57], ['1 month', 2.49]],
+      d: ['Pick a duration below, then send your server invite link.'], sp: { Amount: '14 boosts' } },
     { i: 18, s: 'discord', b: 'discord', n: 'Nitro Promo (3 mois)', k: 'GIFT', dur: '3 months', mo: 3, p: 0.67, w: 0.75, stock: 8, f: 'hot',
       int: 'nitro' },
     { i: 19, s: 'discord', b: 'discord', n: 'Nitro Boost ID (1 mois)', k: 'GIFT', dur: '1 month', mo: 1, p: 0.35, stock: 2,

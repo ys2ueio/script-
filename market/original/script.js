@@ -244,7 +244,7 @@ var PAYS=[{n:'PayPal'},{n:'Bitcoin'},{n:'Litecoin',d:'-10%'},{n:'Ethereum'},{n:'
 var FAQS=[
 {q:'How quickly will I receive my order?',a:'Delivery is instant. Your product is sent automatically within seconds of payment confirmation. No waiting, no manual processing.'},
 {q:'What does FA, KEY and GIFT LINK mean?',a:'FA means Full Access — you receive the login credentials. KEY is an activation key applied to your own account. GIFT LINK is claimed directly on your account with no login shared. LINK is an activation link for an existing account.'},
-{q:'What if my product does not work?',a:'Open a ticket with your ticket ID and proof of the issue. Replacements are handled case by case within the support window listed on the product page. No outcome is guaranteed.'},
+{q:'What if my product does not work?',a:'Open a ticket with your order details and proof of the issue. Replacements are handled case by case within the support window listed on the product page. No outcome is guaranteed.'},
 {q:'What payment methods do you accept?',a:'PayPal Friends and Family, and crypto: Bitcoin, Litecoin, Ethereum, USDT and Solana. Litecoin payments get 10% off automatically. No cards, no bank transfers.'},
 {q:'Is there any risk?',a:'Yes. These are resold accounts and keys. They can stop working, be revoked, or be suspended by the provider at any time. Read the [!] notes on every product page before ordering, and treat each purchase as spending you can afford to lose.'},
 {q:'How do I get support?',a:'Create a ticket from any product page or the ticket tab, then send the ID on Discord or Telegram. Replies are usually fast but not instant.'}
@@ -432,11 +432,6 @@ document.getElementById('ts-d').addEventListener('click',function(){
   document.getElementById('tk-c').value='';document.getElementById('tk-m').value='';
 });
 document.getElementById('ts-msg').addEventListener('click',joinDiscord);
-document.getElementById('ts-copy').addEventListener('click',function(){
-  var id=document.getElementById('ts-id').textContent,btn=this;
-  var done=function(){btn.textContent='✓';btn.classList.add('copied');setTimeout(function(){btn.textContent='⧉';btn.classList.remove('copied');},1500);};
-  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(id).then(done,done);}else{done();}
-});
 
 function showFieldError(id,focus){
   var el=document.getElementById(id),err=document.getElementById(id+'-err');
@@ -456,11 +451,10 @@ document.getElementById('tk-sub').addEventListener('click',function(){
   if(!pid){showFieldError('tk-p');firstInvalid=firstInvalid||'tk-p';}
   if(!ct){showFieldError('tk-c');firstInvalid=firstInvalid||'tk-c';}
   if(firstInvalid){document.getElementById(firstInvalid).focus();return;}
-  var id='YSL-'+Math.random().toString(36).slice(2,7).toUpperCase(),nm,pr;
+  var nm,pr;
   if(pid==='other'){nm='General question';pr='—';}
   else{var pp=P.filter(function(x){return x.id===parseInt(pid,10);})[0];nm=pp.n;pr=money(computeTotal(pp));}
-  document.getElementById('ts-id').textContent=id;
-  document.getElementById('ts-n').innerHTML='<strong>'+nm+'</strong> — '+pr+'<br>Payment: '+py+'<br>Contact: '+ct+'<br><br>Save this ticket ID, then DM <strong>'+CONTACT.discord+'</strong> on Discord or open a ticket in the <strong>moonn</strong> server to complete your order.';
+  document.getElementById('ts-n').innerHTML='<strong>'+nm+'</strong> — '+pr+'<br>Payment: '+py+'<br>Contact: '+ct+'<br><br>Send these details to <strong>'+CONTACT.discord+'</strong> on Discord or open a ticket in the <strong>moonn</strong> server to complete your order.';
   document.getElementById('tf').classList.remove('show');
   document.getElementById('ts').classList.add('show');
   var cc=document.getElementById('cc');cc.textContent=parseInt(cc.textContent,10)+1;
@@ -709,6 +703,12 @@ function buildInt(p){
       '<div class="int-field"><label class="int-lab">Delivery email</label>'+
       '<input class="int-in" id="i-mail" placeholder="you@mail.com"></div>';
   }
+  else if(cfg.type==='duration'){
+    html+='<div class="int-field"><label class="int-lab">Server invite link</label>'+
+      '<input class="int-in" id="i-inv" placeholder="discord.gg/yourserver">'+
+      '<div class="int-hint">Must be permanent, with no member limit and no expiry.</div></div>'+
+      '<label class="int-lab">Duration</label><div class="chip-row" id="i-durprice"></div>';
+  }
 
   html+='</div>';
   document.getElementById('int-slot').innerHTML=html;
@@ -761,6 +761,18 @@ function wireInt(cfg){
       });
     };
     yd();
+  }
+  // duration-priced chips (each option sets the price outright, not a delta)
+  var dpg=document.getElementById('i-durprice');
+  if(dpg&&cfg.prices){
+    intState.opt=0;
+    var dpd=function(){
+      dpg.innerHTML=cfg.prices.map(function(x,i){return '<div class="chip'+(intState.opt===i?' on':'')+'" data-i="'+i+'">'+x[0]+' — '+money(x[1])+'</div>';}).join('');
+      Array.prototype.forEach.call(dpg.querySelectorAll('.chip'),function(c){
+        c.addEventListener('click',function(){intState.opt=parseInt(c.getAttribute('data-i'),10);dpd();updTotal();});
+      });
+    };
+    dpd();
   }
   // region chips
   var rg=document.getElementById('i-reg');
@@ -821,6 +833,7 @@ function computeTotal(pp){
   var base=parseFloat(pp.p);
   var cfg=INT[pp.id]||{};
   if(cfg.type==='boost'&&intState.bq){ base=intState.bq*0.215; }
+  if(cfg.type==='duration'&&cfg.prices&&intState.opt!==undefined){ base=parseFloat(cfg.prices[intState.opt][1]); }
   if((cfg.type==='smm'||cfg.type==='robux')&&intState.sq){
     base=(intState.sq/1000)*(intState.rate||1);
     if(intState.sq>=10000)base*=0.85;
@@ -855,6 +868,7 @@ openTicket=function(p){
   if(p&&current&&p.id===current.id){
     var n=[],cfg=INT[p.id]||{};
     if(cfg.opts&&intState.opt!==undefined)n.push(cfg.opts[intState.opt][0]);
+    if(cfg.prices&&intState.opt!==undefined)n.push(cfg.prices[intState.opt][0]);
     if(intState.dur!==undefined&&DUR[intState.dur])n.push(DUR[intState.dur][0]);
     if(intState.yr!==undefined&&AGEYR[intState.yr])n.push('Year '+AGEYR[intState.yr]);
     if(intState.reg!==undefined&&REGIONS[intState.reg])n.push(REGIONS[intState.reg]);

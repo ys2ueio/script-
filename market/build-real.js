@@ -74,6 +74,8 @@ function intEntry(p) {
     case 'smm':
       const c = p.smm;
       return `${p.id}:{type:'smm',unit:${jsStr(c.unit)},min:${c.min},max:${c.max},step:${c.step},rate:${c.rate},field:${jsStr(c.field)},ph:${jsStr(c.ph)}}`;
+    case 'duration':
+      return `${p.id}:{type:'duration',prices:[${(p.prices || [['Standard', p.price]]).map(o => `[${jsStr(o[0])},${jsStr(o[1].toFixed ? o[1].toFixed(2) : o[1])}]`).join(',')}]}`;
     default:
       return null;
   }
