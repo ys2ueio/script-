@@ -228,6 +228,7 @@ local St = {
 	antiTrap         = false,
 	fullbright       = false,
 	fpsBoost         = false,
+	clickTp          = false,
 	speed            = 16,
 	flySpeed         = 50,
 	guiVisible       = true,
@@ -1604,6 +1605,39 @@ do
 		end
 	end)
 end
+
+-- ── CLICK TP ──────────────────────────────────────────────────
+-- Toggle : une fois actif, chaque clic gauche dans le monde (pas sur
+-- l'UI — filtré via gameProcessedEvent) téléporte le joueur à l'endroit
+-- visé. Mouse.Hit fait le raycast caméra→souris (méthode native
+-- PlayerMouse, pas de Raycast manuel nécessaire). La rotation du
+-- personnage est conservée (CFrame.Rotation), seule la position change.
+local _clickTpConn = nil
+local function stopClickTp()
+	if _clickTpConn then _clickTpConn:Disconnect(); _clickTpConn = nil end
+end
+local function startClickTp()
+	stopClickTp()
+	local mouse = LP:GetMouse()
+	_clickTpConn = UIS.InputBegan:Connect(function(inp, gameProcessed)
+		if gameProcessed then return end
+		if not St.clickTp then return end
+		if inp.UserInputType ~= Enum.UserInputType.MouseButton1 then return end
+		local char = LP.Character
+		local hrp  = char and char:FindFirstChild("HumanoidRootPart")
+		if not hrp then return end
+		local target = mouse.Hit
+		if not target then return end
+		pcall(function()
+			hrp.CFrame = CFrame.new(target.Position + Vector3.new(0, 3, 0)) * hrp.CFrame.Rotation
+		end)
+		setStatus("Click TP →", C_GREEN)
+	end)
+end
+
+makeRow(miscPage, "clickTp", "Click TP", function(on)
+	if on then startClickTp() else stopClickTp(); setStatus("Click TP OFF", C_DIM) end
+end)
 
 -- ── REJOIN ───────────────────────────────────────────────────
 do
