@@ -581,29 +581,93 @@ makeSlider(farmPage, "farmRadius", "Farm Radius", 10, 150, "%d studs")
 -- ============================================================
 local speedPage = pages["Speed"]
 
--- Speed (WalkSpeed)
-local _speedActive = false
-local _speedConn   = nil
-local function applySpeed()
-	local char = LP.Character
-	local hum  = char and char:FindFirstChildOfClass("Humanoid")
-	if hum then hum.WalkSpeed = St.speed end
+-- ── PROXY SPEED (méthode Moon Hub) ──────────────────────────
+-- Part massless soudé au HRP via Weld.
+-- On écrit AssemblyLinearVelocity sur ce proxy chaque RenderStepped,
+-- le weld entraîne le personnage sans toucher WalkSpeed (indétectable).
+-- SetNetworkOwner(LP) → le client est autoritaire → pas de rollback.
+local _speedActive  = false
+local _proxy        = nil
+local _ownConn      = nil
+local _ownTimer     = 0
+local _ownInterval  = 0.8 + math.random() * 0.4
+
+local function _claimOwn(hrp)
+	pcall(function() hrp:SetNetworkOwner(LP) end)
 end
+
+local function _cleanProxy()
+	if _ownConn then pcall(function() _ownConn:Disconnect() end); _ownConn = nil end
+	if _proxy   then pcall(function() _proxy:Destroy() end);      _proxy   = nil end
+end
+
+local function _ensureProxy(hrp)
+	local char = hrp.Parent
+	if _proxy and _proxy.Parent == char then return _proxy end
+	_cleanProxy()
+	local p  = Instance.new("Part")
+	p.Name         = "YE_Proxy"
+	p.Size         = Vector3.new(1,1,1)
+	p.Transparency = 1
+	p.CanCollide   = false
+	p.Massless     = true
+	p.Parent       = char
+	local w  = Instance.new("Weld", p)
+	w.Part0  = hrp; w.Part1 = p; w.C0 = CFrame.new()
+	_proxy   = p
+	_claimOwn(hrp)
+	-- re-claim si le serveur reprend l'ownership
+	_ownConn = hrp:GetPropertyChangedSignal("ReceiveAge"):Connect(function()
+		if _speedActive then task.defer(function() _claimOwn(hrp) end) end
+	end)
+	return p
+end
+
+-- Boucle principale : RenderStepped comme Moon Hub
+RunService.RenderStepped:Connect(function(dt)
+	if not _speedActive then _cleanProxy(); return end
+	local char = LP.Character; if not char then _cleanProxy(); return end
+	local hum  = char:FindFirstChildOfClass("Humanoid")
+	local hrp  = char:FindFirstChild("HumanoidRootPart")
+	if not hum or not hrp then _cleanProxy(); return end
+	-- ne pas forcer en ragdoll / physics
+	local st = hum:GetState()
+	if hum.PlatformStand
+		or st == Enum.HumanoidStateType.Physics
+		or st == Enum.HumanoidStateType.Ragdoll
+		or st == Enum.HumanoidStateType.FallingDown then
+		_cleanProxy(); return
+	end
+	-- re-claim périodique
+	_ownTimer = _ownTimer + dt
+	if _ownTimer >= _ownInterval then
+		_claimOwn(hrp); _ownTimer = 0; _ownInterval = 0.8 + math.random() * 0.4
+	end
+	local md  = hum.MoveDirection
+	local spd = St.speed
+	if md.Magnitude > 0 then
+		local jit = 1 + (math.random() - 0.5) * 0.08  -- jitter ±4%
+		local px  = _ensureProxy(hrp)
+		px.AssemblyLinearVelocity = Vector3.new(
+			md.X * spd * jit,
+			hrp.AssemblyLinearVelocity.Y,
+			md.Z * spd * jit
+		)
+	end
+end)
+
 local function startSpeed()
 	_speedActive = true
-	applySpeed()
-	if _speedConn then _speedConn:Disconnect() end
-	_speedConn = RunService.Heartbeat:Connect(function()
-		if not _speedActive then return end; applySpeed()
-	end)
 end
 local function stopSpeed()
 	_speedActive = false
-	if _speedConn then _speedConn:Disconnect(); _speedConn = nil end
-	local char = LP.Character
-	local hum  = char and char:FindFirstChildOfClass("Humanoid")
-	if hum then hum.WalkSpeed = 16 end
+	_cleanProxy()
 end
+
+-- Re-crée le proxy si respawn
+LP.CharacterAdded:Connect(function()
+	if _speedActive then _cleanProxy() end
+end)
 
 -- "Speed Boost" toggle (not a key in St, managed manually)
 local speedOn = false
