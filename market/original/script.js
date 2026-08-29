@@ -239,13 +239,13 @@ var PICO={
 'Mastercard':'<svg viewBox="0 0 24 24" fill="#EB001B"><path d="M9.5 5a7 7 0 000 14 7 7 0 003.5-1 7 7 0 01-1.4-8.5A7 7 0 0113 6a7 7 0 00-3.5-1zm5 0a7 7 0 00-1.2.1 7 7 0 011.4 8.4A7 7 0 0113.3 18a7 7 0 001.2.9 7 7 0 000-14z"/></svg>',
 'card':'<svg viewBox="0 0 24 24" fill="#8a8a9a"><path d="M2 6h20v3H2V6zm0 5h20v7a1 1 0 01-1 1H3a1 1 0 01-1-1v-7zm2 4h5v2H4v-2z"/></svg>'};
 
-var PAYS=[{n:'PayPal'},{n:'Bitcoin'},{n:'Litecoin',d:'-10%'},{n:'Ethereum'},{n:'USDT'},{n:'Solana'}];
+var PAYS=[{n:'PayPal'},{n:'Bitcoin'},{n:'Litecoin'},{n:'Ethereum'},{n:'USDT'},{n:'Solana'}];
 
 var FAQS=[
 {q:'How quickly will I receive my order?',a:'Delivery is instant. Your product is sent automatically within seconds of payment confirmation. No waiting, no manual processing.'},
 {q:'What does FA, KEY and GIFT LINK mean?',a:'FA means Full Access — you receive the login credentials. KEY is an activation key applied to your own account. GIFT LINK is claimed directly on your account with no login shared. LINK is an activation link for an existing account.'},
 {q:'What if my product does not work?',a:'Open a ticket with your order details and proof of the issue. Replacements are handled case by case within the support window listed on the product page. No outcome is guaranteed.'},
-{q:'What payment methods do you accept?',a:'PayPal Friends and Family, and crypto: Bitcoin, Litecoin, Ethereum, USDT and Solana. Litecoin payments get 10% off automatically. No cards, no bank transfers.'},
+{q:'What payment methods do you accept?',a:'PayPal Friends and Family, and crypto: Bitcoin, Litecoin, Ethereum, USDT and Solana. No cards, no bank transfers.'},
 {q:'Is there any risk?',a:'Yes. These are resold accounts and keys. They can stop working, be revoked, or be suspended by the provider at any time. Read the [!] notes on every product page before ordering, and treat each purchase as spending you can afford to lose.'},
 {q:'How do I get support?',a:'Create a ticket from any product page or the ticket tab, then send the ID on Discord or Telegram. Replies are usually fast but not instant.'}
 ];
@@ -284,7 +284,7 @@ function stockFor(p){
 
 // ANNOUNCE
 document.getElementById('ann').innerHTML=(function(){
-  var a=['Nitro Boost — €2.30','PayPal and crypto accepted','Litecoin payments −10%','Read every product page before ordering','Support runs through tickets'];
+  var a=['Nitro Boost — €2.30','PayPal and crypto accepted','Read every product page before ordering','Support runs through tickets'];
   return a.concat(a).map(function(x){return '<span>'+x+'</span>';}).join('');
 })();
 
@@ -528,7 +528,6 @@ function ticketEur(){
 function updConv(){
   var el=document.getElementById('conv-v'),eur=ticketEur();
   if(CSEL==='PayPal'||!RATES[CSEL]){el.textContent=eur?money(eur)+' via PayPal F&F':'Select a product';return;}
-  if(CSEL==='Litecoin')eur*=0.9;
   var amt=eur/RATES[CSEL];
   var sym={'Bitcoin':'BTC','Litecoin':'LTC','Ethereum':'ETH','USDT':'USDT','Solana':'SOL'}[CSEL];
   el.textContent=eur?amt.toFixed(CSEL==='USDT'?2:6)+' '+sym:'Select a product';
