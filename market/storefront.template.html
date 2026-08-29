@@ -1,0 +1,817 @@
+<title>Yslem Market</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;700&display=swap">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{background:#000 !important}
+body{color:#ececf2 !important;font-family:'Inter',-apple-system,sans-serif;min-height:100vh;overflow-x:hidden;-webkit-font-smoothing:antialiased}
+
+.announce{background:#ececf2;color:#000;padding:7px 0;overflow:hidden;position:relative;z-index:60}
+.announce-track{display:flex;gap:44px;white-space:nowrap;width:max-content;animation:mv 22s linear infinite}
+.announce span{font-size:11.5px;font-weight:700;letter-spacing:.4px}
+@keyframes mv{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+
+.hdr{position:sticky;top:0;z-index:55;background:rgba(0,0,0,.94);border-bottom:1px solid #16161c;padding:11px 16px;display:flex;align-items:center;justify-content:space-between;gap:10px}
+.hdr-logo{display:flex;align-items:center;gap:8px;font-family:'Cinzel',serif;font-size:16px;font-weight:700;letter-spacing:2px;color:#fff}
+.hdr-logo .c{font-size:17px}
+.hdr-right{display:flex;align-items:center;gap:8px}
+.cur-sel{background:rgba(255,255,255,.05);border:1px solid #1a1a22;border-radius:8px;color:#9d9db0;font-size:11.5px;padding:6px 8px;font-family:inherit;outline:none}
+.cur-sel option{background:#0a0a0d}
+.icon-btn{width:34px;height:34px;border-radius:9px;background:rgba(255,255,255,.05);border:1px solid #1a1a22;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:15px;position:relative}
+.cart-count{position:absolute;top:-5px;right:-5px;background:#ececf2;color:#000;font-size:9px;font-weight:800;width:16px;height:16px;border-radius:50%;display:flex;align-items:center;justify-content:center}
+
+.bg{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden;background:#000}
+.throne{position:absolute;top:-60px;left:50%;transform:translateX(-50%);width:520px;height:620px;
+background:
+ radial-gradient(ellipse 46% 30% at 50% 20%,rgba(255,255,255,.16),transparent 70%),
+ conic-gradient(from 200deg at 50% 34%,transparent 0deg,rgba(255,255,255,.07) 26deg,transparent 52deg,transparent 308deg,rgba(255,255,255,.07) 334deg,transparent 360deg),
+ radial-gradient(ellipse 30% 42% at 50% 62%,rgba(255,255,255,.06),transparent 72%);
+-webkit-mask-image:linear-gradient(180deg,rgba(0,0,0,.6) 0%,#000 22%,#000 50%,transparent 86%);
+mask-image:linear-gradient(180deg,rgba(0,0,0,.6) 0%,#000 22%,#000 50%,transparent 86%)}
+.halo{position:absolute;width:520px;height:520px;top:-250px;left:50%;transform:translateX(-50%);background:radial-gradient(circle,rgba(255,255,255,.09) 0%,transparent 68%)}
+.halo2{position:absolute;width:340px;height:340px;top:340px;right:-130px;background:radial-gradient(circle,rgba(255,255,255,.05) 0%,transparent 70%)}
+.vig{position:absolute;inset:0;background:radial-gradient(ellipse 92% 70% at 50% 26%,transparent 32%,rgba(0,0,0,.88) 100%)}
+.content{position:relative;z-index:1}
+
+.hero{padding:52px 20px 0;text-align:center}
+.crest{font-size:32px;display:block;margin-bottom:14px}
+.hero-eyebrow{font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:4px;color:#6b6b7d;text-transform:uppercase;margin-bottom:14px}
+.brand{font-family:'Cinzel',serif;font-size:42px;font-weight:700;letter-spacing:5px;line-height:1;color:#fff;text-shadow:0 0 44px rgba(255,255,255,.18)}
+.hero-tag{font-size:14px;color:#9d9db0;margin-top:16px;line-height:1.6;max-width:330px;margin-left:auto;margin-right:auto}
+.hero-btns{display:flex;gap:9px;justify-content:center;margin-top:22px;flex-wrap:wrap}
+.hb{padding:12px 24px;border-radius:12px;font-size:13.5px;font-weight:700;font-family:inherit;cursor:pointer;border:none;transition:opacity .2s}
+.hb-1{background:#ececf2;color:#000}
+.hb-2{background:rgba(255,255,255,.05);border:1px solid #1a1a22;color:#ececf2}
+.hb:active{opacity:.82}
+
+.trust-row{display:flex;justify-content:center;gap:6px;margin-top:24px;flex-wrap:wrap}
+.trust{padding:6px 13px;border-radius:100px;font-size:10.5px;font-weight:600;background:rgba(255,255,255,.05);color:#9d9db0;border:1px solid #1f1f27}
+
+.pay-wrap{margin:30px 16px 0;border:1px solid #16161c;border-radius:16px;background:rgba(8,8,11,.8);overflow:hidden}
+.pay-title{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:2px;color:#6b6b7d;text-transform:uppercase;text-align:center;padding:14px 0 12px;border-bottom:1px solid #16161c}
+.pay-grid{display:grid;grid-template-columns:repeat(3,1fr)}
+.pay-chip{padding:14px 6px;border-right:1px solid #16161c;border-bottom:1px solid #16161c;display:flex;flex-direction:column;align-items:center;gap:6px;position:relative}
+.pay-chip:nth-child(3n){border-right:none}
+.pay-chip:nth-last-child(-n+3){border-bottom:none}
+.pay-ic{width:26px;height:26px;display:flex;align-items:center;justify-content:center}
+.pay-ic svg{width:24px;height:24px}
+.pay-n{font-size:9.5px;font-weight:600;color:#9d9db0;letter-spacing:.2px}
+.pay-disc{font-size:8.5px;font-weight:800;color:#000;background:#ececf2;padding:2px 5px;border-radius:4px}
+
+.stats{display:flex;margin:12px 16px 0;border:1px solid #16161c;border-radius:16px;background:rgba(8,8,11,.8);overflow:hidden}
+.stat{flex:1;padding:15px 5px;text-align:center;border-right:1px solid #16161c}
+.stat:last-child{border-right:none}
+.stat-n{font-family:'JetBrains Mono',monospace;font-size:19px;font-weight:700;color:#ececf2}
+.stat-l{font-size:8.5px;color:#6b6b7d;text-transform:uppercase;letter-spacing:1.2px;margin-top:4px}
+
+.tick-shell{margin-top:24px;border-top:1px solid #16161c;border-bottom:1px solid #16161c;overflow:hidden;padding:10px 0;background:rgba(6,6,8,.88)}
+.tick-track{display:flex;gap:28px;animation:mv 26s linear infinite;white-space:nowrap;width:max-content}
+.tk{font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#6b6b7d;letter-spacing:.9px}
+.tk b{font-weight:700;margin-left:5px}
+
+.filters{display:flex;gap:7px;padding:22px 16px 16px;overflow-x:auto;scrollbar-width:none}
+.filters::-webkit-scrollbar{display:none}
+.filt{padding:9px 15px;border:1px solid #1a1a22;border-radius:100px;background:rgba(8,8,11,.85);color:#6b6b7d;font-size:12.5px;font-weight:500;font-family:inherit;cursor:pointer;white-space:nowrap;transition:all .22s}
+.filt:hover{border-color:#2a2a34;color:#9d9db0}
+.filt.on{background:#ececf2;color:#000;border-color:transparent;font-weight:700}
+
+.sec{display:flex;align-items:center;gap:11px;padding:0 16px 13px}
+.sec-t{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:2.2px;color:#6b6b7d;text-transform:uppercase;white-space:nowrap}
+.sec-l{flex:1;height:1px;background:linear-gradient(90deg,#1a1a22,transparent)}
+.sec-count{font-family:'JetBrains Mono',monospace;font-size:10px;color:#42424d}
+
+.lbox{width:42px;height:42px;border-radius:11px;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.05);border:1px solid #1a1a22;position:relative;overflow:hidden;flex-shrink:0}
+.lbox::after{content:'';position:absolute;inset:0;background:var(--br);opacity:.1}
+.lbox svg{width:23px;height:23px;display:block;position:relative;z-index:1}
+.mono{position:relative;z-index:1;font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;color:var(--br,#ececf2)}
+.dot{width:5px;height:5px;border-radius:50%;flex-shrink:0;background:#9d9db0}
+
+.cat-block{padding:0 12px 26px}
+.cat-head{display:flex;align-items:center;gap:10px;padding:18px 4px 12px}
+.cat-logo{width:32px;height:32px;border-radius:9px;background:rgba(255,255,255,.05);border:1px solid #1a1a22;display:flex;align-items:center;justify-content:center;font-size:15px}
+.cat-name{font-size:15px;font-weight:700;color:#ececf2;letter-spacing:-.2px}
+.cat-sub{font-size:10.5px;color:#5a5a68;margin-top:2px}
+.cat-rule{flex:1;height:1px;background:linear-gradient(90deg,#1a1a22,transparent)}
+.cat-count{font-family:'JetBrains Mono',monospace;font-size:9.5px;color:#42424d}
+.var-list{display:flex;flex-direction:column;gap:7px}
+.var-row{display:flex;align-items:center;gap:11px;padding:12px 13px;border:1px solid #16161c;border-radius:12px;background:rgba(7,7,10,.85);cursor:pointer;transition:border-color .2s;text-align:left;width:100%;font-family:inherit;color:inherit}
+.var-row:hover{border-color:#2a2a34}
+.var-row:focus-visible{outline:2px solid #ececf2;outline-offset:2px}
+.var-info{flex:1;min-width:0}
+.var-n{font-size:12.5px;font-weight:600;color:#ececf2;margin-bottom:3px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.var-tag{font-family:'JetBrains Mono',monospace;font-size:9.5px;font-weight:700;color:#5a5a68;letter-spacing:.4px}
+.var-flag{font-family:'JetBrains Mono',monospace;font-size:7.5px;font-weight:700;padding:2px 5px;border-radius:4px;letter-spacing:.8px;text-transform:uppercase}
+.f-hot{background:#ececf2;color:#000}
+.f-best{background:rgba(255,255,255,.09);color:#ececf2;border:1px solid #3a3a44}
+.f-new{background:transparent;color:#9d9db0;border:1px solid #2a2a34}
+.var-s{font-size:9.5px;font-weight:600;display:flex;align-items:center;gap:4px;color:#6b6b7d}
+.var-price{text-align:right;white-space:nowrap}
+.var-p{font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:700;color:#ececf2;font-variant-numeric:tabular-nums}
+.var-w{font-family:'JetBrains Mono',monospace;font-size:9.5px;color:#3d3d47;text-decoration:line-through;margin-top:1px}
+
+.faq{padding:8px 16px 26px}
+.faq-item{border:1px solid #16161c;border-radius:13px;background:rgba(7,7,10,.85);margin-bottom:8px;overflow:hidden}
+.faq-q{padding:14px 16px;font-size:13px;font-weight:600;color:#ececf2;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:10px}
+.faq-q .ch{font-size:14px;color:#6b6b7d;transition:transform .25s;flex-shrink:0}
+.faq-item.open .ch{transform:rotate(45deg)}
+.faq-a{max-height:0;overflow:hidden;transition:max-height .3s ease,padding .3s}
+.faq-item.open .faq-a{max-height:340px;padding:0 16px 14px}
+.faq-a p{font-size:12.5px;color:#9d9db0;line-height:1.65}
+
+.rev-wrap{padding:8px 0 26px;overflow:hidden}
+.rev-track{display:flex;gap:9px;animation:mv 60s linear infinite;width:max-content;padding:0 12px}
+.rev{width:210px;flex-shrink:0;padding:13px 14px;border:1px solid #16161c;border-radius:13px;background:rgba(7,7,10,.85)}
+.rev-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:7px}
+.rev-stars{color:#9d9db0;font-size:10px;letter-spacing:1px}
+.rev-date{font-size:9px;color:#42424d;font-family:'JetBrains Mono',monospace}
+.rev-txt{font-size:12px;color:#ececf2;margin-bottom:8px;line-height:1.4}
+.rev-prod{font-size:9.5px;color:#6b6b7d;display:flex;align-items:center;gap:5px}
+.rev-ver{color:#9d9db0;font-weight:700}
+
+.ftr{border-top:1px solid #16161c;padding:26px 16px 120px;background:rgba(0,0,0,.6)}
+.ftr-brand{font-family:'Cinzel',serif;font-size:18px;font-weight:700;letter-spacing:3px;color:#fff;text-align:center;margin-bottom:8px}
+.ftr-tag{font-size:11.5px;color:#6b6b7d;text-align:center;margin-bottom:20px}
+.ftr-social{display:flex;justify-content:center;gap:8px;margin-bottom:24px}
+.fs{padding:9px 18px;border:1px solid #1a1a22;border-radius:10px;background:rgba(255,255,255,.04);font-size:12px;font-weight:600;color:#ececf2;cursor:pointer;font-family:inherit}
+.ftr-cols{display:grid;grid-template-columns:1fr 1fr;gap:22px;margin-bottom:22px}
+.fc-t{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:1.8px;color:#6b6b7d;text-transform:uppercase;margin-bottom:10px}
+.fc-l{font-size:12px;color:#9d9db0;padding:4px 0;cursor:pointer}
+.fc-l:hover{color:#ececf2}
+.ftr-copy{font-size:10.5px;color:#42424d;text-align:center;padding-top:18px;border-top:1px solid #16161c}
+
+.sheet-bg{position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:200;display:none;align-items:flex-end;justify-content:center}
+.sheet-bg.up{display:flex}
+.sheet{background:#08080b;border:1px solid #16161c;border-bottom:none;border-radius:26px 26px 0 0;padding:14px 20px 36px;width:100%;max-width:500px;animation:rise .32s cubic-bezier(.16,1,.3,1);max-height:90vh;overflow-y:auto;position:relative;color:#ececf2}
+@keyframes rise{from{transform:translateY(60px);opacity:0}to{transform:translateY(0);opacity:1}}
+@media (prefers-reduced-motion:reduce){.sheet{animation:none}.announce-track,.tick-track,.rev-track{animation:none}}
+.s-glow{position:absolute;top:0;left:50%;transform:translateX(-50%);width:220px;height:2px;background:#3a3a44;border-radius:100px}
+.grab{width:36px;height:4px;background:#2a2a34;border-radius:100px;margin:0 auto 20px}
+.s-logo{width:64px;height:64px;border-radius:17px;margin:0 auto 13px;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.06);border:1px solid #1a1a22;position:relative;overflow:hidden}
+.s-logo::after{content:'';position:absolute;inset:0;background:var(--br);opacity:.12}
+.s-logo svg{position:relative;z-index:1;width:35px;height:35px}
+.s-logo .mono{font-size:22px}
+.s-title{font-size:23px;font-weight:700;letter-spacing:-.8px;text-align:center;margin-bottom:9px;color:#fff}
+.s-types{display:flex;justify-content:center;gap:5px;margin-bottom:12px;flex-wrap:wrap}
+.s-type{font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:700;padding:4px 8px;border-radius:5px;letter-spacing:.7px;background:rgba(255,255,255,.05);border:1px solid #1a1a22;color:#9d9db0}
+.s-stock-row{text-align:center;margin-bottom:20px}
+.s-stock{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;padding:5px 13px;border-radius:100px;background:rgba(255,255,255,.05);color:#9d9db0;border:1px solid #1f1f27}
+.s-price-b{text-align:center;padding:20px;border-radius:16px;margin-bottom:20px;border:1px solid #16161c;background:rgba(255,255,255,.014)}
+.s-price{font-family:'JetBrains Mono',monospace;font-size:40px;font-weight:700;letter-spacing:-2.3px;line-height:1;color:#ececf2}
+.s-save{font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#9d9db0;margin-top:8px;letter-spacing:.5px}
+.b-title{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:1.9px;color:#6b6b7d;text-transform:uppercase;margin-bottom:10px;display:flex;align-items:center;gap:10px}
+.b-title::after{content:'';flex:1;height:1px;background:linear-gradient(90deg,#1a1a22,transparent)}
+.desc-b{padding:0 0 20px}
+.desc-line{display:flex;gap:9px;font-size:12.5px;color:#ececf2;padding:5px 0;line-height:1.5}
+.desc-line .bul{color:#8a8a9a;flex-shrink:0;font-size:9px;margin-top:4px}
+.spec-g{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:20px}
+.spec{padding:11px 12px;border:1px solid #16161c;border-radius:11px;background:rgba(255,255,255,.014)}
+.spec-k{font-size:9px;color:#6b6b7d;text-transform:uppercase;letter-spacing:.9px;margin-bottom:3px}
+.spec-v{font-size:12px;font-weight:600;color:#ececf2}
+.qty-row{display:flex;align-items:center;gap:11px;margin-bottom:20px}
+.qty-btn{width:40px;height:40px;border-radius:11px;border:1px solid #1a1a22;background:rgba(255,255,255,.04);color:#ececf2;font-size:18px;font-family:inherit;cursor:pointer}
+.qty-v{flex:1;text-align:center;font-family:'JetBrains Mono',monospace;font-size:17px;font-weight:700}
+.total-row{display:flex;align-items:center;justify-content:space-between;padding:14px 0;border-top:1px solid #16161c;margin-bottom:16px}
+.total-l{font-size:12px;color:#6b6b7d;text-transform:uppercase;letter-spacing:1px;font-family:'JetBrains Mono',monospace}
+.total-v{font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:700;color:#ececf2}
+.s-cta{display:block;width:100%;padding:16px;border:none;border-radius:14px;background:#ececf2;color:#0a0a0d;font-size:15px;font-weight:700;font-family:inherit;cursor:pointer;margin-bottom:8px;transition:opacity .2s}
+.s-cta:active{opacity:.82}
+.s-close{display:block;width:100%;padding:13px;background:transparent;border:1px solid #16161c;border-radius:14px;color:#6b6b7d;font-size:13.5px;font-family:inherit;cursor:pointer}
+.pay-mini{display:flex;flex-wrap:wrap;gap:5px;justify-content:center;margin-top:16px}
+.pm{padding:4px 9px;border:1px solid #16161c;border-radius:7px;font-size:9.5px;color:#6b6b7d;font-weight:600}
+
+.tform{display:none}.tform.show{display:block}
+.tf-l{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:1.4px;color:#6b6b7d;text-transform:uppercase;margin-bottom:7px;display:block}
+.tf-i,.tf-s,.tf-a{width:100%;padding:13px 14px;background:rgba(255,255,255,.03);border:1px solid #16161c;border-radius:12px;color:#ececf2;font-size:14px;font-family:inherit;margin-bottom:15px;outline:none;transition:border-color .2s}
+.tf-i::placeholder,.tf-a::placeholder{color:#42424d}
+.tf-i:focus,.tf-s:focus,.tf-a:focus{border-color:#4a4a58}
+.tf-a{resize:vertical;min-height:84px}
+.tf-s{appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236b6b7d' stroke-width='1.6' fill='none'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 14px center}
+.tf-s option{background:#0a0a0d;color:#ececf2}
+.tsuc{display:none;text-align:center;padding:24px 0}.tsuc.show{display:block}
+.ts-ic{font-size:50px;margin-bottom:15px;display:block}
+.ts-t{font-size:20px;font-weight:700;margin-bottom:8px;color:#fff}
+.ts-id{font-family:'JetBrains Mono',monospace;font-size:15px;color:#fff;padding:12px 20px;border:1px solid #2a2a34;border-radius:10px;background:rgba(255,255,255,.05);display:inline-block;margin:14px 0;letter-spacing:2px;font-weight:700}
+.ts-n{font-size:12.5px;color:#6b6b7d;line-height:1.7}
+.ts-n strong{color:#ececf2}
+
+.dock{position:fixed;bottom:0;left:0;right:0;background:rgba(0,0,0,.96);border-top:1px solid #16161c;display:flex;justify-content:space-around;padding:11px 0 20px;z-index:100}
+.di{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:9px;color:#4a4a58;cursor:pointer;font-weight:700;letter-spacing:.5px;transition:color .2s}
+.di.on{color:#ececf2}
+.di:hover{color:#9d9db0}
+.di-ic{font-size:17px}
+
+.live-bar{display:flex;align-items:center;gap:9px;padding:11px 14px;margin:12px 16px 12px;border:1px solid #16161c;border-radius:13px;background:rgba(7,7,10,.9)}
+.live-dot{width:6px;height:6px;border-radius:50%;background:#ececf2;flex-shrink:0;animation:blink 2s ease-in-out infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
+.live-txt{font-size:11.5px;color:#8a8a9a;flex:1;transition:opacity .3s}
+.live-txt b{color:#ececf2;font-weight:600}
+
+.conv-row{display:flex;align-items:center;gap:9px;padding:11px 13px;border:1px solid #16161c;border-radius:11px;background:rgba(255,255,255,.02);margin-bottom:16px}
+.conv-l{font-family:'JetBrains Mono',monospace;font-size:9.5px;color:#6b6b7d;letter-spacing:1.2px;text-transform:uppercase}
+.conv-v{flex:1;text-align:right;font-family:'JetBrains Mono',monospace;font-size:12px;color:#ececf2;font-weight:600}
+.crypto-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:7px;margin-bottom:16px}
+.cryp{padding:11px 12px;border:1px solid #16161c;border-radius:11px;background:rgba(255,255,255,.02);cursor:pointer;transition:border-color .2s}
+.cryp.on{border-color:#4a4a58;background:rgba(255,255,255,.06)}
+.cryp-t{font-size:11px;font-weight:700;color:#ececf2;margin-bottom:3px;display:flex;align-items:center;gap:6px}
+.cryp-t svg{width:14px;height:14px}
+.cryp-a{font-family:'JetBrains Mono',monospace;font-size:12px;color:#8a8a9a;font-weight:600}
+.cryp.on .cryp-a{color:#ececf2}
+
+.trk-wrap{padding:16px;border:1px solid #16161c;border-radius:14px;background:rgba(7,7,10,.9);margin:0 16px 26px}
+.trk-steps{display:flex;align-items:center;margin-bottom:14px}
+.trk-s{flex:1;text-align:center;position:relative}
+.trk-c{width:26px;height:26px;border-radius:50%;border:1.5px solid #2a2a34;background:#08080b;margin:0 auto 7px;display:flex;align-items:center;justify-content:center;font-size:11px;color:#4a4a58;font-weight:700;position:relative;z-index:2}
+.trk-s.done .trk-c{background:#ececf2;border-color:#ececf2;color:#000}
+.trk-s.now .trk-c{border-color:#ececf2;color:#ececf2}
+.trk-l{font-size:9px;color:#4a4a58;letter-spacing:.4px}
+.trk-s.done .trk-l,.trk-s.now .trk-l{color:#9d9db0}
+.trk-line{position:absolute;top:13px;left:50%;width:100%;height:1.5px;background:#1f1f27;z-index:1}
+.trk-s.done .trk-line{background:#ececf2}
+.trk-s:last-child .trk-line{display:none}
+.trk-in{display:flex;gap:8px}
+.trk-in input{flex:1;padding:11px 13px;background:rgba(255,255,255,.03);border:1px solid #16161c;border-radius:10px;color:#ececf2;font-size:12.5px;font-family:'JetBrains Mono',monospace;outline:none;letter-spacing:1px}
+.trk-in input::placeholder{color:#42424d;letter-spacing:0}
+.trk-in button{padding:11px 18px;background:#ececf2;border:none;border-radius:10px;color:#000;font-size:12.5px;font-weight:700;font-family:inherit;cursor:pointer}
+.dl-row{display:flex;gap:7px;margin-top:16px}
+.dl{flex:1;padding:12px 8px;border:1px solid #16161c;border-radius:11px;text-align:center;background:rgba(255,255,255,.02)}
+.dl-n{font-family:'JetBrains Mono',monospace;font-size:17px;font-weight:700;color:#ececf2}
+.dl-l{font-size:8.5px;color:#4a4a58;text-transform:uppercase;letter-spacing:1px;margin-top:3px}
+
+.opt-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:7px;margin-bottom:14px}
+.opt{padding:12px 11px;border:1px solid #16161c;border-radius:11px;background:rgba(255,255,255,.02);cursor:pointer;transition:border-color .18s,background .18s;position:relative}
+.opt.on{border-color:#4a4a58;background:rgba(255,255,255,.07)}
+.opt-n{font-size:12px;font-weight:650;color:#ececf2;margin-bottom:3px}
+.opt-d{font-size:9.5px;color:#5a5a68;line-height:1.35}
+.opt-p{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;color:#8a8a9a;margin-top:5px}
+.opt.on .opt-p{color:#ececf2}
+.opt-tick{position:absolute;top:9px;right:9px;width:15px;height:15px;border-radius:5px;border:1.5px solid #2a2a34;display:flex;align-items:center;justify-content:center;font-size:9px;color:#000}
+.opt.on .opt-tick{background:#ececf2;border-color:#ececf2}
+.int-field{margin-bottom:12px}
+.int-lab{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:1.3px;color:#5a5a68;text-transform:uppercase;margin-bottom:6px;display:block}
+.int-in{width:100%;padding:12px 13px;background:rgba(255,255,255,.03);border:1px solid #16161c;border-radius:11px;color:#ececf2;font-size:13px;font-family:inherit;outline:none}
+.int-in::placeholder{color:#3d3d47}
+.int-in:focus{border-color:#4a4a58}
+.int-hint{font-size:9.5px;color:#4a4a58;margin-top:5px;line-height:1.45}
+.chip-row{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+.chip{padding:8px 13px;border:1px solid #16161c;border-radius:100px;background:rgba(255,255,255,.02);font-size:11.5px;font-weight:600;color:#6b6b7d;cursor:pointer;transition:all .18s}
+.chip.on{background:#ececf2;color:#000;border-color:#ececf2}
+.step-row{display:flex;align-items:center;gap:9px;margin-bottom:12px}
+.step-btn{width:38px;height:38px;border-radius:10px;border:1px solid #1a1a22;background:rgba(255,255,255,.03);color:#ececf2;font-size:17px;font-family:inherit;cursor:pointer}
+.step-v{flex:1;text-align:center;font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:700;color:#ececf2}
+.step-u{font-size:10px;color:#5a5a68;font-family:'Inter',sans-serif;margin-left:4px}
+.slider-row{display:flex;align-items:center;gap:12px;margin-bottom:12px}
+.slider{flex:1;-webkit-appearance:none;appearance:none;height:3px;background:#1f1f27;border-radius:100px;outline:none}
+.slider::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:#ececf2;cursor:pointer}
+.slider::-moz-range-thumb{width:18px;height:18px;border-radius:50%;background:#ececf2;border:none;cursor:pointer}
+.slider-v{font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:#ececf2;min-width:66px;text-align:right}
+.risk{padding:12px 14px;border:1px solid #24242e;border-radius:11px;background:rgba(255,255,255,.02);margin-bottom:18px}
+.risk-t{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:1.4px;color:#8a8a9a;text-transform:uppercase;margin-bottom:8px}
+.risk-l{font-size:11.5px;color:#6b6b7d;line-height:1.6;display:flex;gap:8px;padding:3px 0}
+.risk-l span{color:#c9a95c;flex-shrink:0;font-family:'JetBrains Mono',monospace}
+</style>
+
+<div class="announce"><div class="announce-track" id="ann"></div></div>
+
+<div class="hdr">
+  <div class="hdr-logo"><span class="c">👑</span>YSLEM</div>
+  <div class="hdr-right">
+    <select class="cur-sel" aria-label="Currency"><option>€ EUR</option><option>$ USD</option><option>£ GBP</option></select>
+    <div class="icon-btn" id="nav-cart" role="button" tabindex="0">🛒<span class="cart-count" id="cc">0</span></div>
+  </div>
+</div>
+
+<div class="bg"><div class="halo"></div><div class="halo2"></div><div class="throne"></div><div class="vig"></div></div>
+
+<div class="content">
+
+<div class="hero">
+  <span class="crest">👑</span>
+  <div class="hero-eyebrow">Yslem Market</div>
+  <h1 class="brand">YSLEM</h1>
+  <p class="hero-tag">Digital products, delivered fast. Read every product page carefully before ordering.</p>
+  <div class="hero-btns">
+    <button class="hb hb-1" id="btn-shop">Shop now</button>
+    <button class="hb hb-2" id="btn-disc">Join Discord</button>
+  </div>
+  <div class="trust-row">
+    <span class="trust">Fast delivery</span>
+    <span class="trust">Ticket support</span>
+    <span class="trust">Discord community</span>
+  </div>
+</div>
+
+<div class="pay-wrap">
+  <div class="pay-title">Payment methods</div>
+  <div class="pay-grid" id="pays"></div>
+</div>
+
+<div class="stats">
+  <div class="stat"><div class="stat-n">2.4K</div><div class="stat-l">Orders</div></div>
+  <div class="stat"><div class="stat-n">4.9</div><div class="stat-l">Rating</div></div>
+  <div class="stat"><div class="stat-n">&lt;60s</div><div class="stat-l">Delivery</div></div>
+  <div class="stat"><div class="stat-n" id="stat-n">0</div><div class="stat-l">Products</div></div>
+</div>
+
+<div class="live-bar">
+  <span class="live-dot"></span>
+  <span class="live-txt" id="live-txt">Someone from <b>Paris</b> just ordered <b>Nitro Boost</b></span>
+</div>
+<div class="tick-shell"><div class="tick-track" id="tick"></div></div>
+
+<div class="filters" id="filters"></div>
+
+<div class="sec">
+  <span class="sec-t" id="sec-label">All products</span>
+  <span class="sec-l"></span>
+  <span class="sec-count" id="sec-count"></span>
+</div>
+
+<div id="catblocks"></div>
+
+<div class="sec"><span class="sec-t">Track your order</span><span class="sec-l"></span></div>
+<div class="trk-wrap">
+  <div class="trk-steps" id="trk-steps"></div>
+  <div class="trk-in">
+    <input id="trk-id" placeholder="YSL-XXXXX" aria-label="Ticket ID">
+    <button id="trk-go">Track</button>
+  </div>
+  <div class="dl-row">
+    <div class="dl"><div class="dl-n" id="dl-1">0</div><div class="dl-l">Pending</div></div>
+    <div class="dl"><div class="dl-n">2.4K</div><div class="dl-l">Delivered</div></div>
+    <div class="dl"><div class="dl-n">42s</div><div class="dl-l">Avg time</div></div>
+  </div>
+</div>
+
+<div class="sec" style="padding-top:6px"><span class="sec-t">Frequently asked</span><span class="sec-l"></span></div>
+<div class="faq" id="faq"></div>
+
+<div class="sec"><span class="sec-t">What customers say</span><span class="sec-l"></span></div>
+<div class="rev-wrap"><div class="rev-track" id="revs"></div></div>
+
+<div class="ftr">
+  <div class="ftr-brand">YSLEM</div>
+  <div class="ftr-tag">Digital products · Discord and Telegram</div>
+  <div class="ftr-social">
+    <button class="fs" id="f-disc">💬 Discord</button>
+    <button class="fs" id="f-tg">✈️ Telegram</button>
+  </div>
+  <div class="ftr-cols">
+    <div>
+      <div class="fc-t">Navigation</div>
+      <div class="fc-l" id="l-home">Home</div>
+      <div class="fc-l" id="l-prod">Products</div>
+      <div class="fc-l" id="l-stat">Status</div>
+      <div class="fc-l" id="l-rev">Reviews</div>
+    </div>
+    <div>
+      <div class="fc-t">Support</div>
+      <div class="fc-l" id="l-tick">Open a ticket</div>
+      <div class="fc-l" id="l-faq">FAQ</div>
+      <div class="fc-l" id="l-tos">Terms of Service</div>
+      <div class="fc-l" id="l-ref">Refund Policy</div>
+    </div>
+  </div>
+  <div class="ftr-copy">Copyright © Yslem Market 2026</div>
+</div>
+
+</div>
+
+<div class="sheet-bg" id="sheet">
+  <div class="sheet" id="si">
+    <div class="s-glow"></div><div class="grab"></div>
+    <div class="s-logo" id="s-logo"></div>
+    <div class="s-title" id="s-title"></div>
+    <div class="s-types" id="s-types"></div>
+    <div class="s-stock-row"><span class="s-stock" id="s-stock"></span></div>
+    <div class="s-price-b">
+      <div class="s-price" id="s-price"></div>
+      <div class="s-save" id="s-save"></div>
+    </div>
+    <div class="b-title">Description</div>
+    <div class="desc-b" id="s-desc"></div>
+    <div class="b-title">Specifications</div>
+    <div class="spec-g" id="s-specs"></div>
+    <div id="int-slot"></div>
+    <div class="b-title">Quantity</div>
+    <div class="qty-row">
+      <button class="qty-btn" id="q-min">−</button>
+      <span class="qty-v" id="q-val">1</span>
+      <button class="qty-btn" id="q-plus">+</button>
+    </div>
+    <div class="total-row"><span class="total-l">Total</span><span class="total-v" id="s-total"></span></div>
+    <button class="s-cta" id="s-buy">Buy now</button>
+    <button class="s-close" id="s-cl">Close</button>
+    <div class="pay-mini" id="pay-mini"></div>
+  </div>
+</div>
+
+<div class="sheet-bg" id="ticket">
+  <div class="sheet" id="ti">
+    <div class="s-glow"></div><div class="grab"></div>
+    <div class="tform show" id="tf">
+      <div class="s-logo"><span style="font-size:31px">🎫</span></div>
+      <div class="s-title">Create a ticket</div>
+      <div class="s-stock-row" style="margin-bottom:22px"><span style="font-size:12.5px;color:#6b6b7d">Average reply time is under 10 minutes</span></div>
+      <label class="tf-l" for="tk-p">Product</label>
+      <select class="tf-s" id="tk-p"></select>
+      <label class="tf-l" for="tk-c">Your contact</label>
+      <input class="tf-i" id="tk-c" placeholder="Discord username or Telegram handle">
+      <label class="tf-l">Payment method</label>
+      <div class="crypto-grid" id="cryp-grid"></div>
+      <div class="conv-row"><span class="conv-l">Live rate</span><span class="conv-v" id="conv-v">—</span></div>
+      <label class="tf-l" for="tk-m">Message (optional)</label>
+      <textarea class="tf-a" id="tk-m" placeholder="Quantity, questions, anything else"></textarea>
+      <button class="s-cta" id="tk-sub">Submit ticket</button>
+      <button class="s-close" id="tk-can">Cancel</button>
+    </div>
+    <div class="tsuc" id="ts">
+      <span class="ts-ic">✅</span>
+      <div class="ts-t">Ticket created</div>
+      <div class="ts-id" id="ts-id"></div>
+      <div class="ts-n" id="ts-n"></div>
+      <button class="s-cta" style="margin-top:20px" id="ts-d">Done</button>
+    </div>
+  </div>
+</div>
+
+<div class="dock">
+  <div class="di on" id="d-shop"><span class="di-ic">🏪</span><span>SHOP</span></div>
+  <div class="di" id="d-tick"><span class="di-ic">🎫</span><span>TICKET</span></div>
+  <div class="di" id="d-stat"><span class="di-ic">📊</span><span>STATUS</span></div>
+  <div class="di" id="d-help"><span class="di-ic">❓</span><span>HELP</span></div>
+</div>
+
+<script>
+/*{{CATALOG}}*/
+</script>
+<script>
+/*{{ICONS}}*/
+</script>
+<script>
+var SHOPS=window.YSLEM.shops,BRAND=window.YSLEM.brands,P=window.YSLEM.products;
+var SVG=window.YSLEM_ICONS,PICO=window.YSLEM_PAYICONS;
+function money(v){return '€'+parseFloat(v).toFixed(2);}
+function logo(b){return SVG[b]||'<span class="mono">'+b.slice(0,2).toUpperCase()+'</span>';}
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+
+var PAYS=[{n:'PayPal'},{n:'Bitcoin'},{n:'Litecoin',d:'-10%'},{n:'Ethereum'},{n:'USDT'},{n:'Solana'}];
+var active='all',current=null,qty=1,intState={};
+
+document.getElementById('stat-n').textContent=P.length;
+document.getElementById('ann').innerHTML=(function(){
+  var a=['Nitro Boost — €2.30','PayPal and crypto accepted','Litecoin payments −10%',P.length+' products in stock','Read every product page before ordering'];
+  return a.concat(a).map(function(x){return '<span>'+x+'</span>';}).join('');
+})();
+
+document.getElementById('pays').innerHTML=PAYS.map(function(p){
+  return '<div class="pay-chip">'+(p.d?'<span class="pay-disc" style="position:absolute;top:5px;right:5px">'+p.d+'</span>':'')+
+    '<div class="pay-ic">'+(PICO[p.n]||PICO.card)+'</div><div class="pay-n">'+p.n+'</div></div>';
+}).join('');
+document.getElementById('pay-mini').innerHTML=PAYS.map(function(p){return '<span class="pm">'+p.n+(p.d?' '+p.d:'')+'</span>';}).join('');
+
+var tk=P.slice().sort(function(){return Math.random()-.5;}).slice(0,12);
+document.getElementById('tick').innerHTML=tk.concat(tk).map(function(p){
+  return '<span class="tk">'+esc(p.name.toUpperCase())+'<b>'+money(p.price)+'</b></span>';
+}).join('');
+
+document.getElementById('filters').innerHTML='<button class="filt on" data-c="all">🌐 All</button>'+
+  SHOPS.map(function(s){return '<button class="filt" data-c="'+s.id+'">'+s.icon+' '+s.name.replace(' Shop','')+'</button>';}).join('');
+Array.prototype.forEach.call(document.querySelectorAll('.filt'),function(b){
+  b.addEventListener('click',function(){
+    Array.prototype.forEach.call(document.querySelectorAll('.filt'),function(x){x.classList.remove('on');});
+    b.classList.add('on');active=b.getAttribute('data-c');
+    var s=SHOPS.filter(function(x){return x.id===active;})[0];
+    document.getElementById('sec-label').textContent=active==='all'?'All products':s.name;
+    render();
+  });
+});
+
+document.getElementById('tk-p').innerHTML='<option value="">Select a product</option>'+
+  SHOPS.map(function(s){
+    return '<optgroup label="'+s.name+'">'+P.filter(function(p){return p.shop===s.id;}).map(function(p){
+      return '<option value="'+p.id+'">'+esc(p.name)+' — '+money(p.price)+'</option>';}).join('')+'</optgroup>';
+  }).join('')+'<option value="other">Other / General question</option>';
+
+var FAQS=[
+{q:'How quickly will I receive my order?',a:'Delivery is instant on keys, links and accounts. Services with a delivery window (boosts, social, Robux) show that window on their product page.'},
+{q:'What does FA, KEY and GIFT LINK mean?',a:'FA means Full Access — you receive the login credentials. KEY is applied to an account. GIFT LINK is claimed on your own account with no login shared. LINK is an activation link for your existing account. SERVICE is delivered against a public profile.'},
+{q:'What if my product does not work?',a:'Open a ticket with your ticket ID and proof of the issue. Replacements are handled case by case within the support window listed on the product page. No outcome is guaranteed.'},
+{q:'What payment methods do you accept?',a:'PayPal Friends and Family, and crypto: Bitcoin, Litecoin, Ethereum, USDT and Solana. Litecoin payments get 10% off automatically.'},
+{q:'Is there any risk?',a:'Yes. These are resold accounts, keys and bot traffic. They can stop working, be revoked, or be purged by the provider at any time. Read the [!] notes on every product page before ordering.'},
+{q:'How do I get support?',a:'Create a ticket from any product page or the ticket tab, then send the ID on Discord or Telegram.'}
+];
+document.getElementById('faq').innerHTML=FAQS.map(function(f){
+  return '<div class="faq-item"><div class="faq-q">'+f.q+'<span class="ch">+</span></div><div class="faq-a"><p>'+f.a+'</p></div></div>';
+}).join('');
+Array.prototype.forEach.call(document.querySelectorAll('.faq-item'),function(it){
+  it.querySelector('.faq-q').addEventListener('click',function(){it.classList.toggle('open');});
+});
+
+var REVS=[{t:'Fast and legit, got it in seconds',p:'Nitro Boost'},{t:'Works perfectly, thanks',p:'Netflix 4K'},
+{t:'Best price I found anywhere',p:'Spotify Premium'},{t:'Instant delivery as promised',p:'ChatGPT Plus'},
+{t:'Boosts applied in 10 minutes',p:'14x Server Boosts'},{t:'Legit seller, will buy again',p:'Disney Plus'},
+{t:'Great support on Discord',p:'Claude Pro'},{t:'Key worked first try',p:'CapCut Pro'}];
+var today=new Date(),dts=[];
+for(var i=0;i<8;i++){var d=new Date(today);d.setDate(d.getDate()-i);dts.push(d.toLocaleDateString('en-US',{month:'short',day:'numeric'}));}
+document.getElementById('revs').innerHTML=REVS.concat(REVS).map(function(r,i){
+  return '<div class="rev"><div class="rev-top"><span class="rev-stars">★★★★★</span><span class="rev-date">'+dts[i%8]+'</span></div>'+
+    '<div class="rev-txt">'+r.t+'</div><div class="rev-prod">'+r.p+' <span class="rev-ver">✓ Verified</span></div></div>';
+}).join('');
+
+function render(){
+  var order=active==='all'?SHOPS.map(function(s){return s.id;}):[active];
+  var total=0,html='';
+  order.forEach(function(sid){
+    var shop=SHOPS.filter(function(s){return s.id===sid;})[0];
+    var items=P.filter(function(x){return x.shop===sid;});
+    if(!items.length)return;
+    total+=items.length;
+    html+='<div class="cat-block"><div class="cat-head">'+
+      '<div class="cat-logo">'+shop.icon+'</div>'+
+      '<div><div class="cat-name">'+shop.name+'</div><div class="cat-sub">'+shop.blurb+'</div></div>'+
+      '<div class="cat-rule"></div><div class="cat-count">'+items.length+'</div></div><div class="var-list">';
+    items.forEach(function(p){
+      html+='<button class="var-row" data-id="'+p.id+'">'+
+        '<span class="lbox" style="width:38px;height:38px;border-radius:10px;--br:'+(BRAND[p.brand]||'#888')+'">'+logo(p.brand)+'</span>'+
+        '<span class="var-info"><span class="var-n">'+esc(p.name)+' <span class="var-tag">['+p.dur.toUpperCase()+']</span>'+
+        (p.flag?' <span class="var-flag f-'+p.flag+'">'+p.flag+'</span>':'')+'</span>'+
+        '<span class="var-s"><span class="dot"></span>'+p.kind+' · '+p.sp.Delivery+'</span></span>'+
+        '<span class="var-price"><span class="var-p">'+money(p.price)+'</span>'+
+        (p.retail?'<span class="var-w">'+money(p.retail)+'</span>':'')+'</span></button>';
+    });
+    html+='</div></div>';
+  });
+  document.getElementById('sec-count').textContent=total+' items';
+  document.getElementById('catblocks').innerHTML=html;
+  Array.prototype.forEach.call(document.querySelectorAll('.var-row'),function(r){
+    r.addEventListener('click',function(){openSheet(parseInt(r.getAttribute('data-id'),10));});
+  });
+}
+
+/* ── configurator ───────────────────────────────────────────── */
+var DUR=[['1 month',1],['3 months',2.8],['6 months',5.2],['12 months',9.5]];
+var REGIONS=['Europe','United States','United Kingdom','Turkey','Brazil','Argentina','India'];
+var PLATFORMS=['Web','Desktop','Android','iOS','Smart TV'];
+var VPNDEV=[['1 device',0],['3 devices',0.40],['6 devices',0.80]];
+var FNTIER=[['100+ skins',0],['500+ skins',1.50],['1000+ skins',3.00],['OG account',8.00]];
+var AGEYR=['2015','2016','2017','2018','2019','2020'];
+var SPEED=[['Instant',0,'All at once, higher drop risk'],['Drip-feed',0.35,'Spread over hours, looks organic']];
+
+function buildInt(p){
+  intState={extra:0};
+  var t=p.int,h='<div class="b-title">Configure your order</div><div class="int-wrap">',opts=null;
+  function field(lab,id,ph,hint){return '<div class="int-field"><label class="int-lab" for="'+id+'">'+lab+'</label>'+
+    '<input class="int-in" id="'+id+'" placeholder="'+ph+'">'+(hint?'<div class="int-hint">'+hint+'</div>':'')+'</div>';}
+
+  if(t==='nitro'){h+=field('Discord username','i-user','yourusername','The gift link is sent to you, you claim it yourself.')+
+    '<label class="int-lab">Delivery method</label><div class="opt-grid" id="i-opts"></div>';
+    opts=[['Gift link',0,'Sent by DM, you claim it'],['Direct gift',0.40,'Sent straight to your account']];}
+  else if(t==='boost'){h+=field('Server invite link','i-inv','discord.gg/yourserver','Must be permanent, with no member limit and no expiry.')+
+    '<label class="int-lab">Extra boosts</label><div class="step-row"><button class="step-btn" data-st="-2">−</button>'+
+    '<span class="step-v"><span id="i-bq">0</span><span class="step-u">extra</span></span><button class="step-btn" data-st="2">+</button></div>';}
+  else if(t==='aged'){h+='<label class="int-lab">Creation year</label><div class="chip-row" id="i-yr"></div>'+
+    '<label class="int-lab">Verification</label><div class="opt-grid" id="i-opts"></div>';
+    opts=[['Email only',0,'Email verified'],['Email + phone',0.60,'Both verified']];}
+  else if(t==='ai'){h+=field('Delivery email','i-mail','you@mail.com','Credentials are sent here. Use an address you check.')+
+    '<label class="int-lab">Account type</label><div class="opt-grid" id="i-opts"></div>';
+    opts=[['Shared',0,'Used by several people'],['Private',1.80,'Yours alone']];}
+  else if(t==='link'){h+=field('Your account email','i-mail','you@mail.com','The subscription is applied to this account. Nothing is shared.');}
+  else if(t==='ownacct'){h+=field('Account email','i-mail','you@mail.com','Must have no active subscription. Cancel any trial first.');}
+  else if(t==='stream'){h+='<label class="int-lab">Plan</label><div class="opt-grid" id="i-opts"></div>'+field('Delivery email','i-mail','you@mail.com','');
+    opts=(p.opts||[['Standard',0]]).map(function(x){return [x[0],x[1],''];});}
+  else if(t==='vpn'){h+='<label class="int-lab">Simultaneous devices</label><div class="opt-grid" id="i-opts"></div>'+
+    '<label class="int-lab">Preferred server region</label><div class="chip-row" id="i-reg"></div>';
+    opts=VPNDEV.map(function(x){return [x[0],x[1],''];});}
+  else if(t==='game'){h+='<label class="int-lab">Edition</label><div class="opt-grid" id="i-opts"></div>'+field('Delivery email','i-mail','you@mail.com','');
+    opts=(p.opts||[['Standard',0]]).map(function(x){return [x[0],x[1],''];});}
+  else if(t==='fortnite'){h+='<label class="int-lab">Skin tier</label><div class="opt-grid" id="i-opts"></div>'+
+    '<div class="int-hint" style="margin-bottom:12px">Accounts are randomly assigned from stock. Specific skins cannot be requested.</div>';
+    opts=FNTIER.map(function(x){return [x[0],x[1],''];});}
+  else if(t==='region'){h+='<label class="int-lab">Account region</label><div class="chip-row" id="i-reg"></div>'+
+    field('Account email','i-mail','you@mail.com','Must have no active plan of the same type.');}
+  else if(t==='platform'){h+='<label class="int-lab">Platform</label><div class="chip-row" id="i-plat"></div>'+field('Delivery email','i-mail','you@mail.com','');}
+  else if(t==='method'){h+=field('Delivery email','i-mail','you@mail.com','Sent as a text file. Nothing is installed for you.')+
+    '<label class="int-lab">Format</label><div class="opt-grid" id="i-opts"></div>';
+    opts=[['Text guide',0,'Written step by step'],['Guide + support',0.90,'Walkthrough on Discord']];}
+  else if(t==='smm'||t==='robux'){
+    var c=p.smm||{unit:'Robux',min:1000,max:50000,step:1000,rate:p.price,field:'Roblox username',ph:'YourRobloxName'};
+    intState.rate=c.rate;intState.unit=c.unit;
+    h+=field(c.field,'i-target',c.ph,'Must stay public for the whole delivery window.')+
+      '<label class="int-lab">Quantity</label><div class="slider-row">'+
+      '<input type="range" class="slider" id="i-sq" min="'+c.min+'" max="'+c.max+'" step="'+c.step+'" value="'+(c.min*(t==='robux'?1:10))+'" aria-label="Quantity">'+
+      '<span class="slider-v" id="i-sqv">—</span></div>';
+    if(t==='smm'){h+='<label class="int-lab">Delivery speed</label><div class="opt-grid" id="i-opts"></div>';opts=SPEED;}
+  }
+  else{h+=field('Delivery email','i-mail','you@mail.com','');}
+
+  h+='</div><div class="risk"><div class="risk-t">Read before ordering</div>'+
+    p.warn.map(function(w){return '<div class="risk-l"><span>[!]</span>'+esc(w)+'</div>';}).join('')+'</div>';
+  document.getElementById('int-slot').innerHTML=h;
+  wireInt(p,opts);
+}
+
+function chips(id,list,key){
+  var el=document.getElementById(id);if(!el)return;intState[key]=0;
+  (function d(){
+    el.innerHTML=list.map(function(x,i){return '<div class="chip'+(intState[key]===i?' on':'')+'" data-i="'+i+'">'+x+'</div>';}).join('');
+    Array.prototype.forEach.call(el.querySelectorAll('.chip'),function(c){
+      c.addEventListener('click',function(){intState[key]=parseInt(c.getAttribute('data-i'),10);d();});
+    });
+  })();
+}
+
+function wireInt(p,opts){
+  var og=document.getElementById('i-opts');
+  if(og&&opts){
+    intState.opt=0;intState.opts=opts;
+    (function draw(){
+      og.innerHTML=opts.map(function(o,i){
+        var pv=parseFloat(o[1]);
+        return '<div class="opt'+(intState.opt===i?' on':'')+'" data-i="'+i+'"><div class="opt-tick">✓</div>'+
+          '<div class="opt-n">'+o[0]+'</div>'+(o[2]?'<div class="opt-d">'+o[2]+'</div>':'')+
+          '<div class="opt-p">'+(pv===0?'Included':(pv>0?'+':'')+money(Math.abs(pv))+(pv<0?' off':''))+'</div></div>';
+      }).join('');
+      Array.prototype.forEach.call(og.querySelectorAll('.opt'),function(o){
+        o.addEventListener('click',function(){
+          intState.opt=parseInt(o.getAttribute('data-i'),10);
+          intState.extra=parseFloat(opts[intState.opt][1]);draw();updTotal();
+        });
+      });
+    })();
+  }
+  chips('i-yr',AGEYR,'yr');chips('i-reg',REGIONS,'reg');chips('i-plat',PLATFORMS,'plat');
+  var sq=document.getElementById('i-sq');
+  if(sq){
+    var sd=function(){
+      intState.sq=parseInt(sq.value,10);
+      var v=intState.sq;
+      document.getElementById('i-sqv').textContent=v>=1000?(v/1000).toFixed(v%1000?1:0)+'K':v;
+      updTotal();
+    };
+    sq.addEventListener('input',sd);sd();
+  }
+  var sb=document.querySelectorAll('.step-btn');
+  if(sb.length){
+    intState.bq=0;
+    Array.prototype.forEach.call(sb,function(b){
+      b.addEventListener('click',function(){
+        intState.bq=Math.max(0,Math.min(30,intState.bq+parseInt(b.getAttribute('data-st'),10)));
+        document.getElementById('i-bq').textContent=intState.bq;updTotal();
+      });
+    });
+  }
+}
+
+function unitPrice(){
+  var base=current.price;
+  if(current.int==='boost'&&intState.bq) base+=intState.bq*0.215;
+  if((current.int==='smm'||current.int==='robux')&&intState.sq){
+    base=(intState.sq/1000)*(intState.rate||current.price);
+    if(intState.sq>=10000)base*=0.85;else if(intState.sq>=5000)base*=0.92;
+  }
+  return base+(intState.extra||0);
+}
+function updTotal(){
+  if(!current)return;
+  document.getElementById('s-total').textContent=money(Math.max(unitPrice()*qty,0.10));
+  document.getElementById('q-val').textContent=qty;
+}
+
+function openSheet(id){
+  var p=P.filter(function(x){return x.id===id;})[0];
+  current=p;qty=1;
+  document.getElementById('si').style.setProperty('--br',BRAND[p.brand]||'#888');
+  document.getElementById('s-logo').innerHTML=logo(p.brand);
+  document.getElementById('s-title').textContent=p.name;
+  document.getElementById('s-types').innerHTML=[p.kind,p.dur.toUpperCase()].map(function(t){return '<span class="s-type">'+t+'</span>';}).join('');
+  document.getElementById('s-stock').innerHTML='<span class="dot"></span>'+p.sp.Delivery+' · '+p.sp.Support+' support';
+  document.getElementById('s-price').textContent=money(p.price);
+  document.getElementById('s-save').textContent=p.retail?'SAVE '+Math.round((1-p.price/p.retail)*100)+'% — RETAIL '+money(p.retail):'BEST PRICE ON THE MARKET';
+  document.getElementById('s-desc').innerHTML=p.desc.map(function(d){return '<div class="desc-line"><span class="bul">◉</span>'+esc(d)+'</div>';}).join('');
+  document.getElementById('s-specs').innerHTML=Object.keys(p.sp).map(function(k){
+    return '<div class="spec"><div class="spec-k">'+k+'</div><div class="spec-v">'+esc(p.sp[k])+'</div></div>';
+  }).join('');
+  buildInt(p);updTotal();
+  document.getElementById('sheet').classList.add('up');
+  document.getElementById('si').scrollTop=0;
+}
+
+document.getElementById('q-min').addEventListener('click',function(){if(qty>1){qty--;updTotal();}});
+document.getElementById('q-plus').addEventListener('click',function(){if(qty<10){qty++;updTotal();}});
+document.getElementById('sheet').addEventListener('click',function(e){if(e.target===this)this.classList.remove('up');});
+document.getElementById('si').addEventListener('click',function(e){e.stopPropagation();});
+document.getElementById('ticket').addEventListener('click',function(e){if(e.target===this)this.classList.remove('up');});
+document.getElementById('ti').addEventListener('click',function(e){e.stopPropagation();});
+document.getElementById('s-cl').addEventListener('click',function(){document.getElementById('sheet').classList.remove('up');});
+document.getElementById('s-buy').addEventListener('click',function(){openTicket(current);});
+
+function configNotes(p){
+  var n=[];
+  if(intState.opts&&intState.opt!==undefined)n.push(intState.opts[intState.opt][0]);
+  if(intState.yr!==undefined&&AGEYR[intState.yr])n.push('Year '+AGEYR[intState.yr]);
+  if(intState.reg!==undefined&&REGIONS[intState.reg])n.push(REGIONS[intState.reg]);
+  if(intState.plat!==undefined&&PLATFORMS[intState.plat])n.push(PLATFORMS[intState.plat]);
+  if(intState.bq)n.push('+'+intState.bq+' boosts');
+  if(intState.sq)n.push(intState.sq+' '+(intState.unit||'units'));
+  ['i-target','i-inv','i-mail','i-user'].forEach(function(id){
+    var el=document.getElementById(id);if(el&&el.value)n.push(el.value);
+  });
+  if(qty>1)n.push('Qty '+qty);
+  n.push('Total '+money(Math.max(unitPrice()*qty,0.10)));
+  return n.join(' · ');
+}
+
+function openTicket(p){
+  var notes=p&&current&&p.id===current.id?configNotes(p):'';
+  document.getElementById('sheet').classList.remove('up');
+  document.getElementById('tf').classList.add('show');
+  document.getElementById('ts').classList.remove('show');
+  if(p)document.getElementById('tk-p').value=p.id;
+  if(notes)document.getElementById('tk-m').value=notes;
+  document.getElementById('ticket').classList.add('up');
+  document.getElementById('ti').scrollTop=0;
+  updConv();
+}
+
+document.getElementById('tk-can').addEventListener('click',function(){document.getElementById('ticket').classList.remove('up');});
+document.getElementById('ts-d').addEventListener('click',function(){
+  document.getElementById('ticket').classList.remove('up');
+  document.getElementById('tk-c').value='';document.getElementById('tk-m').value='';
+});
+document.getElementById('tk-sub').addEventListener('click',function(){
+  var pid=document.getElementById('tk-p').value,ct=document.getElementById('tk-c').value.trim();
+  if(!pid){alert('Select a product first.');return;}
+  if(!ct){alert('Add your Discord or Telegram so we can reach you.');return;}
+  var id='YSL-'+Math.random().toString(36).slice(2,7).toUpperCase(),nm,pr;
+  if(pid==='other'){nm='General question';pr='—';}
+  else{var pp=P.filter(function(x){return x.id===parseInt(pid,10);})[0];nm=pp.name;pr=money(pp.price);}
+  document.getElementById('ts-id').textContent=id;
+  document.getElementById('ts-n').innerHTML='<strong>'+esc(nm)+'</strong> — '+pr+'<br>Payment: '+CSEL+'<br>Contact: '+esc(ct)+
+    '<br><br>Save this ticket ID and send it to <strong>@yslem</strong> on Discord or Telegram to complete your order.';
+  document.getElementById('tf').classList.remove('show');
+  document.getElementById('ts').classList.add('show');
+  var cc=document.getElementById('cc');cc.textContent=parseInt(cc.textContent,10)+1;
+  document.getElementById('ti').scrollTop=0;
+});
+
+['d-tick','l-tick','nav-cart'].forEach(function(id){document.getElementById(id).addEventListener('click',function(){openTicket(null);});});
+['btn-shop','l-prod'].forEach(function(id){document.getElementById(id).addEventListener('click',function(){document.querySelector('.filters').scrollIntoView({behavior:'smooth'});});});
+['l-home','d-shop'].forEach(function(id){document.getElementById(id).addEventListener('click',function(){window.scrollTo({top:0,behavior:'smooth'});});});
+['l-faq','d-help'].forEach(function(id){document.getElementById(id).addEventListener('click',function(){document.getElementById('faq').scrollIntoView({behavior:'smooth'});});});
+document.getElementById('l-rev').addEventListener('click',function(){document.getElementById('revs').scrollIntoView({behavior:'smooth'});});
+
+function statusMsg(){alert('Status\n\n'+P.length+' products listed across '+SHOPS.length+' shops\nDelivery depends on the product, every page states its window\nSupport runs through tickets on Discord and Telegram\n\nNothing here is guaranteed to stay working.');}
+document.getElementById('d-stat').addEventListener('click',statusMsg);
+document.getElementById('l-stat').addEventListener('click',statusMsg);
+function contactMsg(){alert('Contact\n\nDiscord: yslem\nTelegram: @yslem\n\nAvailable 24/7 with fast replies.');}
+['btn-disc','f-disc','f-tg'].forEach(function(id){document.getElementById(id).addEventListener('click',contactMsg);});
+document.getElementById('l-tos').addEventListener('click',function(){alert('Terms of Service\n\nAll sales are final once a product is delivered.\nProducts are resold accounts, keys and bot traffic. They can stop working or be revoked at any time.\nNo uptime, duration or outcome is guaranteed.\nSupport windows listed on product pages are a best effort, not a contractual guarantee.\nYou order at your own risk.');});
+document.getElementById('l-ref').addEventListener('click',function(){alert('Refund Policy\n\nClaims are reviewed case by case through a ticket.\nProof is required — screen recording or screenshot from the moment of use.\nNo claim accepted if credentials were changed by the buyer.\nNo claim accepted during provider-wide revoke waves.\nA replacement or refund is not guaranteed.');});
+
+render();
+
+var CITIES=['Paris','London','Berlin','Madrid','Lisbon','Milan','Amsterdam','Warsaw','Dublin','Vienna','Brussels','Zurich','Oslo','Prague'];
+setInterval(function(){
+  var c=CITIES[Math.floor(Math.random()*CITIES.length)],p=P[Math.floor(Math.random()*P.length)];
+  var el=document.getElementById('live-txt');el.style.opacity=0;
+  setTimeout(function(){el.innerHTML='Someone from <b>'+c+'</b> just ordered <b>'+esc(p.name)+'</b>';el.style.opacity=1;},300);
+},5000);
+
+var TSTEPS=['Received','Confirmed','Processing','Delivered'];
+function drawTrk(stage){
+  document.getElementById('trk-steps').innerHTML=TSTEPS.map(function(s,i){
+    var cl=i<stage?'done':(i===stage?'now':'');
+    return '<div class="trk-s '+cl+'"><div class="trk-line"></div><div class="trk-c">'+(i<stage?'✓':(i+1))+'</div><div class="trk-l">'+s+'</div></div>';
+  }).join('');
+}
+drawTrk(0);
+document.getElementById('trk-go').addEventListener('click',function(){
+  var v=document.getElementById('trk-id').value.trim().toUpperCase();
+  if(!/^YSL-[A-Z0-9]{5}$/.test(v)){alert('Enter a valid ticket ID in the format YSL-XXXXX');return;}
+  var st=0;drawTrk(0);
+  var iv=setInterval(function(){st++;drawTrk(st);if(st>=4){clearInterval(iv);document.getElementById('dl-1').textContent='0';}},600);
+});
+document.getElementById('dl-1').textContent=Math.floor(Math.random()*4)+1;
+
+var RATES={'PayPal':null,'Bitcoin':98420,'Litecoin':112,'Ethereum':3640,'USDT':1,'Solana':218};
+var CSEL='PayPal';
+function drawCryp(){
+  document.getElementById('cryp-grid').innerHTML=PAYS.map(function(p){
+    return '<div class="cryp'+(CSEL===p.n?' on':'')+'" data-n="'+p.n+'"><div class="cryp-t">'+(PICO[p.n]||'')+p.n+'</div>'+
+      '<div class="cryp-a">'+(p.d?p.d+' off':'Instant')+'</div></div>';
+  }).join('');
+  Array.prototype.forEach.call(document.querySelectorAll('.cryp'),function(c){
+    c.addEventListener('click',function(){CSEL=c.getAttribute('data-n');drawCryp();updConv();});
+  });
+}
+function updConv(){
+  var el=document.getElementById('conv-v'),pid=document.getElementById('tk-p').value,eur=0;
+  if(pid&&pid!=='other'){var pp=P.filter(function(x){return x.id===parseInt(pid,10);})[0];if(pp)eur=pp.price;}
+  if(current&&pid==String(current.id))eur=unitPrice()*qty;
+  if(CSEL==='PayPal'||!RATES[CSEL]){el.textContent=eur?money(eur)+' via PayPal F&F':'Select a product';return;}
+  if(CSEL==='Litecoin')eur*=0.9;
+  var sym={'Bitcoin':'BTC','Litecoin':'LTC','Ethereum':'ETH','USDT':'USDT','Solana':'SOL'}[CSEL];
+  el.textContent=eur?(eur/RATES[CSEL]).toFixed(CSEL==='USDT'?2:6)+' '+sym:'Select a product';
+}
+document.getElementById('tk-p').addEventListener('change',updConv);
+drawCryp();
+</script>
