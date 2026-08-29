@@ -453,7 +453,9 @@ function openTicket(p){
   document.getElementById('sheet').classList.remove('up');
   document.getElementById('tf').classList.add('show');
   document.getElementById('ts').classList.remove('show');
+  clearFieldError('tk-p');clearFieldError('tk-c');
   if(p)document.getElementById('tk-p').value=p.id;
+  updTkSummary();
   document.getElementById('ticket').classList.add('up');
   document.getElementById('ti').scrollTop=0;
 }
@@ -463,13 +465,34 @@ document.getElementById('ts-d').addEventListener('click',function(){
   document.getElementById('ticket').classList.remove('up');
   document.getElementById('tk-c').value='';document.getElementById('tk-m').value='';
 });
+document.getElementById('ts-msg').addEventListener('click',contactMsg);
+document.getElementById('ts-copy').addEventListener('click',function(){
+  var id=document.getElementById('ts-id').textContent,btn=this;
+  var done=function(){btn.textContent='✓';btn.classList.add('copied');setTimeout(function(){btn.textContent='⧉';btn.classList.remove('copied');},1500);};
+  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(id).then(done,done);}else{done();}
+});
+
+function showFieldError(id,focus){
+  var el=document.getElementById(id),err=document.getElementById(id+'-err');
+  el.classList.add('err');if(err)err.classList.add('show');
+  if(focus)el.focus();
+}
+function clearFieldError(id){
+  var el=document.getElementById(id),err=document.getElementById(id+'-err');
+  el.classList.remove('err');if(err)err.classList.remove('show');
+}
+document.getElementById('tk-p').addEventListener('change',function(){clearFieldError('tk-p');});
+document.getElementById('tk-c').addEventListener('input',function(){clearFieldError('tk-c');});
+
 document.getElementById('tk-sub').addEventListener('click',function(){
   var pid=document.getElementById('tk-p').value,ct=document.getElementById('tk-c').value.trim(),py=CSEL;
-  if(!pid){alert('Select a product first.');return;}
-  if(!ct){alert('Add your Discord or Telegram so we can reach you.');return;}
+  var firstInvalid=null;
+  if(!pid){showFieldError('tk-p');firstInvalid=firstInvalid||'tk-p';}
+  if(!ct){showFieldError('tk-c');firstInvalid=firstInvalid||'tk-c';}
+  if(firstInvalid){document.getElementById(firstInvalid).focus();return;}
   var id='YSL-'+Math.random().toString(36).slice(2,7).toUpperCase(),nm,pr;
   if(pid==='other'){nm='General question';pr='—';}
-  else{var pp=P.filter(function(x){return x.id===parseInt(pid,10);})[0];nm=pp.n;pr=money(pp.p);}
+  else{var pp=P.filter(function(x){return x.id===parseInt(pid,10);})[0];nm=pp.n;pr=money(computeTotal(pp));}
   document.getElementById('ts-id').textContent=id;
   document.getElementById('ts-n').innerHTML='<strong>'+nm+'</strong> — '+pr+'<br>Payment: '+py+'<br>Contact: '+ct+'<br><br>Save this ticket ID and send it to <strong>@yslem</strong> on Discord or Telegram to complete your order.';
   document.getElementById('tf').classList.remove('show');
@@ -551,27 +574,45 @@ function drawCryp(){
   Array.prototype.forEach.call(document.querySelectorAll('.cryp'),function(c){
     c.addEventListener('click',function(){
       CSEL=c.getAttribute('data-n');
-      document.getElementById('tk-pay').value=CSEL;
-      drawCryp();updConv();
+      drawCryp();updConv();updTkSummary();
     });
   });
 }
-function updConv(){
-  var el=document.getElementById('conv-v');
+function ticketEur(){
   var pid=document.getElementById('tk-p').value;
-  var eur=0;
-  if(pid&&pid!=='other'){var pp=P.filter(function(x){return x.id===parseInt(pid,10);})[0];if(pp)eur=parseFloat(pp.p);}
+  if(!pid||pid==='other')return 0;
+  var pp=P.filter(function(x){return x.id===parseInt(pid,10);})[0];
+  return pp?computeTotal(pp):0;
+}
+function updConv(){
+  var el=document.getElementById('conv-v'),eur=ticketEur();
   if(CSEL==='PayPal'||!RATES[CSEL]){el.textContent=eur?money(eur)+' via PayPal F&F':'Select a product';return;}
   if(CSEL==='Litecoin')eur*=0.9;
   var amt=eur/RATES[CSEL];
   var sym={'Bitcoin':'BTC','Litecoin':'LTC','Ethereum':'ETH','USDT':'USDT','Solana':'SOL'}[CSEL];
   el.textContent=eur?amt.toFixed(CSEL==='USDT'?2:6)+' '+sym:'Select a product';
 }
-document.getElementById('tk-p').addEventListener('change',updConv);
+
+/* ══ ORDER SUMMARY ══ */
+function updTkSummary(){
+  var pid=document.getElementById('tk-p').value,box=document.getElementById('tk-sum');
+  if(!pid||pid==='other'){box.hidden=true;updConv();return;}
+  var pp=P.filter(function(x){return x.id===parseInt(pid,10);})[0];
+  if(!pp){box.hidden=true;updConv();return;}
+  box.hidden=false;
+  var gv=glowVars('br',BRAND[pp.lg]).split(';');
+  gv.forEach(function(pair){if(!pair)return;var i=pair.indexOf(':');box.style.setProperty(pair.slice(0,i),pair.slice(i+1));});
+  document.getElementById('tk-sum-logo').innerHTML=SVG[pp.lg]||'';
+  document.getElementById('tk-sum-name').textContent=pp.n;
+  document.getElementById('tk-sum-meta').textContent=pp.t[0]+' · '+pp.t[1];
+  document.getElementById('tk-sum-price').textContent=money(computeTotal(pp));
+  updConv();
+}
+document.getElementById('tk-p').addEventListener('change',updTkSummary);
 drawCryp();
 
 var _ot=openTicket;
-openTicket=function(p){_ot(p);setTimeout(updConv,50);};
+openTicket=function(p){_ot(p);setTimeout(function(){updTkSummary();},50);};
 
 
 /* ══ PRODUCT INTEGRATIONS ══ */
@@ -818,11 +859,12 @@ function wireInt(cfg){
   }
 }
 
-/* override total */
-function updTotal(){
-  if(!current)return;
-  var base=parseFloat(current.p);
-  var cfg=INT[current.id]||{};
+/* shared total math — used by the product sheet and the ticket summary alike */
+function computeTotal(pp){
+  if(!pp)return 0;
+  if(!current||current.id!==pp.id)return parseFloat(pp.p);
+  var base=parseFloat(pp.p);
+  var cfg=INT[pp.id]||{};
   if(cfg.type==='boost'&&intState.bq){ base=intState.bq*0.215; }
   if((cfg.type==='smm'||cfg.type==='robux')&&intState.sq){
     base=(intState.sq/1000)*(intState.rate||1);
@@ -832,7 +874,11 @@ function updTotal(){
   var t=base+(intState.extra||0);
   if(intState.dur!==undefined&&DUR[intState.dur]) t*=parseFloat(DUR[intState.dur][1]);
   t=t*qty;
-  document.getElementById('s-total').textContent=money(Math.max(t,0.1).toFixed(2));
+  return Math.max(t,0.1);
+}
+function updTotal(){
+  if(!current)return;
+  document.getElementById('s-total').textContent=money(computeTotal(current));
   document.getElementById('q-val').textContent=qty;
 }
 
@@ -867,9 +913,10 @@ openTicket=function(p){
     if(ml&&ml.value)n.push('Email: '+ml.value);
     if(us&&us.value)n.push('Discord: '+us.value);
     if(qty>1)n.push('Qty '+qty);
-    if(n.length)document.getElementById('tk-m').value=n.join(' · ');
+    n.push('Total '+money(computeTotal(p)));
+    document.getElementById('tk-m').value=n.join(' · ');
   }
-  setTimeout(updConv,50);
+  setTimeout(function(){updTkSummary();},50);
 };
 
 /* ══ PENDING COUNTER ══ */

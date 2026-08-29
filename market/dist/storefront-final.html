@@ -29,17 +29,32 @@ body{color:#ececf2 !important;font-family:'Inter',-apple-system,sans-serif;min-h
 
 /* ══ BACKGROUND ══ */
 .bg{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden;background:#000}
-.halo{position:absolute;width:520px;height:520px;top:-250px;left:50%;transform:translateX(-50%);background:radial-gradient(circle,rgba(255,255,255,.09) 0%,transparent 68%)}
+.bg-grid{position:absolute;inset:-15% -10%;
+  background-image:radial-gradient(rgba(255,255,255,.06) 1px,transparent 1.4px);
+  background-size:28px 28px;
+  -webkit-mask-image:radial-gradient(ellipse 65% 50% at 50% 16%,#000 0%,transparent 78%);
+  mask-image:radial-gradient(ellipse 65% 50% at 50% 16%,#000 0%,transparent 78%)}
+.aura{position:absolute;top:-220px;left:50%;width:680px;height:680px;transform:translateX(-50%);
+  background:conic-gradient(from 0deg,transparent 0deg,rgba(216,180,106,.16) 34deg,transparent 92deg,transparent 250deg,rgba(255,255,255,.10) 300deg,transparent 355deg);
+  filter:blur(50px);animation:auraSpin 30s linear infinite}
+@keyframes auraSpin{to{transform:translateX(-50%) rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.aura{animation:none}}
+.halo{position:absolute;width:520px;height:520px;top:-250px;left:50%;transform:translateX(-50%);background:radial-gradient(circle,rgba(255,255,255,.08) 0%,transparent 68%)}
 .halo2{position:absolute;width:340px;height:340px;top:340px;right:-130px;background:radial-gradient(circle,rgba(255,255,255,.05) 0%,transparent 70%)}
-.vig{position:absolute;inset:0;background:radial-gradient(ellipse 92% 70% at 50% 26%,transparent 32%,rgba(0,0,0,.88) 100%)}
+.vig{position:absolute;inset:0;background:radial-gradient(ellipse 92% 70% at 50% 22%,transparent 30%,rgba(0,0,0,.9) 100%)}
 .content{position:relative;z-index:1}
 
 /* ══ HERO ══ */
-.hero{padding:52px 20px 0;text-align:center}
-.crest{font-size:32px;display:block;margin-bottom:14px}
-.hero-eyebrow{font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:4px;color:#6b6b7d;text-transform:uppercase;margin-bottom:14px}
-.brand{font-family:'Cinzel',serif;font-size:42px;font-weight:700;letter-spacing:5px;line-height:1;color:#fff;text-shadow:0 0 44px rgba(255,255,255,.18)}
-.hero-tag{font-size:14px;color:#9d9db0;margin-top:16px;line-height:1.6;max-width:330px;margin-left:auto;margin-right:auto}
+.hero{padding:56px 20px 0;text-align:center}
+.crest{font-size:34px;display:block;margin-bottom:16px;filter:drop-shadow(0 0 18px rgba(216,180,106,.35))}
+.hero-eyebrow{font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:4px;color:#6b6b7d;text-transform:uppercase;margin-bottom:16px}
+.crest-rule{width:150px;height:1px;margin:0 auto 18px;background:linear-gradient(90deg,transparent,rgba(216,180,106,.55),transparent);position:relative}
+.crest-rule::after{content:'◆';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:6px;line-height:1;color:#d8b46a;background:#000;padding:0 8px}
+.brand{font-family:'Cinzel',serif;font-size:44px;font-weight:700;letter-spacing:6px;line-height:1;text-wrap:balance;
+  background:linear-gradient(180deg,#fff 0%,#fff 52%,#d8b46a 130%);
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+  filter:drop-shadow(0 0 40px rgba(255,255,255,.16))}
+.hero-tag{font-size:14px;color:#9d9db0;margin-top:18px;line-height:1.65;max-width:330px;margin-left:auto;margin-right:auto}
 .hero-btns{display:flex;gap:9px;justify-content:center;margin-top:22px}
 .hb{padding:12px 24px;border-radius:12px;font-size:13.5px;font-weight:700;font-family:inherit;cursor:pointer;border:none;transition:opacity .2s}
 .hb-1{background:#ececf2;color:#000}
@@ -185,9 +200,27 @@ body{color:#ececf2 !important;font-family:'Inter',-apple-system,sans-serif;min-h
 .tsuc{display:none;text-align:center;padding:24px 0}.tsuc.show{display:block}
 .ts-ic{font-size:50px;margin-bottom:15px;display:block}
 .ts-t{font-size:20px;font-weight:700;margin-bottom:8px;color:#fff}
-.ts-id{font-family:'JetBrains Mono',monospace;font-size:15px;color:#fff;padding:12px 20px;border:1px solid #2a2a34;border-radius:10px;background:rgba(255,255,255,.05);display:inline-block;margin:14px 0;letter-spacing:2px;font-weight:700}
+.ts-id-row{display:flex;align-items:center;justify-content:center;gap:8px;margin:14px 0}
+.ts-id{font-family:'JetBrains Mono',monospace;font-size:15px;color:#fff;padding:12px 20px;border:1px solid #2a2a34;border-radius:10px;background:rgba(255,255,255,.05);display:inline-block;letter-spacing:2px;font-weight:700}
+.ts-copy{width:42px;height:42px;flex-shrink:0;border-radius:10px;border:1px solid #2a2a34;background:rgba(255,255,255,.05);color:#ececf2;font-size:15px;cursor:pointer;transition:all .2s}
+.ts-copy.copied{background:#ececf2;color:#000;border-color:transparent}
 .ts-n{font-size:12.5px;color:#6b6b7d;line-height:1.7}
 .ts-n strong{color:#ececf2}
+
+/* ticket form: steps, order summary, inline errors */
+.tf-req{color:#d8b46a;margin-left:2px}
+.tf-err-msg{font-size:11px;color:#e2988f;margin:-11px 0 15px;display:none;line-height:1.4}
+.tf-err-msg.show{display:block}
+.tf-i.err,.tf-s.err{border-color:#8a3e39;background:rgba(226,114,108,.06)}
+.tk-sum{display:flex;align-items:center;gap:12px;padding:13px 14px;border:1px solid #1f1f27;border-radius:14px;background:rgba(255,255,255,.03);margin:-2px 0 18px}
+.tk-sum-logo{width:38px;height:38px;border-radius:10px;flex-shrink:0;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;
+  background:radial-gradient(120% 130% at 30% 22%,var(--br1),var(--br2) 62%,#0a0a0d 100%);
+  border:1px solid var(--br3)}
+.tk-sum-logo svg{width:20px;height:20px;position:relative;z-index:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))}
+.tk-sum-info{flex:1;min-width:0}
+.tk-sum-name{font-size:13px;font-weight:700;color:#ececf2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tk-sum-meta{font-size:10.5px;color:#6b6b7d;margin-top:2px}
+.tk-sum-price{font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:700;color:#ececf2;flex-shrink:0;font-variant-numeric:tabular-nums}
 
 /* DOCK */
 .dock{position:fixed;bottom:0;left:0;right:0;background:rgba(0,0,0,.96);border-top:1px solid #16161c;display:flex;justify-content:space-around;padding:11px 0 20px;z-index:100}
@@ -360,6 +393,8 @@ body{color:#ececf2 !important;font-family:'Inter',-apple-system,sans-serif;min-h
 </div>
 
 <div class="bg">
+  <div class="bg-grid"></div>
+  <div class="aura"></div>
   <div class="halo"></div><div class="halo2"></div>
   <div class="vig"></div>
 </div>
@@ -370,6 +405,7 @@ body{color:#ececf2 !important;font-family:'Inter',-apple-system,sans-serif;min-h
   <span class="crest">👑</span>
   <div class="hero-eyebrow">Yslem Market</div>
   <h1 class="brand">YSLEM</h1>
+  <div class="crest-rule"></div>
   <p class="hero-tag">Digital products, delivered fast. Read every product page carefully before ordering.</p>
   <div class="hero-btns">
     <button class="hb hb-1" id="btn-shop">Shop now</button>
@@ -501,22 +537,29 @@ body{color:#ececf2 !important;font-family:'Inter',-apple-system,sans-serif;min-h
       <div class="s-logo"><span style="font-size:31px">🎫</span></div>
       <div class="s-title">Create a ticket</div>
       <div class="s-stock-row" style="margin-bottom:22px"><span style="font-size:12.5px;color:#6b6b7d">Average reply time is under 10 minutes</span></div>
-      <label class="tf-l">Product</label>
+
+      <label class="tf-l">1 · Product<span class="tf-req">*</span></label>
       <select class="tf-s" id="tk-p"></select>
-      <label class="tf-l">Your contact</label>
+      <div class="tf-err-msg" id="tk-p-err">Select a product to continue.</div>
+
+      <div class="tk-sum" id="tk-sum" hidden>
+        <div class="tk-sum-logo" id="tk-sum-logo"></div>
+        <div class="tk-sum-info">
+          <div class="tk-sum-name" id="tk-sum-name"></div>
+          <div class="tk-sum-meta" id="tk-sum-meta"></div>
+        </div>
+        <div class="tk-sum-price" id="tk-sum-price"></div>
+      </div>
+
+      <label class="tf-l">2 · Your contact<span class="tf-req">*</span></label>
       <input class="tf-i" id="tk-c" placeholder="Discord username or Telegram handle">
-      <label class="tf-l">Payment method</label>
+      <div class="tf-err-msg" id="tk-c-err">Add a Discord or Telegram handle so we can reach you.</div>
+
+      <label class="tf-l">3 · Payment method</label>
       <div class="crypto-grid" id="cryp-grid"></div>
       <div class="conv-row"><span class="conv-l">Live rate</span><span class="conv-v" id="conv-v">—</span></div>
-      <select class="tf-s" id="tk-pay" style="display:none">
-        <option>PayPal (Friends &amp; Family)</option>
-        <option>Litecoin (LTC) −10%</option>
-        <option>Bitcoin (BTC)</option>
-        <option>Ethereum (ETH)</option>
-        <option>USDT (TRC-20)</option>
-        <option>Solana (SOL)</option>
-      </select>
-      <label class="tf-l">Message (optional)</label>
+
+      <label class="tf-l">4 · Message (optional)</label>
       <textarea class="tf-a" id="tk-m" placeholder="Quantity, questions, anything else"></textarea>
       <button class="s-cta" id="tk-sub">Submit ticket</button>
       <button class="s-close" id="tk-can">Cancel</button>
@@ -524,9 +567,13 @@ body{color:#ececf2 !important;font-family:'Inter',-apple-system,sans-serif;min-h
     <div class="tsuc" id="ts">
       <span class="ts-ic">✅</span>
       <div class="ts-t">Ticket created</div>
-      <div class="ts-id" id="ts-id"></div>
+      <div class="ts-id-row">
+        <div class="ts-id" id="ts-id"></div>
+        <button class="ts-copy" id="ts-copy" title="Copy ticket ID" aria-label="Copy ticket ID">⧉</button>
+      </div>
       <div class="ts-n" id="ts-n"></div>
-      <button class="s-cta" style="margin-top:20px" id="ts-d">Done</button>
+      <button class="s-cta" style="margin-top:20px" id="ts-msg">Message us on Discord / Telegram</button>
+      <button class="s-close" id="ts-d">Done</button>
     </div>
   </div>
 </div>
@@ -994,7 +1041,9 @@ function openTicket(p){
   document.getElementById('sheet').classList.remove('up');
   document.getElementById('tf').classList.add('show');
   document.getElementById('ts').classList.remove('show');
+  clearFieldError('tk-p');clearFieldError('tk-c');
   if(p)document.getElementById('tk-p').value=p.id;
+  updTkSummary();
   document.getElementById('ticket').classList.add('up');
   document.getElementById('ti').scrollTop=0;
 }
@@ -1004,13 +1053,34 @@ document.getElementById('ts-d').addEventListener('click',function(){
   document.getElementById('ticket').classList.remove('up');
   document.getElementById('tk-c').value='';document.getElementById('tk-m').value='';
 });
+document.getElementById('ts-msg').addEventListener('click',contactMsg);
+document.getElementById('ts-copy').addEventListener('click',function(){
+  var id=document.getElementById('ts-id').textContent,btn=this;
+  var done=function(){btn.textContent='✓';btn.classList.add('copied');setTimeout(function(){btn.textContent='⧉';btn.classList.remove('copied');},1500);};
+  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(id).then(done,done);}else{done();}
+});
+
+function showFieldError(id,focus){
+  var el=document.getElementById(id),err=document.getElementById(id+'-err');
+  el.classList.add('err');if(err)err.classList.add('show');
+  if(focus)el.focus();
+}
+function clearFieldError(id){
+  var el=document.getElementById(id),err=document.getElementById(id+'-err');
+  el.classList.remove('err');if(err)err.classList.remove('show');
+}
+document.getElementById('tk-p').addEventListener('change',function(){clearFieldError('tk-p');});
+document.getElementById('tk-c').addEventListener('input',function(){clearFieldError('tk-c');});
+
 document.getElementById('tk-sub').addEventListener('click',function(){
   var pid=document.getElementById('tk-p').value,ct=document.getElementById('tk-c').value.trim(),py=CSEL;
-  if(!pid){alert('Select a product first.');return;}
-  if(!ct){alert('Add your Discord or Telegram so we can reach you.');return;}
+  var firstInvalid=null;
+  if(!pid){showFieldError('tk-p');firstInvalid=firstInvalid||'tk-p';}
+  if(!ct){showFieldError('tk-c');firstInvalid=firstInvalid||'tk-c';}
+  if(firstInvalid){document.getElementById(firstInvalid).focus();return;}
   var id='YSL-'+Math.random().toString(36).slice(2,7).toUpperCase(),nm,pr;
   if(pid==='other'){nm='General question';pr='—';}
-  else{var pp=P.filter(function(x){return x.id===parseInt(pid,10);})[0];nm=pp.n;pr=money(pp.p);}
+  else{var pp=P.filter(function(x){return x.id===parseInt(pid,10);})[0];nm=pp.n;pr=money(computeTotal(pp));}
   document.getElementById('ts-id').textContent=id;
   document.getElementById('ts-n').innerHTML='<strong>'+nm+'</strong> — '+pr+'<br>Payment: '+py+'<br>Contact: '+ct+'<br><br>Save this ticket ID and send it to <strong>@yslem</strong> on Discord or Telegram to complete your order.';
   document.getElementById('tf').classList.remove('show');
@@ -1092,27 +1162,45 @@ function drawCryp(){
   Array.prototype.forEach.call(document.querySelectorAll('.cryp'),function(c){
     c.addEventListener('click',function(){
       CSEL=c.getAttribute('data-n');
-      document.getElementById('tk-pay').value=CSEL;
-      drawCryp();updConv();
+      drawCryp();updConv();updTkSummary();
     });
   });
 }
-function updConv(){
-  var el=document.getElementById('conv-v');
+function ticketEur(){
   var pid=document.getElementById('tk-p').value;
-  var eur=0;
-  if(pid&&pid!=='other'){var pp=P.filter(function(x){return x.id===parseInt(pid,10);})[0];if(pp)eur=parseFloat(pp.p);}
+  if(!pid||pid==='other')return 0;
+  var pp=P.filter(function(x){return x.id===parseInt(pid,10);})[0];
+  return pp?computeTotal(pp):0;
+}
+function updConv(){
+  var el=document.getElementById('conv-v'),eur=ticketEur();
   if(CSEL==='PayPal'||!RATES[CSEL]){el.textContent=eur?money(eur)+' via PayPal F&F':'Select a product';return;}
   if(CSEL==='Litecoin')eur*=0.9;
   var amt=eur/RATES[CSEL];
   var sym={'Bitcoin':'BTC','Litecoin':'LTC','Ethereum':'ETH','USDT':'USDT','Solana':'SOL'}[CSEL];
   el.textContent=eur?amt.toFixed(CSEL==='USDT'?2:6)+' '+sym:'Select a product';
 }
-document.getElementById('tk-p').addEventListener('change',updConv);
+
+/* ══ ORDER SUMMARY ══ */
+function updTkSummary(){
+  var pid=document.getElementById('tk-p').value,box=document.getElementById('tk-sum');
+  if(!pid||pid==='other'){box.hidden=true;updConv();return;}
+  var pp=P.filter(function(x){return x.id===parseInt(pid,10);})[0];
+  if(!pp){box.hidden=true;updConv();return;}
+  box.hidden=false;
+  var gv=glowVars('br',BRAND[pp.lg]).split(';');
+  gv.forEach(function(pair){if(!pair)return;var i=pair.indexOf(':');box.style.setProperty(pair.slice(0,i),pair.slice(i+1));});
+  document.getElementById('tk-sum-logo').innerHTML=SVG[pp.lg]||'';
+  document.getElementById('tk-sum-name').textContent=pp.n;
+  document.getElementById('tk-sum-meta').textContent=pp.t[0]+' · '+pp.t[1];
+  document.getElementById('tk-sum-price').textContent=money(computeTotal(pp));
+  updConv();
+}
+document.getElementById('tk-p').addEventListener('change',updTkSummary);
 drawCryp();
 
 var _ot=openTicket;
-openTicket=function(p){_ot(p);setTimeout(updConv,50);};
+openTicket=function(p){_ot(p);setTimeout(function(){updTkSummary();},50);};
 
 
 /* ══ PRODUCT INTEGRATIONS ══ */
@@ -1359,11 +1447,12 @@ function wireInt(cfg){
   }
 }
 
-/* override total */
-function updTotal(){
-  if(!current)return;
-  var base=parseFloat(current.p);
-  var cfg=INT[current.id]||{};
+/* shared total math — used by the product sheet and the ticket summary alike */
+function computeTotal(pp){
+  if(!pp)return 0;
+  if(!current||current.id!==pp.id)return parseFloat(pp.p);
+  var base=parseFloat(pp.p);
+  var cfg=INT[pp.id]||{};
   if(cfg.type==='boost'&&intState.bq){ base=intState.bq*0.215; }
   if((cfg.type==='smm'||cfg.type==='robux')&&intState.sq){
     base=(intState.sq/1000)*(intState.rate||1);
@@ -1373,7 +1462,11 @@ function updTotal(){
   var t=base+(intState.extra||0);
   if(intState.dur!==undefined&&DUR[intState.dur]) t*=parseFloat(DUR[intState.dur][1]);
   t=t*qty;
-  document.getElementById('s-total').textContent=money(Math.max(t,0.1).toFixed(2));
+  return Math.max(t,0.1);
+}
+function updTotal(){
+  if(!current)return;
+  document.getElementById('s-total').textContent=money(computeTotal(current));
   document.getElementById('q-val').textContent=qty;
 }
 
@@ -1408,9 +1501,10 @@ openTicket=function(p){
     if(ml&&ml.value)n.push('Email: '+ml.value);
     if(us&&us.value)n.push('Discord: '+us.value);
     if(qty>1)n.push('Qty '+qty);
-    if(n.length)document.getElementById('tk-m').value=n.join(' · ');
+    n.push('Total '+money(computeTotal(p)));
+    document.getElementById('tk-m').value=n.join(' · ');
   }
-  setTimeout(updConv,50);
+  setTimeout(function(){updTkSummary();},50);
 };
 
 /* ══ PENDING COUNTER ══ */
