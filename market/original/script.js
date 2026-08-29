@@ -261,6 +261,26 @@ var active='all',current=null,qty=1,addonOn=false;
 
 function money(v){return '€'+parseFloat(v).toFixed(2);}
 
+/* ══ STOCK — depends on the shop a product belongs to ══ */
+var STOCK_BY_SHOP={
+  discord:{min:60,max:420},
+  ai:{min:12,max:70},
+  stream:{min:25,max:160},
+  vpn:{min:40,max:260},
+  gaming:{min:4,max:35},
+  tools:{min:18,max:95},
+  smm:{min:0,max:0}   // services: no finite inventory, auto-delivered per order
+};
+function seededRand(seed){var x=Math.sin(seed*99991)*10000;return x-Math.floor(x);}
+function stockFor(p){
+  if(p.t[0]==='SERVICE')return{auto:true,cls:'ok',label:'Auto-delivery'};
+  var r=STOCK_BY_SHOP[p.c]||{min:10,max:100};
+  var n=Math.floor(r.min+seededRand(p.id)*(r.max-r.min));
+  var cls=n>20?'ok':(n>5?'low':'crit');
+  var label=(cls==='crit'?'Only '+n+' left':n+' in stock');
+  return{n:n,cls:cls,label:label};
+}
+
 // ANNOUNCE
 document.getElementById('ann').innerHTML=(function(){
   var a=['Nitro Boost — €2.30','PayPal and crypto accepted','Litecoin payments −10%','Read every product page before ordering','Support runs through tickets'];
@@ -335,11 +355,12 @@ function renderCats(){
       '<div class="cat-name">'+CATN[cid]+'</div><div class="cat-rule"></div>'+
       '<div class="cat-count">'+items.length+'</div></div><div class="var-list">';
     items.forEach(function(p){
+      var st=stockFor(p);
       html+='<div class="var-row" data-id="'+p.id+'" style="--ac:'+p.ac+'">'+
         '<div class="lbox" style="width:38px;height:38px;margin:0;border-radius:10px;--br:'+(BRAND[p.lg]||'#888')+'">'+(SVG[p.lg]||'')+'</div>'+
         '<div class="var-info"><div class="var-n">'+p.n+' <span class="var-tag">['+p.t[1]+']</span>'+
         (p.f?' <span class="var-flag f-'+p.f+'">'+p.f+'</span>':'')+'</div>'+
-        '<div class="var-s"><span class="dot"></span>'+p.t[0]+' · Fast delivery</div></div>'+
+        '<div class="var-s '+st.cls+'"><span class="dot '+st.cls+'"></span>'+p.t[0]+' · '+st.label+'</div></div>'+
         '<div class="var-price"><div class="var-p">'+money(p.p)+'</div>'+
         (p.w?'<div class="var-w">'+money(p.w)+'</div>':'')+'</div></div>';
     });
@@ -365,15 +386,14 @@ function openSheet(id){
   document.getElementById('s-logo').innerHTML=SVG[p.lg]||'';
   document.getElementById('s-title').textContent=p.n;
   document.getElementById('s-types').innerHTML=p.t.map(function(t){return '<span class="s-type">'+t+'</span>';}).join('');
-  var ok=true,ss=document.getElementById('s-stock');
-  ss.className='s-stock';
-  ss.innerHTML='<span class="dot"></span>Fast delivery';
+  var st=stockFor(p),ss=document.getElementById('s-stock');
+  ss.className='s-stock '+st.cls;
+  ss.innerHTML='<span class="dot '+st.cls+'"></span>'+st.label;
   document.getElementById('s-price').textContent=money(p.p);
   document.getElementById('s-save').textContent=p.w?'SAVE '+Math.round((1-parseFloat(p.p)/parseFloat(p.w))*100)+'% — RETAIL '+money(p.w):'BEST PRICE ON THE MARKET';
   document.getElementById('s-desc').innerHTML=
     p.desc.map(function(d){return '<div class="desc-line"><span class="bul">◉</span>'+d+'</div>';}).join('')+
-    '<div style="height:14px"></div><div class="b-title" style="margin-top:4px">Read before ordering</div>'+
-    p.warn.map(function(w){return '<div class="warn-line"><span class="ex">[!]</span>'+w+'</div>';}).join('');
+    riskBlock(p);
   document.getElementById('s-specs').innerHTML=Object.keys(p.sp).map(function(k){
     return '<div class="spec"><div class="spec-k">'+k+'</div><div class="spec-v">'+p.sp[k]+'</div></div>';
   }).join('');
@@ -667,7 +687,7 @@ function buildInt(p){
       '<input class="int-in" id="i-mail" placeholder="you@mail.com"></div>';
   }
 
-  html+='</div>'+riskBlock(p);
+  html+='</div>';
   document.getElementById('int-slot').innerHTML=html;
   wireInt(cfg);
 }

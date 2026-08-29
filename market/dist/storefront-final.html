@@ -144,11 +144,9 @@ body{color:#ececf2 !important;font-family:'Inter',-apple-system,sans-serif;min-h
 .s-save{font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#9d9db0;margin-top:8px;letter-spacing:.5px;position:relative}
 .b-title{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:1.9px;color:#6b6b7d;text-transform:uppercase;margin-bottom:10px;display:flex;align-items:center;gap:10px}
 .b-title::after{content:'';flex:1;height:1px;background:linear-gradient(90deg,#1a1a22,transparent)}
-.desc-b{padding:0 0 20px}
+.desc-b{padding:0 0 6px}
 .desc-line{display:flex;gap:9px;font-size:12.5px;color:#ececf2;padding:5px 0;line-height:1.5}
 .desc-line .bul{color:var(--ac);flex-shrink:0;font-size:9px;margin-top:4px}
-.warn-line{display:flex;gap:9px;font-size:12px;color:#c9a95c;padding:5px 0;line-height:1.5}
-.warn-line .ex{color:#f87171;font-weight:800;flex-shrink:0;font-family:'JetBrains Mono',monospace;font-size:11px}
 .spec-g{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:20px}
 .spec{padding:11px 12px;border:1px solid #16161c;border-radius:11px;background:rgba(255,255,255,.014)}
 .spec-k{font-size:9px;color:#6b6b7d;text-transform:uppercase;letter-spacing:.9px;margin-bottom:3px}
@@ -291,10 +289,20 @@ body{color:#ececf2 !important;font-family:'Inter',-apple-system,sans-serif;min-h
 .step-btn{width:38px;height:38px;border-radius:10px;border:1px solid #1a1a22;background:rgba(255,255,255,.03);color:#ececf2;font-size:17px;font-family:inherit;cursor:pointer}
 .step-v{flex:1;text-align:center;font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:700;color:#ececf2}
 .step-u{font-size:10px;color:#5a5a68;font-family:'Inter',sans-serif;margin-left:4px}
-.risk{padding:12px 14px;border:1px solid #24242e;border-radius:11px;background:rgba(255,255,255,.02);margin-bottom:18px}
-.risk-t{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:1.4px;color:#8a8a9a;text-transform:uppercase;margin-bottom:8px}
-.risk-l{font-size:11.5px;color:#6b6b7d;line-height:1.6;display:flex;gap:8px;padding:3px 0}
-.risk-l span{color:#8a8a9a;flex-shrink:0}
+.risk{padding:14px 15px;border:1px solid #332c1a;border-radius:13px;background:linear-gradient(180deg,rgba(201,169,92,.07),rgba(201,169,92,.02));margin-bottom:20px}
+.risk-t{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:1.6px;color:#d8b46a;text-transform:uppercase;margin-bottom:10px;display:flex;align-items:center;gap:7px}
+.risk-t::before{content:'';flex:1;order:2;height:1px;background:linear-gradient(90deg,rgba(216,180,106,.3),transparent)}
+.risk-l{font-size:12px;color:#cbbb95;line-height:1.6;display:flex;gap:9px;padding:4px 0}
+.risk-l span{color:#d8b46a;font-weight:800;flex-shrink:0;font-family:'JetBrains Mono',monospace;font-size:11px}
+
+/* stock states */
+.s-stock.low{background:rgba(216,180,106,.1);color:#e0c485;border-color:#4a3f22}
+.s-stock.crit{background:rgba(242,128,122,.1);color:#f2a4a0;border-color:#4a2521}
+.dot.low{background:#d8b46a}
+.dot.crit{background:#f2807a}
+.var-s.low{color:#c7a468}
+.var-s.crit{color:#e08e88}
+.var-s .dot.low,.var-s .dot.crit{opacity:1}
 
 .var-row{padding:12px 13px}
 .var-n{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
@@ -1216,6 +1224,26 @@ var active='all',current=null,qty=1,addonOn=false;
 
 function money(v){return '€'+parseFloat(v).toFixed(2);}
 
+/* ══ STOCK — depends on the shop a product belongs to ══ */
+var STOCK_BY_SHOP={
+  discord:{min:60,max:420},
+  ai:{min:12,max:70},
+  stream:{min:25,max:160},
+  vpn:{min:40,max:260},
+  gaming:{min:4,max:35},
+  tools:{min:18,max:95},
+  smm:{min:0,max:0}   // services: no finite inventory, auto-delivered per order
+};
+function seededRand(seed){var x=Math.sin(seed*99991)*10000;return x-Math.floor(x);}
+function stockFor(p){
+  if(p.t[0]==='SERVICE')return{auto:true,cls:'ok',label:'Auto-delivery'};
+  var r=STOCK_BY_SHOP[p.c]||{min:10,max:100};
+  var n=Math.floor(r.min+seededRand(p.id)*(r.max-r.min));
+  var cls=n>20?'ok':(n>5?'low':'crit');
+  var label=(cls==='crit'?'Only '+n+' left':n+' in stock');
+  return{n:n,cls:cls,label:label};
+}
+
 // ANNOUNCE
 document.getElementById('ann').innerHTML=(function(){
   var a=['Nitro Boost — €2.30','PayPal and crypto accepted','Litecoin payments −10%','Read every product page before ordering','Support runs through tickets'];
@@ -1291,11 +1319,12 @@ function renderCats(){
       '<div class="cat-name">'+CATN[cid]+'</div><div class="cat-rule"></div>'+
       '<div class="cat-count">'+items.length+'</div></div><div class="var-list">';
     items.forEach(function(p){
+      var st=stockFor(p);
       html+='<div class="var-row" data-id="'+p.id+'" style="--ac:'+p.ac+'">'+
         '<div class="lbox" style="width:38px;height:38px;margin:0;border-radius:10px;--br:'+(BRAND[p.lg]||'#888')+'">'+(SVG[p.lg]||'')+'</div>'+
         '<div class="var-info"><div class="var-n">'+p.n+' <span class="var-tag">['+p.t[1]+']</span>'+
         (p.f?' <span class="var-flag f-'+p.f+'">'+p.f+'</span>':'')+'</div>'+
-        '<div class="var-s"><span class="dot"></span>'+p.t[0]+' · Fast delivery</div></div>'+
+        '<div class="var-s '+st.cls+'"><span class="dot '+st.cls+'"></span>'+p.t[0]+' · '+st.label+'</div></div>'+
         '<div class="var-price"><div class="var-p">'+money(p.p)+'</div>'+
         (p.w?'<div class="var-w">'+money(p.w)+'</div>':'')+'</div></div>';
     });
@@ -1321,15 +1350,14 @@ function openSheet(id){
   document.getElementById('s-logo').innerHTML=SVG[p.lg]||'';
   document.getElementById('s-title').textContent=p.n;
   document.getElementById('s-types').innerHTML=p.t.map(function(t){return '<span class="s-type">'+t+'</span>';}).join('');
-  var ok=true,ss=document.getElementById('s-stock');
-  ss.className='s-stock';
-  ss.innerHTML='<span class="dot"></span>Fast delivery';
+  var st=stockFor(p),ss=document.getElementById('s-stock');
+  ss.className='s-stock '+st.cls;
+  ss.innerHTML='<span class="dot '+st.cls+'"></span>'+st.label;
   document.getElementById('s-price').textContent=money(p.p);
   document.getElementById('s-save').textContent=p.w?'SAVE '+Math.round((1-parseFloat(p.p)/parseFloat(p.w))*100)+'% — RETAIL '+money(p.w):'BEST PRICE ON THE MARKET';
   document.getElementById('s-desc').innerHTML=
     p.desc.map(function(d){return '<div class="desc-line"><span class="bul">◉</span>'+d+'</div>';}).join('')+
-    '<div style="height:14px"></div><div class="b-title" style="margin-top:4px">Read before ordering</div>'+
-    p.warn.map(function(w){return '<div class="warn-line"><span class="ex">[!]</span>'+w+'</div>';}).join('');
+    riskBlock(p);
   document.getElementById('s-specs').innerHTML=Object.keys(p.sp).map(function(k){
     return '<div class="spec"><div class="spec-k">'+k+'</div><div class="spec-v">'+p.sp[k]+'</div></div>';
   }).join('');
@@ -1705,7 +1733,7 @@ function buildInt(p){
       '<input class="int-in" id="i-mail" placeholder="you@mail.com"></div>';
   }
 
-  html+='</div>'+riskBlock(p);
+  html+='</div>';
   document.getElementById('int-slot').innerHTML=html;
   wireInt(cfg);
 }
