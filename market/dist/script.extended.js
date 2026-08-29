@@ -710,6 +710,17 @@ var active='all',current=null,qty=1,addonOn=false;
 
 function money(v){return '€'+parseFloat(v).toFixed(2);}
 
+/* brand-colored glow vars for logo plates, computed once per hex */
+function hexA(hex,a){
+  hex=(hex||'#888888').replace('#','');
+  if(hex.length===3)hex=hex.split('').map(function(c){return c+c;}).join('');
+  var r=parseInt(hex.substr(0,2),16),g=parseInt(hex.substr(2,2),16),b=parseInt(hex.substr(4,2),16);
+  return 'rgba('+r+','+g+','+b+','+a+')';
+}
+function glowVars(prefix,hex){
+  return '--'+prefix+'1:'+hexA(hex,.55)+';--'+prefix+'2:'+hexA(hex,.16)+';--'+prefix+'3:'+hexA(hex,.4)+';--'+prefix+'S:'+hexA(hex,.55)+';';
+}
+
 /* ══ STOCK — depends on the shop a product belongs to ══ */
 var STOCK_BY_SHOP={
   discord:{min:60,max:420},
@@ -801,14 +812,14 @@ function renderCats(){
     var items=P.filter(function(x){return x.c===cid;});
     if(!items.length)return;
     html+='<div class="cat-block"><div class="cat-head">'+
-      '<div class="cat-logo" style="--cb:'+(BRAND[items[0].lg]||'#888')+'">'+(SVG[items[0].lg]||'')+'</div>'+
+      '<div class="cat-logo" style="'+glowVars('cb',BRAND[items[0].lg])+'">'+(SVG[items[0].lg]||'')+'</div>'+
       '<div class="cat-name">'+CATN[cid]+'</div><div class="cat-rule"></div>'+
       '<div class="cat-count">'+items.length+'</div></div><div class="var-list">';
     items.forEach(function(p){
       var st=stockFor(p);
       html+='<div class="var-row" data-id="'+p.id+'" style="--ac:'+p.ac+'">'+
-        '<div class="lbox" style="width:38px;height:38px;margin:0;border-radius:10px;--br:'+(BRAND[p.lg]||'#888')+'">'+(SVG[p.lg]||'')+'</div>'+
-        '<div class="var-info"><div class="var-n">'+p.n+' <span class="var-tag">['+p.t[1]+']</span>'+
+        '<div class="lbox" style="'+glowVars('br',BRAND[p.lg])+'">'+(SVG[p.lg]||'')+'</div>'+
+        '<div class="var-info"><div class="var-n">'+p.n+' <span class="var-tag">'+p.t[1]+'</span>'+
         (p.f?' <span class="var-flag f-'+p.f+'">'+p.f+'</span>':'')+'</div>'+
         '<div class="var-s '+st.cls+'"><span class="dot '+st.cls+'"></span>'+p.t[0]+' · '+st.label+'</div></div>'+
         '<div class="var-price"><div class="var-p">'+money(p.p)+'</div>'+
@@ -1346,7 +1357,8 @@ var _open=openSheet;
 openSheet=function(id){
   _open(id);
   var p=P.filter(function(x){return x.id===id;})[0];
-  document.getElementById('si').style.setProperty('--br',BRAND[p.lg]||'#888');
+  var si=document.getElementById('si'),gv=glowVars('br',BRAND[p.lg]).split(';');
+  gv.forEach(function(pair){if(!pair)return;var i=pair.indexOf(':');si.style.setProperty(pair.slice(0,i),pair.slice(i+1));});
   buildInt(p);
   updTotal();
 };

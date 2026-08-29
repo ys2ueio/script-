@@ -129,10 +129,11 @@ body{color:#ececf2 !important;font-family:'Inter',-apple-system,sans-serif;min-h
 @keyframes rise{from{transform:translateY(60px);opacity:0}to{transform:translateY(0);opacity:1}}
 .s-glow{position:absolute;top:0;left:50%;transform:translateX(-50%);width:220px;height:2px;background:#3a3a44;border-radius:100px}
 .grab{width:36px;height:4px;background:#2a2a34;border-radius:100px;margin:0 auto 20px}
-.s-logo{width:64px;height:64px;border-radius:17px;margin:0 auto 13px;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.06);border:1px solid #1a1a22;position:relative;overflow:hidden}
-.s-logo::after{content:'';position:absolute;inset:0;background:var(--br);opacity:.12}
-.s-logo svg{position:relative;z-index:1}
-.s-logo svg{width:35px;height:35px}
+.s-logo{width:72px;height:72px;border-radius:20px;margin:0 auto 14px;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;
+  background:radial-gradient(120% 130% at 30% 22%,var(--br1),var(--br2) 62%,#0a0a0d 100%);
+  border:1px solid var(--br3);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.1),0 12px 28px -12px var(--brS)}
+.s-logo svg{position:relative;z-index:1;width:38px;height:38px;filter:drop-shadow(0 2px 5px rgba(0,0,0,.55))}
 .s-title{font-size:23px;font-weight:700;letter-spacing:-.8px;text-align:center;margin-bottom:9px;color:#fff}
 .s-types{display:flex;justify-content:center;gap:5px;margin-bottom:12px;flex-wrap:wrap}
 .s-type{font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:700;padding:4px 8px;border-radius:5px;letter-spacing:.7px;background:rgba(255,255,255,.05);border:1px solid #1a1a22;color:#9d9db0}
@@ -304,18 +305,44 @@ body{color:#ececf2 !important;font-family:'Inter',-apple-system,sans-serif;min-h
 .var-s.crit{color:#e08e88}
 .var-s .dot.low,.var-s .dot.crit{opacity:1}
 
-.var-row{padding:12px 13px}
-.var-n{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
-.var-tag{font-family:'JetBrains Mono',monospace;font-size:9.5px;font-weight:700;color:#5a5a68;letter-spacing:.4px}
+/* ══ SHOP SECTIONS ══ */
+.cat-block{padding:0 12px 26px}
+.cat-head{display:flex;align-items:center;gap:11px;padding:18px 4px 13px}
+.cat-logo{width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;position:relative;overflow:hidden;
+  background:radial-gradient(120% 130% at 30% 22%,var(--cb1),var(--cb2) 62%,#0a0a0d 100%);
+  border:1px solid var(--cb3);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.08),0 4px 12px -6px var(--cbS)}
+.cat-logo svg{width:18px;height:18px;position:relative;z-index:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,.45))}
+.cat-name{font-size:15px;font-weight:700;color:#ececf2;letter-spacing:-.2px}
+.cat-sub{font-size:10.5px;color:#5a5a68;margin-top:2px}
+.cat-rule{flex:1;height:1px;background:linear-gradient(90deg,#1a1a22,transparent)}
+.cat-count{font-family:'JetBrains Mono',monospace;font-size:9.5px;color:#42424d;flex-shrink:0}
+
+/* ══ PRODUCT ROWS ══ */
+.var-list{display:flex;flex-direction:column;gap:8px}
+.var-row{display:flex;align-items:center;gap:12px;padding:13px 14px;border:1px solid #16161c;border-radius:14px;background:rgba(7,7,10,.85);cursor:pointer;transition:border-color .2s,transform .12s,box-shadow .2s}
+.var-row:hover{border-color:#2a2a34;transform:translateY(-1px);box-shadow:0 10px 22px -14px rgba(0,0,0,.7)}
+.var-row:active{transform:translateY(0)}
+
+.lbox{width:46px;height:46px;border-radius:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0;position:relative;overflow:hidden;
+  background:radial-gradient(120% 130% at 30% 22%,var(--br1),var(--br2) 62%,#0a0a0d 100%);
+  border:1px solid var(--br3);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.09),0 6px 16px -8px var(--brS)}
+.lbox svg{width:24px;height:24px;position:relative;z-index:1;filter:drop-shadow(0 1px 3px rgba(0,0,0,.5))}
+
+.var-info{flex:1;min-width:0}
+.var-n{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:13.5px;font-weight:700;color:#ececf2;margin-bottom:4px;line-height:1.3}
+.var-tag{font-family:'JetBrains Mono',monospace;font-size:8.5px;font-weight:700;color:#8a8a9a;letter-spacing:.5px;text-transform:uppercase;background:rgba(255,255,255,.05);border:1px solid #1f1f27;padding:2px 6px;border-radius:5px}
 .var-flag{font-family:'JetBrains Mono',monospace;font-size:7.5px;font-weight:700;padding:2px 5px;border-radius:4px;letter-spacing:.8px;text-transform:uppercase}
-.var-price{text-align:right;white-space:nowrap}
-.var-w{font-family:'JetBrains Mono',monospace;font-size:9.5px;color:#3d3d47;text-decoration:line-through;margin-top:1px}
-.cat-head{padding:18px 4px 12px}
-.cat-logo{width:32px;height:32px;position:relative;overflow:hidden}
-.cat-logo::after{content:'';position:absolute;inset:0;background:var(--cb);opacity:.12}
-.cat-logo svg{position:relative;z-index:1;width:18px;height:18px}
-.cat-name{font-size:15px;letter-spacing:-.2px}
-.cat-count{font-family:'JetBrains Mono',monospace;font-size:9.5px;color:#42424d}
+.f-hot{background:#ececf2;color:#000}
+.f-best{background:rgba(255,255,255,.09);color:#ececf2;border:1px solid #3a3a44}
+.f-new{background:transparent;color:#9d9db0;border:1px solid #2a2a34}
+.var-s{font-size:10px;font-weight:600;display:flex;align-items:center;gap:5px;color:#6b6b7d}
+.dot{width:5px;height:5px;border-radius:50%;flex-shrink:0;background:#9d9db0}
+
+.var-price{text-align:right;white-space:nowrap;flex-shrink:0}
+.var-p{font-family:'JetBrains Mono',monospace;font-size:15.5px;font-weight:700;color:#ececf2;font-variant-numeric:tabular-nums}
+.var-w{font-family:'JetBrains Mono',monospace;font-size:9.5px;color:#3d3d47;text-decoration:line-through;margin-top:2px;font-variant-numeric:tabular-nums}
 </style>
 </head>
 <body>
@@ -1224,6 +1251,17 @@ var active='all',current=null,qty=1,addonOn=false;
 
 function money(v){return '€'+parseFloat(v).toFixed(2);}
 
+/* brand-colored glow vars for logo plates, computed once per hex */
+function hexA(hex,a){
+  hex=(hex||'#888888').replace('#','');
+  if(hex.length===3)hex=hex.split('').map(function(c){return c+c;}).join('');
+  var r=parseInt(hex.substr(0,2),16),g=parseInt(hex.substr(2,2),16),b=parseInt(hex.substr(4,2),16);
+  return 'rgba('+r+','+g+','+b+','+a+')';
+}
+function glowVars(prefix,hex){
+  return '--'+prefix+'1:'+hexA(hex,.55)+';--'+prefix+'2:'+hexA(hex,.16)+';--'+prefix+'3:'+hexA(hex,.4)+';--'+prefix+'S:'+hexA(hex,.55)+';';
+}
+
 /* ══ STOCK — depends on the shop a product belongs to ══ */
 var STOCK_BY_SHOP={
   discord:{min:60,max:420},
@@ -1315,14 +1353,14 @@ function renderCats(){
     var items=P.filter(function(x){return x.c===cid;});
     if(!items.length)return;
     html+='<div class="cat-block"><div class="cat-head">'+
-      '<div class="cat-logo" style="--cb:'+(BRAND[items[0].lg]||'#888')+'">'+(SVG[items[0].lg]||'')+'</div>'+
+      '<div class="cat-logo" style="'+glowVars('cb',BRAND[items[0].lg])+'">'+(SVG[items[0].lg]||'')+'</div>'+
       '<div class="cat-name">'+CATN[cid]+'</div><div class="cat-rule"></div>'+
       '<div class="cat-count">'+items.length+'</div></div><div class="var-list">';
     items.forEach(function(p){
       var st=stockFor(p);
       html+='<div class="var-row" data-id="'+p.id+'" style="--ac:'+p.ac+'">'+
-        '<div class="lbox" style="width:38px;height:38px;margin:0;border-radius:10px;--br:'+(BRAND[p.lg]||'#888')+'">'+(SVG[p.lg]||'')+'</div>'+
-        '<div class="var-info"><div class="var-n">'+p.n+' <span class="var-tag">['+p.t[1]+']</span>'+
+        '<div class="lbox" style="'+glowVars('br',BRAND[p.lg])+'">'+(SVG[p.lg]||'')+'</div>'+
+        '<div class="var-info"><div class="var-n">'+p.n+' <span class="var-tag">'+p.t[1]+'</span>'+
         (p.f?' <span class="var-flag f-'+p.f+'">'+p.f+'</span>':'')+'</div>'+
         '<div class="var-s '+st.cls+'"><span class="dot '+st.cls+'"></span>'+p.t[0]+' · '+st.label+'</div></div>'+
         '<div class="var-price"><div class="var-p">'+money(p.p)+'</div>'+
@@ -1860,7 +1898,8 @@ var _open=openSheet;
 openSheet=function(id){
   _open(id);
   var p=P.filter(function(x){return x.id===id;})[0];
-  document.getElementById('si').style.setProperty('--br',BRAND[p.lg]||'#888');
+  var si=document.getElementById('si'),gv=glowVars('br',BRAND[p.lg]).split(';');
+  gv.forEach(function(pair){if(!pair)return;var i=pair.indexOf(':');si.style.setProperty(pair.slice(0,i),pair.slice(i+1));});
   buildInt(p);
   updTotal();
 };
