@@ -697,7 +697,7 @@ do
 	end)
 end
 
-makeSlider(speedPage, "speed", "Walk Speed", 4, 250, "%d")
+makeSlider(speedPage, "speed", "Walk Speed", 4, 500, "%d")
 
 -- ── ANTI RAGDOLL ────────────────────────────────────────────
 local _ragConn = nil
@@ -1000,23 +1000,84 @@ end)
 -- ============================================================
 local miscPage = pages["Misc"]
 
--- ── BYPASS ANTI-CHEAT (clone trick) ─────────────────────────
-local _bypassActive = false
+-- ── BYPASS ANTI-CHEAT (clone trick, safe swap) ──────────────
+-- v2 fixes vs la version initiale :
+--  1) _bypassActive ne se remettait jamais à false → le bypass ne
+--     pouvait être appliqué qu'UNE seule fois par session. Remplacé
+--     par un cooldown (ré-applicable, mais pas de spam-click qui
+--     enchaînerait des swaps de Humanoid coup sur coup).
+--  2) hum.Parent = nil détachait l'ancien Humanoid sans le détruire
+--     (connexions internes laissées pendantes) + task.wait(0.1) créait
+--     une fenêtre où le character n'a AUCUN Humanoid (autres boucles du
+--     hub qui lisent FindFirstChildOfClass("Humanoid") tombent sur nil
+--     pendant ce temps). Remplacé par un swap synchrone (clone d'abord,
+--     Destroy() propre ensuite, zéro yield entre les deux).
+--  3) clone.WalkSpeed = St.speed forçait la vitesse au moindre clic sur
+--     Bypass, même si Speed Boost était OFF — un saut de vitesse
+--     injustifié aux yeux d'un anti-cheat, et de toute façon inutile
+--     depuis le passage à la vitesse par proxy (WalkSpeed n'est plus lu
+--     nulle part dans le hub). Supprimé : Clone() recopie déjà la bonne
+--     valeur telle quelle, rien à réécrire.
+--  4) CameraSubject n'était jamais restauré après le swap → la caméra
+--     pouvait rester figée sur l'ancien Humanoid détruit. Ajouté.
+--  5) Les contrôles (WASD/tactile) du PlayerModule restent liés à
+--     l'ancien Humanoid après un swap → ré-activation via le même motif
+--     déjà utilisé et testé par Anti Ragdoll plus haut dans ce fichier.
+local _bypassActive    = false  -- true pendant le swap (garde anti-réentrance)
+local _bypassCooldown  = 0
+local BYPASS_COOLDOWN_S = 5
+
 local function applyBypass()
 	if _bypassActive then return end
+	local now = tick()
+	if now - _bypassCooldown < BYPASS_COOLDOWN_S then
+		local left = math.ceil(BYPASS_COOLDOWN_S - (now - _bypassCooldown))
+		setStatus("Bypass: attendre "..left.."s", C_DIM)
+		return
+	end
+	local char = LP.Character
+	local oldHum = char and char:FindFirstChildOfClass("Humanoid")
+	if not char or not oldHum then
+		setStatus("Bypass: pas de character", C_RED)
+		return
+	end
 	_bypassActive = true
-	pcall(function()
-		local char = LP.Character; if not char then return end
-		local hum  = char:FindFirstChildOfClass("Humanoid"); if not hum then return end
-		-- Clone humanoid to reset AC state
-		local clone = hum:Clone()
-		hum.Parent = nil
+	local ok = pcall(function()
+		local cam = workspace.CurrentCamera
+		local wasSubject = cam and cam.CameraSubject == oldHum
+
+		-- Clone() recopie déjà toutes les propriétés actuelles
+		-- (WalkSpeed, JumpPower, HipHeight, Animator inclus) — rien à
+		-- réécrire manuellement.
+		local clone = oldHum:Clone()
 		clone.Parent = char
-		task.wait(0.1)
-		clone.WalkSpeed = St.speed
+
+		-- Destroy() propre : coupe les connexions internes de l'ancien
+		-- Humanoid au lieu de le laisser pendouiller, et déclenche
+		-- .Destroying pour tout script du jeu qui l'observerait.
+		oldHum:Destroy()
+
+		-- Restaure la cible caméra si elle pointait sur l'ancien Humanoid
+		-- (sinon la caméra reste figée sur une instance détruite).
+		if cam and wasSubject then cam.CameraSubject = clone end
+
+		-- Ré-active les contrôles WASD/tactile sur le nouveau Humanoid.
+		pcall(function()
+			local pm = LP:FindFirstChild("PlayerScripts")
+			local cm = pm and pm:FindFirstChild("PlayerModule")
+			if cm then require(cm:FindFirstChild("ControlModule")):Enable() end
+		end)
 	end)
-	setStatus("Bypass applied", C_GREEN)
-	task.delay(3, function() setStatus("Idle", C_DIM) end)
+	_bypassActive = false
+	_bypassCooldown = tick()
+	if ok then
+		setStatus("Bypass applied", C_GREEN)
+	else
+		setStatus("Bypass failed — voir console", C_RED)
+	end
+	task.delay(3, function()
+		if not _bypassActive then setStatus("Idle", C_DIM) end
+	end)
 end
 
 do
