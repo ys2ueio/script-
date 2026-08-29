@@ -32,7 +32,7 @@ canva:'<svg viewBox="0 0 24 24" fill="#00C4CC"><path d="M12 0C5.4 0 0 5.4 0 12s5
 var C={v:'#ececf2',pk:'#ececf2',cy:'#ececf2',lm:'#ececf2',am:'#ececf2',rd:'#ececf2',bl:'#ececf2',gr:'#ececf2',or:'#ececf2'};
 var BRAND={telegram:'#26A5E4',tiktok:'#FF0050',instagram:'#E4405F',twitter:'#ffffff',twitch:'#9146FF',adobe:'#FF0000',duolingo:'#58CC02',roblox:'#E2231A',steam:'#66C0F4',discord:'#5865F2',openai:'#10a37f',claude:'#D97757',gemini:'#4285F4',netflix:'#E50914',spotify:'#1DB954',disney:'#0063e5',hbo:'#A020F0',crunchy:'#F47521',youtube:'#FF0000',prime:'#00A8E1',deezer:'#A238FF',nord:'#4687FF',express:'#DA3940',minecraft:'#62B47A',fortnite:'#8B5CF6',xbox:'#107C10',capcut:'#00D9E9',canva:'#00C4CC'};
 
-var CATS=[{id:'all',l:'🌐 All'},{id:'discord',l:'💜 Discord'},{id:'ai',l:'🤖 AI'},{id:'stream',l:'🎬 Streaming'},{id:'vpn',l:'🔒 VPN'},{id:'gaming',l:'🎮 Gaming'},{id:'tools',l:'🛠 Tools'},{id:'smm',l:'📈 Social'}];
+var CATS=[{id:'all',l:'All'},{id:'discord',l:'Discord'},{id:'ai',l:'AI'},{id:'stream',l:'Streaming'},{id:'vpn',l:'VPN'},{id:'gaming',l:'Gaming'},{id:'tools',l:'Tools'},{id:'smm',l:'Social'}];
 var CATN={discord:'Discord',ai:'AI Subscriptions',stream:'Streaming',vpn:'VPN',gaming:'Gaming',tools:'Tools',smm:'Social Growth'};
 
 var P=[

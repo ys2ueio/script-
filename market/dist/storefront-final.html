@@ -20,11 +20,13 @@ body{color:#ececf2 !important;font-family:'Inter',-apple-system,sans-serif;min-h
 /* ══ HEADER ══ */
 .hdr{position:sticky;top:0;z-index:55;background:rgba(0,0,0,.94);border-bottom:1px solid #16161c;padding:11px 16px;display:flex;align-items:center;justify-content:space-between;gap:10px}
 .hdr-logo{display:flex;align-items:center;gap:8px;font-family:'Cinzel',serif;font-size:16px;font-weight:700;letter-spacing:2px;color:#fff}
-.hdr-logo .c{font-size:17px}
+.hdr-logo .c{display:flex}
+.hdr-logo .c svg{width:17px;height:17px}
 .hdr-right{display:flex;align-items:center;gap:8px}
 .cur-sel{background:rgba(255,255,255,.05);border:1px solid #1a1a22;border-radius:8px;color:#9d9db0;font-size:11.5px;padding:6px 8px;font-family:inherit;outline:none}
 .cur-sel option{background:#0a0a0d}
-.icon-btn{width:34px;height:34px;border-radius:9px;background:rgba(255,255,255,.05);border:1px solid #1a1a22;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:15px;position:relative}
+.icon-btn{width:34px;height:34px;border-radius:9px;background:rgba(255,255,255,.05);border:1px solid #1a1a22;display:flex;align-items:center;justify-content:center;cursor:pointer;position:relative}
+.icon-btn svg{width:17px;height:17px}
 .cart-count{position:absolute;top:-5px;right:-5px;background:#ececf2;color:#000;font-size:9px;font-weight:800;width:16px;height:16px;border-radius:50%;display:flex;align-items:center;justify-content:center}
 
 /* ══ BACKGROUND ══ */
@@ -34,11 +36,8 @@ body{color:#ececf2 !important;font-family:'Inter',-apple-system,sans-serif;min-h
   background-size:28px 28px;
   -webkit-mask-image:radial-gradient(ellipse 65% 50% at 50% 16%,#000 0%,transparent 78%);
   mask-image:radial-gradient(ellipse 65% 50% at 50% 16%,#000 0%,transparent 78%)}
-.aura{position:absolute;top:-220px;left:50%;width:680px;height:680px;transform:translateX(-50%);
-  background:conic-gradient(from 0deg,transparent 0deg,rgba(216,180,106,.16) 34deg,transparent 92deg,transparent 250deg,rgba(255,255,255,.10) 300deg,transparent 355deg);
-  filter:blur(50px);animation:auraSpin 30s linear infinite}
-@keyframes auraSpin{to{transform:translateX(-50%) rotate(360deg)}}
-@media (prefers-reduced-motion:reduce){.aura{animation:none}}
+.aura{position:absolute;top:-220px;left:50%;width:680px;height:520px;transform:translateX(-50%);
+  background:radial-gradient(ellipse 60% 55% at 50% 30%,rgba(216,180,106,.13) 0%,transparent 68%)}
 .halo{position:absolute;width:520px;height:520px;top:-250px;left:50%;transform:translateX(-50%);background:radial-gradient(circle,rgba(255,255,255,.08) 0%,transparent 68%)}
 .halo2{position:absolute;width:340px;height:340px;top:340px;right:-130px;background:radial-gradient(circle,rgba(255,255,255,.05) 0%,transparent 70%)}
 .vig{position:absolute;inset:0;background:radial-gradient(ellipse 92% 70% at 50% 22%,transparent 30%,rgba(0,0,0,.9) 100%)}
@@ -46,7 +45,8 @@ body{color:#ececf2 !important;font-family:'Inter',-apple-system,sans-serif;min-h
 
 /* ══ HERO ══ */
 .hero{padding:56px 20px 0;text-align:center}
-.crest{font-size:34px;display:block;margin-bottom:16px;filter:drop-shadow(0 0 18px rgba(216,180,106,.35))}
+.crest{display:flex;justify-content:center;margin-bottom:16px;color:#fff;filter:drop-shadow(0 0 18px rgba(216,180,106,.4))}
+.crest svg{width:34px;height:34px}
 .hero-eyebrow{font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:4px;color:#6b6b7d;text-transform:uppercase;margin-bottom:16px}
 .crest-rule{width:150px;height:1px;margin:0 auto 18px;background:linear-gradient(90deg,transparent,rgba(216,180,106,.55),transparent);position:relative}
 .crest-rule::after{content:'◆';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:6px;line-height:1;color:#d8b46a;background:#000;padding:0 8px}
@@ -130,7 +130,8 @@ body{color:#ececf2 !important;font-family:'Inter',-apple-system,sans-serif;min-h
 .ftr-brand{font-family:'Cinzel',serif;font-size:18px;font-weight:700;letter-spacing:3px;color:#fff;text-align:center;margin-bottom:8px}
 .ftr-tag{font-size:11.5px;color:#6b6b7d;text-align:center;margin-bottom:20px}
 .ftr-social{display:flex;justify-content:center;gap:8px;margin-bottom:24px}
-.fs{padding:9px 18px;border:1px solid #1a1a22;border-radius:10px;background:rgba(255,255,255,.04);font-size:12px;font-weight:600;color:#ececf2;cursor:pointer;font-family:inherit}
+.fs{display:inline-flex;align-items:center;gap:8px;padding:9px 18px;border:1px solid #1a1a22;border-radius:10px;background:rgba(255,255,255,.04);font-size:12px;font-weight:600;color:#ececf2;cursor:pointer;font-family:inherit}
+.fs svg{width:15px;height:15px;flex-shrink:0}
 .ftr-cols{display:grid;grid-template-columns:1fr 1fr;gap:22px;margin-bottom:22px}
 .fc-t{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:1.8px;color:#6b6b7d;text-transform:uppercase;margin-bottom:10px}
 .fc-l{font-size:12px;color:#9d9db0;padding:4px 0;cursor:pointer}
@@ -198,7 +199,8 @@ body{color:#ececf2 !important;font-family:'Inter',-apple-system,sans-serif;min-h
 .tf-s{appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236b6b7d' stroke-width='1.6' fill='none'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 14px center}
 .tf-s option{background:#0a0a0d;color:#ececf2}
 .tsuc{display:none;text-align:center;padding:24px 0}.tsuc.show{display:block}
-.ts-ic{font-size:50px;margin-bottom:15px;display:block}
+.ts-ic{display:flex;justify-content:center;margin-bottom:15px}
+.ts-ic svg{width:48px;height:48px}
 .ts-t{font-size:20px;font-weight:700;margin-bottom:8px;color:#fff}
 .ts-id-row{display:flex;align-items:center;justify-content:center;gap:8px;margin:14px 0}
 .ts-id{font-family:'JetBrains Mono',monospace;font-size:15px;color:#fff;padding:12px 20px;border:1px solid #2a2a34;border-radius:10px;background:rgba(255,255,255,.05);display:inline-block;letter-spacing:2px;font-weight:700}
@@ -227,7 +229,8 @@ body{color:#ececf2 !important;font-family:'Inter',-apple-system,sans-serif;min-h
 .di{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:9px;color:#4a4a58;cursor:pointer;font-weight:700;letter-spacing:.5px;transition:color .2s}
 .di.on{color:#ececf2}
 .di:hover{color:#9d9db0}
-.di-ic{font-size:17px}
+.di-ic{display:flex}
+.di-ic svg{width:19px;height:19px}
 .empty{grid-column:1/-1;text-align:center;padding:52px 20px;color:#6b6b7d;font-size:13px}
 
 /* ══ FUTURISTIC ══ */
@@ -263,6 +266,12 @@ body{color:#ececf2 !important;font-family:'Inter',-apple-system,sans-serif;min-h
 .live-bar{display:flex;align-items:center;gap:9px;padding:11px 14px;margin:0 16px 12px;border:1px solid #16161c;border-radius:13px;background:rgba(7,7,10,.9)}
 .live-dot{width:6px;height:6px;border-radius:50%;background:#ececf2;flex-shrink:0;animation:blink 2s ease-in-out infinite}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
+
+@media (prefers-reduced-motion:reduce){
+  .announce-track,.tick-track,.rev-track,.live-dot{animation:none}
+  .sheet{animation:none}
+  .var-row,.filt,.qty-btn,.step-btn,.chip,.opt,.ts-copy{transition:none}
+}
 .live-txt{font-size:11.5px;color:#8a8a9a;flex:1}
 .live-txt b{color:#ececf2;font-weight:600}
 
@@ -385,10 +394,10 @@ body{color:#ececf2 !important;font-family:'Inter',-apple-system,sans-serif;min-h
 </div>
 
 <div class="hdr">
-  <div class="hdr-logo"><span class="c">👑</span>YSLEM</div>
+  <div class="hdr-logo"><span class="c"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 8.2l4.3 2.8 4.3-6 4.3 6 4.3-2.8-1.8 9.3H4.8L3 8.2zM5.5 19h13v1.6h-13V19z"/></svg></span>YSLEM</div>
   <div class="hdr-right">
     <select class="cur-sel"><option>€ EUR</option><option>$ USD</option><option>£ GBP</option></select>
-    <div class="icon-btn" id="nav-cart">🛒<span class="cart-count" id="cc">0</span></div>
+    <div class="icon-btn" id="nav-cart"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 4h2l2.3 12a2 2 0 002 1.7h7.9a2 2 0 002-1.6L21 8.3H6.2"/><circle cx="9.7" cy="20" r="1.2" fill="currentColor" stroke="none"/><circle cx="16.7" cy="20" r="1.2" fill="currentColor" stroke="none"/></svg><span class="cart-count" id="cc">0</span></div>
   </div>
 </div>
 
@@ -402,7 +411,7 @@ body{color:#ececf2 !important;font-family:'Inter',-apple-system,sans-serif;min-h
 <div class="content">
 
 <div class="hero">
-  <span class="crest">👑</span>
+  <span class="crest"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 8.2l4.3 2.8 4.3-6 4.3 6 4.3-2.8-1.8 9.3H4.8L3 8.2zM5.5 19h13v1.6h-13V19z"/></svg></span>
   <div class="hero-eyebrow">Yslem Market</div>
   <h1 class="brand">YSLEM</h1>
   <div class="crest-rule"></div>
@@ -472,8 +481,8 @@ body{color:#ececf2 !important;font-family:'Inter',-apple-system,sans-serif;min-h
   <div class="ftr-brand">YSLEM</div>
   <div class="ftr-tag">Digital products · Discord and Telegram</div>
   <div class="ftr-social">
-    <button class="fs" id="f-disc">💬 Discord</button>
-    <button class="fs" id="f-tg">✈️ Telegram</button>
+    <button class="fs" id="f-disc"><svg viewBox="0 0 24 24" fill="#5865F2"><path d="M20.32 4.37a19.79 19.79 0 00-4.89-1.52.07.07 0 00-.08.04c-.21.37-.44.86-.6 1.25a18.27 18.27 0 00-5.49 0 12.6 12.6 0 00-.62-1.25.08.08 0 00-.08-.04A19.74 19.74 0 003.68 4.37a.07.07 0 00-.03.03C.53 9.05-.32 13.58.1 18.06a.08.08 0 00.03.06 19.9 19.9 0 006 3.03.08.08 0 00.08-.03c.46-.63.87-1.3 1.23-1.99a.08.08 0 00-.04-.11 13.1 13.1 0 01-1.88-.9.08.08 0 010-.12l.37-.3a.07.07 0 01.08 0c3.93 1.8 8.18 1.8 12.06 0a.07.07 0 01.08 0l.37.3a.08.08 0 010 .12c-.6.35-1.22.65-1.87.9a.08.08 0 00-.05.1c.36.7.78 1.37 1.23 2a.08.08 0 00.08.02 19.84 19.84 0 006-3.03.08.08 0 00.04-.05c.5-5.18-.84-9.68-3.55-13.67a.06.06 0 00-.03-.02zM8.02 15.33c-1.18 0-2.16-1.08-2.16-2.42s.96-2.42 2.16-2.42c1.21 0 2.18 1.1 2.16 2.42 0 1.34-.96 2.42-2.16 2.42zm7.98 0c-1.19 0-2.16-1.08-2.16-2.42s.95-2.42 2.16-2.42c1.2 0 2.17 1.1 2.15 2.42 0 1.34-.94 2.42-2.15 2.42z"/></svg>Discord</button>
+    <button class="fs" id="f-tg"><svg viewBox="0 0 24 24" fill="#26A5E4"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.6 0 12 0zm5.6 8.2l-1.9 8.9c-.1.6-.5.8-1.1.5l-3-2.2-1.4 1.4c-.2.2-.3.3-.6.3l.2-3 5.5-5c.2-.2 0-.3-.4-.1l-6.8 4.3-2.9-.9c-.6-.2-.6-.6.1-.9l11.4-4.4c.5-.2 1 .1.9.9v.2z"/></svg>Telegram</button>
   </div>
   <div class="ftr-cols">
     <div>
@@ -534,7 +543,9 @@ body{color:#ececf2 !important;font-family:'Inter',-apple-system,sans-serif;min-h
   <div class="sheet" id="ti" style="--ac:#ececf2">
     <div class="s-glow"></div><div class="grab"></div>
     <div class="tform show" id="tf">
-      <div class="s-logo"><span style="font-size:31px">🎫</span></div>
+      <div class="s-logo" style="--br1:rgba(236,236,242,.4);--br2:rgba(236,236,242,.1);--br3:rgba(236,236,242,.3)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#ececf2" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.2a2 2 0 012-2h14a2 2 0 012 2v1.3a1.6 1.6 0 000 3.2v1.3a2 2 0 01-2 2H5a2 2 0 01-2-2v-1.3a1.6 1.6 0 000-3.2V9.2z"/><path d="M14 7.2v9.6" stroke-dasharray="2 2.4"/></svg>
+      </div>
       <div class="s-title">Create a ticket</div>
       <div class="s-stock-row" style="margin-bottom:22px"><span style="font-size:12.5px;color:#6b6b7d">Average reply time is under 10 minutes</span></div>
 
@@ -565,7 +576,7 @@ body{color:#ececf2 !important;font-family:'Inter',-apple-system,sans-serif;min-h
       <button class="s-close" id="tk-can">Cancel</button>
     </div>
     <div class="tsuc" id="ts">
-      <span class="ts-ic">✅</span>
+      <span class="ts-ic"><svg viewBox="0 0 24 24" fill="none" stroke="#ececf2" stroke-width="1.6"><circle cx="12" cy="12" r="9.4"/><path d="M7.8 12.4l2.7 2.7L16.4 9" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
       <div class="ts-t">Ticket created</div>
       <div class="ts-id-row">
         <div class="ts-id" id="ts-id"></div>
@@ -579,10 +590,10 @@ body{color:#ececf2 !important;font-family:'Inter',-apple-system,sans-serif;min-h
 </div>
 
 <div class="dock">
-  <div class="di on" id="d-shop"><span class="di-ic">🏪</span><span>SHOP</span></div>
-  <div class="di" id="d-tick"><span class="di-ic">🎫</span><span>TICKET</span></div>
-  <div class="di" id="d-stat"><span class="di-ic">📊</span><span>STATUS</span></div>
-  <div class="di" id="d-help"><span class="di-ic">❓</span><span>HELP</span></div>
+  <div class="di on" id="d-shop"><span class="di-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5l1-5.5h14l1 5.5"/><path d="M4 9.5a2.4 2.4 0 004.8 0 2.4 2.4 0 004.8 0 2.4 2.4 0 004.8 0"/><path d="M5 10v9.5h14V10"/><path d="M10 19.5v-5h4v5"/></svg></span><span>SHOP</span></div>
+  <div class="di" id="d-tick"><span class="di-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.2a2 2 0 012-2h14a2 2 0 012 2v1.3a1.6 1.6 0 000 3.2v1.3a2 2 0 01-2 2H5a2 2 0 01-2-2v-1.3a1.6 1.6 0 000-3.2V9.2z"/></svg></span><span>TICKET</span></div>
+  <div class="di" id="d-stat"><span class="di-ic"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="12.5" width="4" height="7.5" rx="1"/><rect x="10" y="7.5" width="4" height="12.5" rx="1"/><rect x="16" y="3.5" width="4" height="16.5" rx="1"/></svg></span><span>STATUS</span></div>
+  <div class="di" id="d-help"><span class="di-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.3"/><path d="M9.3 9.6a2.8 2.8 0 015.3 1c0 1.9-2.6 2-2.6 3.9"/><circle cx="12" cy="17.4" r=".9" fill="currentColor" stroke="none"/></svg></span><span>HELP</span></div>
 </div>
 
 <script>
@@ -630,7 +641,7 @@ sellauth:'<svg viewBox="0 0 24 24" fill="#FF5FA8"><path d="M6 2h9l6 6v11a3 3 0 0
 var C={v:'#ececf2',pk:'#ececf2',cy:'#ececf2',lm:'#ececf2',am:'#ececf2',rd:'#ececf2',bl:'#ececf2',gr:'#ececf2',or:'#ececf2'};
 var BRAND={telegram:'#26A5E4',tiktok:'#FF0050',instagram:'#E4405F',twitter:'#ffffff',twitch:'#9146FF',adobe:'#FF0000',duolingo:'#58CC02',roblox:'#E2231A',steam:'#66C0F4',discord:'#5865F2',openai:'#10a37f',claude:'#D97757',gemini:'#4285F4',netflix:'#E50914',spotify:'#1DB954',disney:'#0063e5',hbo:'#A020F0',crunchy:'#F47521',youtube:'#FF0000',prime:'#00A8E1',deezer:'#A238FF',nord:'#4687FF',express:'#DA3940',minecraft:'#62B47A',fortnite:'#8B5CF6',xbox:'#107C10',capcut:'#00D9E9',canva:'#00C4CC',paramount:'#0064FF',dazn:'#F8FF13',apple:'#F0F0F5',cs2:'#DE9B35',valorant:'#FF4655',fivem:'#F40552',facebook:'#1877F2',kick:'#53FC18',accsupplier:'#8A97A8',sellauth:'#FF5FA8'};
 
-var CATS=[{id:'all',l:'🌐 All'},{id:'discord',l:'💜 Discord'},{id:'ai',l:'🤖 AI'},{id:'stream',l:'🎬 Streaming'},{id:'vpn',l:'🔒 VPN'},{id:'gaming',l:'🎮 Gaming'},{id:'tools',l:'🛠 Tools'},{id:'smm',l:'📈 Social'}];
+var CATS=[{id:'all',l:'All'},{id:'discord',l:'Discord'},{id:'ai',l:'AI'},{id:'stream',l:'Streaming'},{id:'vpn',l:'VPN'},{id:'gaming',l:'Gaming'},{id:'tools',l:'Tools'},{id:'smm',l:'Social'}];
 var CATN={discord:'Discord',ai:'AI Subscriptions',stream:'Streaming',vpn:'VPN',gaming:'Gaming',tools:'Tools',smm:'Social Growth'};
 
 var P=[

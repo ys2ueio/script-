@@ -40,7 +40,7 @@ const rowsHTML = rows.map(({ shop, best, save }, i) => `
         <span class="logo" style="--br:${Y.brands[best.brand] || '#888'}">${logo(best.brand)}</span>
         <span class="info">
           <span class="pname">${esc(best.name)}</span>
-          <span class="shop"><span class="shop-ic">${shop.icon}</span>${esc(shop.name)}</span>
+          <span class="shop">${esc(shop.name)}</span>
         </span>
         <span class="price-col">
           <span class="price">${money(best.price)}</span>
@@ -76,7 +76,6 @@ h1{font-size:22px;font-weight:800;letter-spacing:-.4px}
 .info{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
 .pname{font-size:13px;font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .shop{font-size:10.5px;color:var(--mute);display:flex;align-items:center;gap:5px}
-.shop-ic{font-size:11px}
 .price-col{text-align:right;flex-shrink:0}
 .price{display:block;font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:700;font-variant-numeric:tabular-nums}
 .save{display:inline-block;margin-top:3px;font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:800;color:#0a0a0d;background:var(--good);padding:2px 6px;border-radius:5px}

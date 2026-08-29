@@ -71,7 +71,7 @@ const shopCardHTML = shopRows.map(({ shop, items, best, cheapest, avg }) => {
   }).join('');
   return `<section class="shop-card" id="shop-${shop.id}">
     <header class="shop-head">
-      <div class="shop-icon">${shop.icon}</div>
+      <div class="shop-icon">${shop.id.slice(0, 2).toUpperCase()}</div>
       <div class="shop-meta">
         <h2>${shop.name}</h2>
         <p>${shop.blurb}</p>
@@ -117,7 +117,7 @@ const leaderHTML = leaderboard.map(({ shop, best }, i) => {
     <span class="pc-logo" style="--br:${Y.brands[best.brand] || '#888'}">${logo(best.brand)}</span>
     <span class="lead-info">
       <span class="lead-name">${esc(best.name)}</span>
-      <span class="lead-shop">${shop.icon} ${shop.name}</span>
+      <span class="lead-shop">${shop.name}</span>
     </span>
     <span class="lead-price">
       <span class="lead-p">${money(best.price)}</span>
@@ -126,7 +126,7 @@ const leaderHTML = leaderboard.map(({ shop, best }, i) => {
   </a>`;
 }).join('\n');
 
-const navHTML = Y.shops.map(s => `<a href="#shop-${s.id}" class="nav-chip">${s.icon} ${s.name.replace(' Shop', '')}</a>`).join('');
+const navHTML = Y.shops.map(s => `<a href="#shop-${s.id}" class="nav-chip">${s.name.replace(' Shop', '')}</a>`).join('');
 
 const totalProducts = Y.products.length;
 const totalShops = Y.shops.length;
@@ -185,7 +185,7 @@ h1{font-family:'Cinzel',serif;font-size:clamp(28px,6vw,44px);letter-spacing:3px;
 
 .shop-card{border:1px solid var(--line);border-radius:18px;background:var(--surface);margin-bottom:18px;overflow:hidden;scroll-margin-top:64px}
 .shop-head{display:flex;align-items:center;gap:14px;padding:20px}
-.shop-icon{width:44px;height:44px;border-radius:12px;background:var(--surface2);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0}
+.shop-icon{width:44px;height:44px;border-radius:12px;background:var(--surface2);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;letter-spacing:.5px;color:var(--sub);flex-shrink:0}
 .shop-meta h2{font-size:16px;font-weight:700;letter-spacing:-.2px}
 .shop-meta p{font-size:11.5px;color:var(--mute);margin-top:2px}
 .shop-stat{margin-left:auto;text-align:right}
