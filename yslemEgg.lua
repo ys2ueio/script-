@@ -1273,12 +1273,15 @@ switchTab("Farm")
 
 -- ============================================================
 -- AIM BAT — portage exact de "AB" (Bat Aimbot V1) de Moon Hub :
--- même SPEED (58), même HEIGHT (3.7), même distance de frappe (5),
--- même cooldown swing (0.2s), même formule de prédiction vélocité
--- + lookVector, même formule Y (poursuite + clamp au sol), même
--- rotation par AssemblyAngularVelocity (clamp ±2.5 rad puis *42).
+-- même HEIGHT (3.7), même distance de frappe (5), même cooldown
+-- swing (0.2s), même formule de prédiction vélocité + lookVector,
+-- même formule Y (poursuite + clamp au sol), même rotation par
+-- AssemblyAngularVelocity (clamp ±2.5 rad puis *42).
+-- SPEED n'est PAS fixe (58 chez Moon Hub) : elle est lue en direct
+-- sur St.speed — le même slider "Walk Speed" de l'onglet Speed —
+-- pour que la vitesse de poursuite de l'aimbot suive toujours la
+-- vitesse choisie par l'utilisateur.
 -- ============================================================
-local AB_SPEED    = 58
 local AB_HEIGHT   = 3.7
 local AB_HIT_DIST = 5
 local AB_HIT_CD   = false
@@ -1366,7 +1369,8 @@ local function startAimBat()
 		local yVel = (desiredHeight - myPos.Y) * 19.5 + targetVel.Y * 0.8
 		if hum.FloorMaterial ~= Enum.Material.Air then yVel = math.max(yVel, 13) end
 		yVel = math.clamp(yVel, -70, 110)
-		local desiredVel = Vector3.new(flatDir.X * AB_SPEED, yVel, flatDir.Z * AB_SPEED)
+		local pursuitSpeed = St.speed
+		local desiredVel = Vector3.new(flatDir.X * pursuitSpeed, yVel, flatDir.Z * pursuitSpeed)
 		root.AssemblyLinearVelocity = root.AssemblyLinearVelocity:Lerp(desiredVel, 0.8)
 
 		local speed3 = targetVel.Magnitude
