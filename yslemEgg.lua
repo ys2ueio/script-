@@ -43,6 +43,7 @@ local C_RED    = Color3.fromRGB(220,60,60)
 -- STATE
 -- ============================================================
 local St = {
+	instantGrab     = false,
 	autoFarm        = false,
 	autoHatch       = false,
 	autoEquip       = false,
@@ -367,6 +368,44 @@ end
 -- ── PAGE: FARM ──────────────────────────────────────────────
 -- ============================================================
 local farmPage = pages["Farm"]
+
+-- ── INSTANT GRAB ────────────────────────────────────────────
+-- Technique confirmée par la source originale du jeu (Toolbox Hub) :
+-- ProximityPromptService.PromptShown se déclenche dès qu'un prompt
+-- devient visible (egg, upgrade, claim, tout type confondu) — on met
+-- son HoldDuration à 0 pour que la moindre interaction soit instantanée,
+-- au lieu de tenir la touche. Contrairement à l'original (appliqué une
+-- fois pour toute la session, jamais restauré), version réversible ici :
+-- la valeur d'origine est mémorisée par prompt et restaurée au OFF.
+local PPS = game:GetService("ProximityPromptService")
+local _instaGrabConn = nil
+local _instaGrabOriginal = setmetatable({}, {__mode = "k"})  -- prompt -> HoldDuration d'origine
+
+local function setInstantGrab(on)
+	St.instantGrab = on
+	if on then
+		if _instaGrabConn then return end
+		_instaGrabConn = PPS.PromptShown:Connect(function(prompt)
+			if not St.instantGrab then return end
+			if _instaGrabOriginal[prompt] == nil then
+				_instaGrabOriginal[prompt] = prompt.HoldDuration
+			end
+			prompt.HoldDuration = 0
+		end)
+	else
+		if _instaGrabConn then _instaGrabConn:Disconnect(); _instaGrabConn = nil end
+		-- Restaure tout prompt déjà modifié (encore en mémoire)
+		for prompt, orig in pairs(_instaGrabOriginal) do
+			pcall(function()
+				if prompt and prompt.Parent then prompt.HoldDuration = orig end
+			end)
+		end
+	end
+end
+
+makeRow(farmPage, "instantGrab", "Instant Grab", function(on)
+	setInstantGrab(on)
+end)
 
 -- ── AUTO FARM ───────────────────────────────────────────────
 local _farmConn = nil
