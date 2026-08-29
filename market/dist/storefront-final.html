@@ -38,6 +38,9 @@ body{color:#ececf2 !important;font-family:'Inter',-apple-system,sans-serif;min-h
   mask-image:radial-gradient(ellipse 65% 50% at 50% 16%,#000 0%,transparent 78%)}
 .aura{position:absolute;top:-220px;left:50%;width:680px;height:520px;transform:translateX(-50%);
   background:radial-gradient(ellipse 60% 55% at 50% 30%,rgba(216,180,106,.13) 0%,transparent 68%)}
+.wm{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:16px;opacity:.045}
+.wm svg{width:120px;height:120px;color:#fff}
+.wm span{font-family:'Cinzel',serif;font-size:52px;font-weight:700;letter-spacing:20px;color:#fff;padding-left:20px;white-space:nowrap}
 .halo{position:absolute;width:520px;height:520px;top:-250px;left:50%;transform:translateX(-50%);background:radial-gradient(circle,rgba(255,255,255,.08) 0%,transparent 68%)}
 .halo2{position:absolute;width:340px;height:340px;top:340px;right:-130px;background:radial-gradient(circle,rgba(255,255,255,.05) 0%,transparent 70%)}
 .vig{position:absolute;inset:0;background:radial-gradient(ellipse 92% 70% at 50% 22%,transparent 30%,rgba(0,0,0,.9) 100%)}
@@ -404,6 +407,10 @@ body{color:#ececf2 !important;font-family:'Inter',-apple-system,sans-serif;min-h
 <div class="bg">
   <div class="bg-grid"></div>
   <div class="aura"></div>
+  <div class="wm">
+    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 8.2l4.3 2.8 4.3-6 4.3 6 4.3-2.8-1.8 9.3H4.8L3 8.2zM5.5 19h13v1.6h-13V19z"/></svg>
+    <span>YSLEM</span>
+  </div>
   <div class="halo"></div><div class="halo2"></div>
   <div class="vig"></div>
 </div>
@@ -890,6 +897,7 @@ var REVS=[
 {t:'Great support on Discord',p:'Claude Pro'},{t:'Key worked first try',p:'CapCut Pro'}
 ];
 
+var CONTACT={discord:'yslem_dxb',discordInvite:'https://discord.gg/moonn',telegram:'@yslem'};
 var active='all',current=null,qty=1,addonOn=false;
 
 function money(v){return '€'+parseFloat(v).toFixed(2);}
@@ -1093,7 +1101,7 @@ document.getElementById('tk-sub').addEventListener('click',function(){
   if(pid==='other'){nm='General question';pr='—';}
   else{var pp=P.filter(function(x){return x.id===parseInt(pid,10);})[0];nm=pp.n;pr=money(computeTotal(pp));}
   document.getElementById('ts-id').textContent=id;
-  document.getElementById('ts-n').innerHTML='<strong>'+nm+'</strong> — '+pr+'<br>Payment: '+py+'<br>Contact: '+ct+'<br><br>Save this ticket ID and send it to <strong>@yslem</strong> on Discord or Telegram to complete your order.';
+  document.getElementById('ts-n').innerHTML='<strong>'+nm+'</strong> — '+pr+'<br>Payment: '+py+'<br>Contact: '+ct+'<br><br>Save this ticket ID and send it to <strong>'+CONTACT.discord+'</strong> on Discord (or '+CONTACT.telegram+' on Telegram) to complete your order.';
   document.getElementById('tf').classList.remove('show');
   document.getElementById('ts').classList.add('show');
   var cc=document.getElementById('cc');cc.textContent=parseInt(cc.textContent,10)+1;
@@ -1117,9 +1125,10 @@ function statusMsg(){
 document.getElementById('d-stat').addEventListener('click',statusMsg);
 document.getElementById('l-stat').addEventListener('click',statusMsg);
 
-function contactMsg(){alert('Contact\n\nDiscord: yslem\nTelegram: @yslem\n\nAvailable 24/7 with fast replies.');}
-document.getElementById('btn-disc').addEventListener('click',contactMsg);
-document.getElementById('f-disc').addEventListener('click',contactMsg);
+function contactMsg(){alert('Contact\n\nDiscord: '+CONTACT.discord+' ('+CONTACT.discordInvite+')\nTelegram: '+CONTACT.telegram+'\n\nAvailable 24/7 with fast replies.');}
+function joinDiscord(){window.open(CONTACT.discordInvite,'_blank','noopener');}
+document.getElementById('btn-disc').addEventListener('click',joinDiscord);
+document.getElementById('f-disc').addEventListener('click',joinDiscord);
 document.getElementById('f-tg').addEventListener('click',contactMsg);
 
 document.getElementById('l-tos').addEventListener('click',function(){alert('Terms of Service\n\nAll sales are final once a product is delivered.\nProducts are resold accounts and keys. They can stop working or be revoked at any time.\nNo uptime, duration or outcome is guaranteed.\nSupport windows listed on product pages are a best effort, not a contractual guarantee.\nYou order at your own risk.');});

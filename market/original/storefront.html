@@ -38,6 +38,9 @@ body{color:#ececf2 !important;font-family:'Inter',-apple-system,sans-serif;min-h
   mask-image:radial-gradient(ellipse 65% 50% at 50% 16%,#000 0%,transparent 78%)}
 .aura{position:absolute;top:-220px;left:50%;width:680px;height:520px;transform:translateX(-50%);
   background:radial-gradient(ellipse 60% 55% at 50% 30%,rgba(216,180,106,.13) 0%,transparent 68%)}
+.wm{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:16px;opacity:.045}
+.wm svg{width:120px;height:120px;color:#fff}
+.wm span{font-family:'Cinzel',serif;font-size:52px;font-weight:700;letter-spacing:20px;color:#fff;padding-left:20px;white-space:nowrap}
 .halo{position:absolute;width:520px;height:520px;top:-250px;left:50%;transform:translateX(-50%);background:radial-gradient(circle,rgba(255,255,255,.08) 0%,transparent 68%)}
 .halo2{position:absolute;width:340px;height:340px;top:340px;right:-130px;background:radial-gradient(circle,rgba(255,255,255,.05) 0%,transparent 70%)}
 .vig{position:absolute;inset:0;background:radial-gradient(ellipse 92% 70% at 50% 22%,transparent 30%,rgba(0,0,0,.9) 100%)}
@@ -404,6 +407,10 @@ body{color:#ececf2 !important;font-family:'Inter',-apple-system,sans-serif;min-h
 <div class="bg">
   <div class="bg-grid"></div>
   <div class="aura"></div>
+  <div class="wm">
+    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 8.2l4.3 2.8 4.3-6 4.3 6 4.3-2.8-1.8 9.3H4.8L3 8.2zM5.5 19h13v1.6h-13V19z"/></svg>
+    <span>YSLEM</span>
+  </div>
   <div class="halo"></div><div class="halo2"></div>
   <div class="vig"></div>
 </div>

@@ -257,6 +257,7 @@ var REVS=[
 {t:'Great support on Discord',p:'Claude Pro'},{t:'Key worked first try',p:'CapCut Pro'}
 ];
 
+var CONTACT={discord:'yslem_dxb',discordInvite:'https://discord.gg/moonn',telegram:'@yslem'};
 var active='all',current=null,qty=1,addonOn=false;
 
 function money(v){return '€'+parseFloat(v).toFixed(2);}
@@ -459,7 +460,7 @@ document.getElementById('tk-sub').addEventListener('click',function(){
   if(pid==='other'){nm='General question';pr='—';}
   else{var pp=P.filter(function(x){return x.id===parseInt(pid,10);})[0];nm=pp.n;pr=money(computeTotal(pp));}
   document.getElementById('ts-id').textContent=id;
-  document.getElementById('ts-n').innerHTML='<strong>'+nm+'</strong> — '+pr+'<br>Payment: '+py+'<br>Contact: '+ct+'<br><br>Save this ticket ID and send it to <strong>@yslem</strong> on Discord or Telegram to complete your order.';
+  document.getElementById('ts-n').innerHTML='<strong>'+nm+'</strong> — '+pr+'<br>Payment: '+py+'<br>Contact: '+ct+'<br><br>Save this ticket ID and send it to <strong>'+CONTACT.discord+'</strong> on Discord (or '+CONTACT.telegram+' on Telegram) to complete your order.';
   document.getElementById('tf').classList.remove('show');
   document.getElementById('ts').classList.add('show');
   var cc=document.getElementById('cc');cc.textContent=parseInt(cc.textContent,10)+1;
@@ -483,9 +484,10 @@ function statusMsg(){
 document.getElementById('d-stat').addEventListener('click',statusMsg);
 document.getElementById('l-stat').addEventListener('click',statusMsg);
 
-function contactMsg(){alert('Contact\n\nDiscord: yslem\nTelegram: @yslem\n\nAvailable 24/7 with fast replies.');}
-document.getElementById('btn-disc').addEventListener('click',contactMsg);
-document.getElementById('f-disc').addEventListener('click',contactMsg);
+function contactMsg(){alert('Contact\n\nDiscord: '+CONTACT.discord+' ('+CONTACT.discordInvite+')\nTelegram: '+CONTACT.telegram+'\n\nAvailable 24/7 with fast replies.');}
+function joinDiscord(){window.open(CONTACT.discordInvite,'_blank','noopener');}
+document.getElementById('btn-disc').addEventListener('click',joinDiscord);
+document.getElementById('f-disc').addEventListener('click',joinDiscord);
 document.getElementById('f-tg').addEventListener('click',contactMsg);
 
 document.getElementById('l-tos').addEventListener('click',function(){alert('Terms of Service\n\nAll sales are final once a product is delivered.\nProducts are resold accounts and keys. They can stop working or be revoked at any time.\nNo uptime, duration or outcome is guaranteed.\nSupport windows listed on product pages are a best effort, not a contractual guarantee.\nYou order at your own risk.');});
