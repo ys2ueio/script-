@@ -50,7 +50,11 @@ const shopRows = Y.shops.map(s => {
   return { shop: s, items, best, cheapest, avg };
 });
 
-const iconsMap = eval('(function(){' + icons.replace('window.YSLEM_ICONS=', 'var I=').replace('window.YSLEM_PAYICONS=', 'var Q=') + ';return I;})()');
+const vm = require('vm');
+const iconsSandbox = { window: {} };
+vm.createContext(iconsSandbox);
+vm.runInContext(icons, iconsSandbox);
+const iconsMap = iconsSandbox.window.YSLEM_ICONS;
 
 function logo(b) { return iconsMap[b] || ''; }
 

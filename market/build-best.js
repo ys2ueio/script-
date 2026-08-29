@@ -7,7 +7,11 @@ function money(v) { return '€' + v.toFixed(2); }
 function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
 const iconsSrc = fs.readFileSync(path.join(DIR, 'icons.js'), 'utf8');
-const iconsMap = eval('(function(){' + iconsSrc.replace('window.YSLEM_ICONS=', 'var I=').replace('window.YSLEM_PAYICONS=', 'var Q=') + ';return I;})()');
+const vm = require('vm');
+const iconsSandbox = { window: {} };
+vm.createContext(iconsSandbox);
+vm.runInContext(iconsSrc, iconsSandbox);
+const iconsMap = iconsSandbox.window.YSLEM_ICONS;
 function logo(b) { return iconsMap[b] || ''; }
 
 // best value per shop = highest saving % vs retail; falls back to cheapest if no retail products
