@@ -1272,72 +1272,128 @@ end)
 switchTab("Farm")
 
 -- ============================================================
--- AIM BAT
+-- AIM BAT — portage exact de "AB" (Bat Aimbot V1) de Moon Hub :
+-- même SPEED (58), même HEIGHT (3.7), même distance de frappe (5),
+-- même cooldown swing (0.2s), même formule de prédiction vélocité
+-- + lookVector, même formule Y (poursuite + clamp au sol), même
+-- rotation par AssemblyAngularVelocity (clamp ±2.5 rad puis *42).
 -- ============================================================
-local _aimBatActive  = false
-local _aimBatConn    = nil
-local _aimBatCooldown = 0
+local AB_SPEED    = 58
+local AB_HEIGHT   = 3.7
+local AB_HIT_DIST = 5
+local AB_HIT_CD   = false
 
-local function _getNearestEnemy()
-	local char = LP.Character
-	local hrp  = char and char:FindFirstChild("HumanoidRootPart")
-	if not hrp then return nil, nil end
-	local best, bestDist, bestHrp = nil, 60, nil
-	for _, pl in ipairs(Players:GetPlayers()) do
-		if pl ~= LP and pl.Character then
-			local eh = pl.Character:FindFirstChild("HumanoidRootPart")
-			local hum = pl.Character:FindFirstChildOfClass("Humanoid")
-			if eh and hum and hum.Health > 0 then
-				local d = (eh.Position - hrp.Position).Magnitude
-				if d < bestDist then bestDist = d; best = pl; bestHrp = eh end
+-- Noms de bat/gear connus (mêmes que Moon Hub — le jeu utilise déjà
+-- la convention "Slap" côté GearGiver, confirmé par l'analyse).
+local BAT_NAMES = {
+	"Bat","Slap","Iron Slap","Gold Slap","Diamond Slap","Emerald Slap",
+	"Ruby Slap","Dark Matter Slap","Flame Slap","Nuclear Slap",
+	"Galaxy Slap","Glitched Slap",
+}
+
+local function _abGetBat()
+	local char = LP.Character; if not char then return nil end
+	for _, name in ipairs(BAT_NAMES) do
+		local t = char:FindFirstChild(name)
+		if t and t:IsA("Tool") then return t end
+	end
+	local bp = LP:FindFirstChildOfClass("Backpack")
+	if bp then
+		for _, name in ipairs(BAT_NAMES) do
+			local t = bp:FindFirstChild(name)
+			if t then return t end
+		end
+	end
+	return nil
+end
+
+local function _abTryHit()
+	if AB_HIT_CD then return end
+	AB_HIT_CD = true
+	pcall(function()
+		local bat = _abGetBat(); if not bat then return end
+		local char = LP.Character
+		local hum  = char and char:FindFirstChildOfClass("Humanoid")
+		if bat.Parent ~= char and hum then pcall(function() hum:EquipTool(bat) end) end
+		pcall(function() bat:Activate() end)
+	end)
+	task.delay(0.2, function() AB_HIT_CD = false end)
+end
+
+local function _abGetClosest()
+	local root = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+	if not root then return nil, math.huge end
+	local closest, minDist = nil, math.huge
+	for _, plr in ipairs(Players:GetPlayers()) do
+		if plr ~= LP and plr.Character then
+			local tr  = plr.Character:FindFirstChild("HumanoidRootPart")
+			local hum = plr.Character:FindFirstChildOfClass("Humanoid")
+			if tr and hum and hum.Health > 0 then
+				local d = (tr.Position - root.Position).Magnitude
+				if d < minDist then minDist = d; closest = plr end
 			end
 		end
 	end
-	return best, bestHrp
+	return closest, minDist
 end
 
+local _aimBatActive = false
+local _aimBatConn    = nil
+
 local function startAimBat()
+	_aimBatActive = true
 	if _aimBatConn then _aimBatConn:Disconnect() end
+	local hum0 = LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
+	if hum0 then hum0.AutoRotate = false end
 	_aimBatConn = RunService.RenderStepped:Connect(function()
 		if not _aimBatActive then return end
-		local _, targetHrp = _getNearestEnemy()
-		if not targetHrp then return end
-		local char = LP.Character
-		local hrp  = char and char:FindFirstChild("HumanoidRootPart")
-		local hum  = char and char:FindFirstChildOfClass("Humanoid")
-		if not hrp or not hum then return end
-		-- aim: rotate HRP toward target
-		local lookCF = CFrame.lookAt(hrp.Position, Vector3.new(targetHrp.Position.X, hrp.Position.Y, targetHrp.Position.Z))
-		hrp.CFrame = lookCF
-		-- swing: find equipped Tool with "bat"/"hit"/"swing" in name and fire
-		local now = tick()
-		if now - _aimBatCooldown < 0.35 then return end
-		_aimBatCooldown = now
-		for _, tool in ipairs(char:GetChildren()) do
-			if tool:IsA("Tool") then
-				local n = tool.Name:lower()
-				if n:find("bat") or n:find("hit") or n:find("punch") or n:find("sword") or n:find("stick") then
-					-- fire ClickDetector / Activate
-					pcall(function() tool:Activate() end)
-					-- also try remotes inside the tool
-					for _, v in ipairs(tool:GetDescendants()) do
-						if v:IsA("RemoteEvent") then
-							local vn = v.Name:lower()
-							if vn:find("hit") or vn:find("swing") or vn:find("attack") or vn:find("damage") then
-								pcall(function() v:FireServer(targetHrp.Position) end)
-							end
-						end
-					end
-					break
-				end
-			end
+		local char = LP.Character; if not char then return end
+		local root = char:FindFirstChild("HumanoidRootPart"); if not root then return end
+		local hum  = char:FindFirstChildOfClass("Humanoid"); if not hum then return end
+		if not char:FindFirstChildOfClass("Tool") then
+			local bat = _abGetBat(); if bat then pcall(function() hum:EquipTool(bat) end) end
 		end
+		local target, dist = _abGetClosest()
+		if not target or not target.Character then return end
+		local tr = target.Character:FindFirstChild("HumanoidRootPart"); if not tr then return end
+
+		local targetVel = tr.AssemblyLinearVelocity
+		local myPos, targetPos = root.Position, tr.Position
+		local predictPos = targetPos + targetVel * 0.14 + tr.CFrame.LookVector * 0.3
+		local direction  = predictPos - myPos
+		local flatDir    = Vector3.new(direction.X, 0, direction.Z).Unit
+		local desiredHeight = targetPos.Y + AB_HEIGHT
+		local yVel = (desiredHeight - myPos.Y) * 19.5 + targetVel.Y * 0.8
+		if hum.FloorMaterial ~= Enum.Material.Air then yVel = math.max(yVel, 13) end
+		yVel = math.clamp(yVel, -70, 110)
+		local desiredVel = Vector3.new(flatDir.X * AB_SPEED, yVel, flatDir.Z * AB_SPEED)
+		root.AssemblyLinearVelocity = root.AssemblyLinearVelocity:Lerp(desiredVel, 0.8)
+
+		local speed3 = targetVel.Magnitude
+		local predictTime = math.clamp(speed3 / 150, 0.05, 0.2)
+		local predictedPos = targetPos + targetVel * predictTime
+		local toPredict = predictedPos - myPos
+		if toPredict.Magnitude > 0.1 then
+			local goalCF = CFrame.lookAt(myPos, predictedPos)
+			local diffCF = root.CFrame:Inverse() * goalCF
+			local rx, ry, rz = diffCF:ToEulerAnglesXYZ()
+			rx = math.clamp(rx, -2.5, 2.5); ry = math.clamp(ry, -2.5, 2.5); rz = math.clamp(rz, -2.5, 2.5)
+			root.AssemblyAngularVelocity = root.CFrame:VectorToWorldSpace(Vector3.new(rx*42, ry*42, rz*42))
+		end
+
+		if dist <= AB_HIT_DIST then _abTryHit() end
 	end)
 end
 
 local function stopAimBat()
-	if _aimBatConn then _aimBatConn:Disconnect(); _aimBatConn = nil end
 	_aimBatActive = false
+	if _aimBatConn then _aimBatConn:Disconnect(); _aimBatConn = nil end
+	AB_HIT_CD = false
+	local char = LP.Character
+	local root = char and char:FindFirstChild("HumanoidRootPart")
+	local hum  = char and char:FindFirstChildOfClass("Humanoid")
+	if root then root.AssemblyLinearVelocity = Vector3.zero; root.AssemblyAngularVelocity = Vector3.zero end
+	if hum then hum.AutoRotate = true end
 end
 
 -- ============================================================
