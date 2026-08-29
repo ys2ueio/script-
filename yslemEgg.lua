@@ -1353,7 +1353,12 @@ local _floatDefs = {
 	{ id = "speed",   label = "Speed",   isToggle = true },
 	{ id = "aimbat",  label = "Aim\nBat", isToggle = true },
 	{ id = "bypass",  label = "Bypass",  isToggle = false },
+	{ id = "lock",    label = "Lock",    isToggle = true },
 }
+
+-- Gèle le drag de TOUS les boutons flottants (y compris lui-même une fois
+-- verrouillé) — même mécanique que le "Lock" de Moon Hub.
+local _floatLocked = false
 
 local _floatBtns = {}  -- id -> { btn, setActive, getActive }
 
@@ -1433,9 +1438,10 @@ local function makeFloatBtn(defIdx, def)
 		end
 	end
 
-	-- drag
+	-- drag (désactivé quand _floatLocked est actif)
 	local drag2, dStart, dPos2 = false, nil, nil
 	btn.InputBegan:Connect(function(inp)
+		if _floatLocked then return end
 		if inp.UserInputType == Enum.UserInputType.MouseButton1
 			or inp.UserInputType == Enum.UserInputType.Touch then
 			drag2 = true; dStart = inp.Position; dPos2 = btn.Position
@@ -1488,7 +1494,17 @@ for i, def in ipairs(_floatDefs) do
 			setAct(true)
 			task.delay(1.5, function() setAct(false) end)
 		end)
+
+	elseif def.id == "lock" then
+		-- Le clic reste toujours actif (MouseButton1Click est indépendant du
+		-- drag InputBegan) — on peut donc toujours re-cliquer Lock pour se
+		-- déverrouiller, même quand tous les boutons sont gelés.
+		_floatBtns["lock"].btn.MouseButton1Click:Connect(function()
+			_floatLocked = not _floatLocked
+			setAct(_floatLocked)
+			setStatus(_floatLocked and "Boutons verrouilles" or "Boutons deverrouilles", C_MOON2)
+		end)
 	end
 end
 
-print("[yslemEgg] Loaded — RightShift hide/show | Float btns: Speed, AimBat, Bypass")
+print("[yslemEgg] Loaded — RightShift hide/show | Float btns: Speed, AimBat, Bypass, Lock")
