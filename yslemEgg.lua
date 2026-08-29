@@ -1210,4 +1210,224 @@ end)
 -- ============================================================
 switchTab("Farm")
 
-print("[yslemEgg] Loaded — RightShift to hide/show")
+-- ============================================================
+-- AIM BAT
+-- ============================================================
+local _aimBatActive  = false
+local _aimBatConn    = nil
+local _aimBatCooldown = 0
+
+local function _getNearestEnemy()
+	local char = LP.Character
+	local hrp  = char and char:FindFirstChild("HumanoidRootPart")
+	if not hrp then return nil, nil end
+	local best, bestDist, bestHrp = nil, 60, nil
+	for _, pl in ipairs(Players:GetPlayers()) do
+		if pl ~= LP and pl.Character then
+			local eh = pl.Character:FindFirstChild("HumanoidRootPart")
+			local hum = pl.Character:FindFirstChildOfClass("Humanoid")
+			if eh and hum and hum.Health > 0 then
+				local d = (eh.Position - hrp.Position).Magnitude
+				if d < bestDist then bestDist = d; best = pl; bestHrp = eh end
+			end
+		end
+	end
+	return best, bestHrp
+end
+
+local function startAimBat()
+	if _aimBatConn then _aimBatConn:Disconnect() end
+	_aimBatConn = RunService.RenderStepped:Connect(function()
+		if not _aimBatActive then return end
+		local _, targetHrp = _getNearestEnemy()
+		if not targetHrp then return end
+		local char = LP.Character
+		local hrp  = char and char:FindFirstChild("HumanoidRootPart")
+		local hum  = char and char:FindFirstChildOfClass("Humanoid")
+		if not hrp or not hum then return end
+		-- aim: rotate HRP toward target
+		local lookCF = CFrame.lookAt(hrp.Position, Vector3.new(targetHrp.Position.X, hrp.Position.Y, targetHrp.Position.Z))
+		hrp.CFrame = lookCF
+		-- swing: find equipped Tool with "bat"/"hit"/"swing" in name and fire
+		local now = tick()
+		if now - _aimBatCooldown < 0.35 then return end
+		_aimBatCooldown = now
+		for _, tool in ipairs(char:GetChildren()) do
+			if tool:IsA("Tool") then
+				local n = tool.Name:lower()
+				if n:find("bat") or n:find("hit") or n:find("punch") or n:find("sword") or n:find("stick") then
+					-- fire ClickDetector / Activate
+					pcall(function() tool:Activate() end)
+					-- also try remotes inside the tool
+					for _, v in ipairs(tool:GetDescendants()) do
+						if v:IsA("RemoteEvent") then
+							local vn = v.Name:lower()
+							if vn:find("hit") or vn:find("swing") or vn:find("attack") or vn:find("damage") then
+								pcall(function() v:FireServer(targetHrp.Position) end)
+							end
+						end
+					end
+					break
+				end
+			end
+		end
+	end)
+end
+
+local function stopAimBat()
+	if _aimBatConn then _aimBatConn:Disconnect(); _aimBatConn = nil end
+	_aimBatActive = false
+end
+
+-- ============================================================
+-- FLOATING BUTTONS (Moon Hub style, right side)
+-- ============================================================
+local FLOAT_SZ  = 46
+local FLOAT_GAP = 8
+local FLOAT_TOP = 80  -- vertical start (below top bar)
+local FLOAT_RIGHT_OFF = 12  -- offset from right edge
+
+-- Float button definitions: {id, label, onClick (toggle), isToggle}
+local _floatDefs = {
+	{ id = "speed",   label = "Speed",   isToggle = true },
+	{ id = "aimbat",  label = "Aim\nBat", isToggle = true },
+	{ id = "bypass",  label = "Bypass",  isToggle = false },
+}
+
+local _floatBtns = {}  -- id -> { btn, setActive, getActive }
+
+local function makeFloatBtn(defIdx, def)
+	local col = (defIdx - 1) % 2
+	local row = math.floor((defIdx - 1) / 2)
+	local xOff = -(FLOAT_SZ * 2 + FLOAT_GAP + FLOAT_RIGHT_OFF) + col * (FLOAT_SZ + FLOAT_GAP)
+	local yOff = FLOAT_TOP + row * (FLOAT_SZ + FLOAT_GAP)
+
+	local btn = Instance.new("TextButton", gui)
+	btn.Name = "YE_Float_"..def.id
+	btn.Size = UDim2.new(0, FLOAT_SZ, 0, FLOAT_SZ)
+	btn.Position = UDim2.new(1, xOff, 0, yOff)
+	btn.BackgroundColor3 = C_ROW
+	btn.BackgroundTransparency = 0
+	btn.BorderSizePixel = 0
+	btn.Text = ""; btn.AutoButtonColor = false
+	btn.ZIndex = 500; btn.Active = true
+	corner(btn, 14)
+	-- living stroke
+	local st2 = Instance.new("UIStroke", btn)
+	st2.Thickness = 1.5
+	st2.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	local stGrad = Instance.new("UIGradient", st2)
+	stGrad.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0,    Color3.fromRGB(4,7,16)),
+		ColorSequenceKeypoint.new(0.25, Color3.fromRGB(14,28,58)),
+		ColorSequenceKeypoint.new(0.5,  Color3.fromRGB(4,7,16)),
+		ColorSequenceKeypoint.new(0.75, Color3.fromRGB(14,28,58)),
+		ColorSequenceKeypoint.new(1,    Color3.fromRGB(4,7,16)),
+	})
+	table.insert(_liveGrads, stGrad)
+
+	-- label
+	local lbl2 = Instance.new("TextLabel", btn)
+	lbl2.Size = UDim2.new(1,0,1,0)
+	lbl2.BackgroundTransparency = 1
+	lbl2.Text = def.label
+	lbl2.TextColor3 = C_WHITE
+	lbl2.Font = Enum.Font.GothamBold
+	lbl2.TextScaled = false; lbl2.TextSize = 9; lbl2.TextWrapped = true
+	lbl2.ZIndex = btn.ZIndex + 1
+	local lGrad = Instance.new("UIGradient", lbl2)
+	lGrad.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0,    Color3.fromRGB(40,80,165)),
+		ColorSequenceKeypoint.new(0.33, Color3.fromRGB(90,150,255)),
+		ColorSequenceKeypoint.new(0.66, Color3.fromRGB(160,210,255)),
+		ColorSequenceKeypoint.new(1,    Color3.fromRGB(40,80,165)),
+	})
+	table.insert(_liveGrads, lGrad)
+	local lPad = Instance.new("UIPadding", lbl2)
+	lPad.PaddingLeft = UDim.new(0,4); lPad.PaddingRight = UDim.new(0,4)
+	lPad.PaddingTop = UDim.new(0,3);  lPad.PaddingBottom = UDim.new(0,3)
+
+	-- active dot (top-right corner, green)
+	local dot = Instance.new("Frame", btn)
+	dot.Name = "Dot"
+	dot.Size = UDim2.new(0,9,0,9)
+	dot.Position = UDim2.new(1,-13,0,4)
+	dot.BackgroundColor3 = Color3.fromRGB(80,230,120)
+	dot.BorderSizePixel = 0
+	dot.ZIndex = lbl2.ZIndex + 1
+	dot.Visible = false
+	corner(dot, 5)
+
+	local _active = false
+	local function setActive(on)
+		_active = on
+		btn.BackgroundColor3 = on and C_ON_BG or C_ROW
+		dot.Visible = on
+		if on then
+			dot.Size = UDim2.new(0,4,0,4)
+			dot.Position = UDim2.new(1,-10.5,0,8.5)
+			TweenService:Create(dot, TweenInfo.new(0.18, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+				Size = UDim2.new(0,9,0,9), Position = UDim2.new(1,-13,0,4),
+			}):Play()
+		end
+	end
+
+	-- drag
+	local drag2, dStart, dPos2 = false, nil, nil
+	btn.InputBegan:Connect(function(inp)
+		if inp.UserInputType == Enum.UserInputType.MouseButton1
+			or inp.UserInputType == Enum.UserInputType.Touch then
+			drag2 = true; dStart = inp.Position; dPos2 = btn.Position
+		end
+	end)
+	UIS.InputChanged:Connect(function(inp)
+		if not drag2 then return end
+		if inp.UserInputType == Enum.UserInputType.MouseMovement
+			or inp.UserInputType == Enum.UserInputType.Touch then
+			local delta = inp.Position - dStart
+			btn.Position = UDim2.new(dPos2.X.Scale, dPos2.X.Offset + delta.X,
+				dPos2.Y.Scale, dPos2.Y.Offset + delta.Y)
+		end
+	end)
+	UIS.InputEnded:Connect(function(inp)
+		if inp.UserInputType == Enum.UserInputType.MouseButton1
+			or inp.UserInputType == Enum.UserInputType.Touch then
+			drag2 = false
+		end
+	end)
+
+	_floatBtns[def.id] = { btn = btn, setActive = setActive, getActive = function() return _active end }
+	return btn, setActive
+end
+
+-- Build float buttons
+for i, def in ipairs(_floatDefs) do
+	local _, setAct = makeFloatBtn(i, def)
+
+	if def.id == "speed" then
+		_floatBtns["speed"].btn.MouseButton1Click:Connect(function()
+			speedOn = not speedOn
+			if speedOn then startSpeed() else stopSpeed() end
+			setAct(speedOn)
+			speedRefresh()  -- sync the in-panel pill too
+		end)
+
+	elseif def.id == "aimbat" then
+		_floatBtns["aimbat"].btn.MouseButton1Click:Connect(function()
+			_aimBatActive = not _aimBatActive
+			setAct(_aimBatActive)
+			if _aimBatActive then startAimBat()
+			else stopAimBat() end
+		end)
+
+	elseif def.id == "bypass" then
+		_floatBtns["bypass"].btn.MouseButton1Click:Connect(function()
+			applyBypass()
+			-- flash the dot briefly to confirm
+			setAct(true)
+			task.delay(1.5, function() setAct(false) end)
+		end)
+	end
+end
+
+print("[yslemEgg] Loaded — RightShift hide/show | Float btns: Speed, AimBat, Bypass")
