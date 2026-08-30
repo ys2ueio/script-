@@ -1363,26 +1363,26 @@ task.spawn(function()
 		end)
 	end
 
-	local function _tryGrabTollbox(target)
+	local _canFireSignal = typeof(firesignal) == "function"
+	local function _tryGrab(target)
 		pcall(function()
-			-- 1. Internal hold handlers (yslem_hub primary path).
 			if target.prompt then
+				-- A. fireproximityprompt — standard exploit primitive.
+				if fireproximityprompt then pcall(fireproximityprompt, target.prompt) end
+				-- B. firesignal on Triggered — proven fallback.
+				if _canFireSignal then pcall(firesignal, target.prompt.Triggered, LP) end
+				-- C. Tollbox extras: internal handlers via getconnections.
 				_initStealData(target.prompt)
-				local d = _stealData[target.prompt]
-				if d and not d.useFallback and #d.hold > 0 then
-					for _, f in ipairs(d.hold) do task.spawn(f) end
-					task.wait(_HOLD_DUR)
-				end
-				-- 2. fireproximityprompt — standard exploit primitive.
-				if fireproximityprompt then
-					pcall(fireproximityprompt, target.prompt)
-				end
-				-- 3. Internal Triggered handlers.
-				if d and not d.useFallback and #d.trigger > 0 then
-					for _, f in ipairs(d.trigger) do task.spawn(f) end
-				end
-				-- 4. InputHoldBegin/End — last-resort fallback.
-				if d and d.useFallback then
+				local sd = _stealData[target.prompt]
+				if sd and not sd.useFallback then
+					if #sd.hold > 0 then
+						for _, f in ipairs(sd.hold) do task.spawn(f) end
+					end
+					if #sd.trigger > 0 then
+						for _, f in ipairs(sd.trigger) do task.spawn(f) end
+					end
+				else
+					-- D. InputHoldBegin/End — last-resort on executors without getconnections.
 					pcall(function()
 						target.prompt:InputHoldBegin()
 						task.wait(_HOLD_DUR)
@@ -1390,11 +1390,11 @@ task.spawn(function()
 					end)
 				end
 			end
-			-- 5. Direct RF carry (always worth trying in parallel).
+			-- E. Direct RF carry (always).
 			if target.uid then
 				_invokeRF("RF/EggWorld/AskFieldEggCarry", target.uid)
 			end
-			-- 6. ClickDetector fallback.
+			-- F. ClickDetector fallback.
 			if target.part and fireclickdetector then
 				for _, d2 in ipairs(target.part:GetChildren()) do
 					if d2:IsA("ClickDetector") then pcall(fireclickdetector, d2) end
@@ -1402,8 +1402,6 @@ task.spawn(function()
 			end
 		end)
 	end
-	-- alias for the grab spam loop below
-	local _tryGrab = _tryGrabTollbox
 
 	while true do
 		task.wait(0.2)
@@ -2220,59 +2218,83 @@ end
 -- impulse (away from LP), launching it clear of the area. Real player
 -- characters are skipped entirely — we never touch another user's
 -- network-owned parts.
-local FLING_RADIUS  = 25   -- stud radius to check for threats
-local FLING_FORCE   = 120  -- launch speed (studs/s)
-local _flingActive  = false
-local _flingConn    = nil
-local _flingT       = 0
+local startFling, stopFling
+do
+	local FLING_RADIUS  = 25
+	local FLING_FORCE   = 140
+	local _flingActive  = false
+	local _flingConn    = nil
+	local _flingHB      = 0
+	local _flingScanT   = 0
+	local _flingNpcHRPs = {}
 
-local function _isPlayerChar(model)
-	for _, plr in ipairs(Players:GetPlayers()) do
-		if plr.Character == model then return true end
+	local function _isPlayerChar(model)
+		for _, plr in ipairs(Players:GetPlayers()) do
+			if plr.Character == model then return true end
+		end
+		return false
 	end
-	return false
-end
 
-local function startFling()
-	if _flingConn then _flingConn:Disconnect(); _flingConn = nil end
-	_flingActive = true
-	_flingT = 0
-	_flingConn = RunService.Heartbeat:Connect(function(dt)
-		if not _flingActive then return end
-		_flingT = _flingT + dt
-		if _flingT < 0.05 then return end
-		_flingT = 0
+	local function _flingApply(hrp, myPos)
+		local diff = hrp.Position - myPos
+		local mag  = diff.Magnitude
+		if mag >= FLING_RADIUS then return end
+		local dir = mag > 0.1
+			and diff.Unit
+			or Vector3.new(math.random()-0.5, 0.5, math.random()-0.5).Unit
+		local vel = dir * FLING_FORCE + Vector3.new(0, 35, 0)
+		pcall(function()
+			if setnworkowner then setnworkowner(hrp, LP) end
+			hrp.AssemblyLinearVelocity = vel
+		end)
+		pcall(function()
+			local bv = Instance.new("BodyVelocity")
+			bv.Velocity = vel; bv.MaxForce = Vector3.new(1e6,1e6,1e6); bv.P = 1e5
+			bv.Parent = hrp
+			task.delay(0.35, function() pcall(function() bv:Destroy() end) end)
+		end)
+	end
 
-		local myChar = LP.Character
-		local myHRP  = myChar and myChar:FindFirstChild("HumanoidRootPart")
-		if not myHRP then return end
-		local myPos  = myHRP.Position
-
-		for _, desc in ipairs(workspace:GetDescendants()) do
-			if desc:IsA("Humanoid") then
-				local model = desc.Parent
-				if model and not _isPlayerChar(model) then
-					local hrp = model:FindFirstChild("HumanoidRootPart")
-					if hrp then
-						local diff = hrp.Position - myPos
-						if diff.Magnitude < FLING_RADIUS then
-							pcall(function()
-								local dir = diff.Magnitude > 0.1
-									and diff.Unit
-									or Vector3.new(math.random()-0.5, 1, math.random()-0.5).Unit
-								hrp.AssemblyLinearVelocity =
-									dir * FLING_FORCE + Vector3.new(0, 30, 0)
-							end)
+	startFling = function()
+		if _flingConn then _flingConn:Disconnect(); _flingConn = nil end
+		_flingActive = true; _flingHB = 0; _flingScanT = 0; _flingNpcHRPs = {}
+		_flingConn = RunService.Heartbeat:Connect(function(dt)
+			if not _flingActive then return end
+			-- Rebuild NPC list every 0.5 s — avoids per-frame GetDescendants.
+			_flingScanT = _flingScanT + dt
+			if _flingScanT >= 0.5 then
+				_flingScanT = 0
+				local found = {}
+				for _, desc in ipairs(workspace:GetDescendants()) do
+					if desc:IsA("Humanoid") then
+						local mdl = desc.Parent
+						if mdl and not _isPlayerChar(mdl) then
+							local h = mdl:FindFirstChild("HumanoidRootPart")
+							if h then found[#found+1] = h end
 						end
 					end
 				end
+				_flingNpcHRPs = found
 			end
-		end
-	end)
-end
-local function stopFling()
-	_flingActive = false
-	if _flingConn then _flingConn:Disconnect(); _flingConn = nil end
+			-- Apply every 0.05 s using the cached list.
+			_flingHB = _flingHB + dt
+			if _flingHB < 0.05 then return end
+			_flingHB = 0
+			local myChar = LP.Character
+			local myHRP  = myChar and myChar:FindFirstChild("HumanoidRootPart")
+			if not myHRP then return end
+			local myPos  = myHRP.Position
+			for _, hrp in ipairs(_flingNpcHRPs) do
+				if hrp and hrp.Parent then _flingApply(hrp, myPos) end
+			end
+		end)
+	end
+
+	stopFling = function()
+		_flingActive = false
+		if _flingConn then _flingConn:Disconnect(); _flingConn = nil end
+		_flingNpcHRPs = {}
+	end
 end
 
 -- ============================================================
