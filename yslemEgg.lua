@@ -1148,8 +1148,8 @@ if not gui.Parent then gui.Parent = LP.PlayerGui end
 -- Main window — compact size (reduced from the original 300x340), spawns centered on screen.
 local main = Instance.new("Frame", gui)
 main.Name = "Main"
-main.Size = UDim2.new(0,264,0,296)
-main.Position = UDim2.new(0.5,-132,0.5,-148)
+main.Size = UDim2.new(0,248,0,268)
+main.Position = UDim2.new(0.5,-124,0.5,-134)
 main.BackgroundColor3 = C.BG
 main.BorderSizePixel = 0
 main.ClipsDescendants = true
@@ -1336,32 +1336,74 @@ task.spawn(function()
 	end
 	_farmFullStopRef = _farmFullStop
 
-	-- Try every known grab trigger on a target — never assumes only one
-	-- mechanism is right for this game build/executor.
-	local _canFireSignal = typeof(firesignal) == "function"
-	local function _tryGrab(target)
+	-- Tollbox grab engine: mirrors yslem_hub AutoSteal approach.
+	-- Per-prompt data is cached on first encounter: extract internal
+	-- PromptButtonHoldBegan / Triggered handlers via getconnections()
+	-- so we can fire them directly (most reliable), then fall through to
+	-- fireproximityprompt → InputHoldBegin/End as progressively coarser
+	-- fallbacks.
+	local _stealData  = {}
+	local _HOLD_DUR   = 0.12  -- seconds, matches typical hold-prompt threshold
+
+	local function _initStealData(prompt)
+		if _stealData[prompt] then return end
+		local d = {hold={}, trigger={}, useFallback=true}
+		_stealData[prompt] = d
 		pcall(function()
-			if target.prompt then
-				-- fireproximityprompt is the standard exploit primitive for
-				-- this, but not every executor implements it — firesignal on
-				-- the prompt's own Triggered event (with LP as the arg, its
-				-- real signature) is a proven fallback, and it's the same
-				-- primitive already confirmed working elsewhere in this hub
-				-- (Auto Hatch/Equip's UI button clicks).
-				if fireproximityprompt then pcall(fireproximityprompt, target.prompt) end
-				if _canFireSignal then pcall(firesignal, target.prompt.Triggered, LP) end
+			if type(getconnections) ~= "function" then return end
+			for _, c in ipairs(getconnections(prompt.PromptButtonHoldBegan)) do
+				if c.Function then table.insert(d.hold, c.Function) end
 			end
+			for _, c in ipairs(getconnections(prompt.Triggered)) do
+				if c.Function then table.insert(d.trigger, c.Function) end
+			end
+			if #d.hold > 0 or #d.trigger > 0 then
+				d.useFallback = false
+			end
+		end)
+	end
+
+	local function _tryGrabTollbox(target)
+		pcall(function()
+			-- 1. Internal hold handlers (yslem_hub primary path).
+			if target.prompt then
+				_initStealData(target.prompt)
+				local d = _stealData[target.prompt]
+				if d and not d.useFallback and #d.hold > 0 then
+					for _, f in ipairs(d.hold) do task.spawn(f) end
+					task.wait(_HOLD_DUR)
+				end
+				-- 2. fireproximityprompt — standard exploit primitive.
+				if fireproximityprompt then
+					pcall(fireproximityprompt, target.prompt)
+				end
+				-- 3. Internal Triggered handlers.
+				if d and not d.useFallback and #d.trigger > 0 then
+					for _, f in ipairs(d.trigger) do task.spawn(f) end
+				end
+				-- 4. InputHoldBegin/End — last-resort fallback.
+				if d and d.useFallback then
+					pcall(function()
+						target.prompt:InputHoldBegin()
+						task.wait(_HOLD_DUR)
+						target.prompt:InputHoldEnd()
+					end)
+				end
+			end
+			-- 5. Direct RF carry (always worth trying in parallel).
 			if target.uid then
 				_invokeRF("RF/EggWorld/AskFieldEggCarry", target.uid)
 			end
-			-- Generic ClickDetector fallback, if the egg's part has one.
+			-- 6. ClickDetector fallback.
 			if target.part and fireclickdetector then
-				for _, d in ipairs(target.part:GetChildren()) do
-					if d:IsA("ClickDetector") then pcall(fireclickdetector, d) end
+				for _, d2 in ipairs(target.part:GetChildren()) do
+					if d2:IsA("ClickDetector") then pcall(fireclickdetector, d2) end
 				end
 			end
 		end)
 	end
+	-- alias for the grab spam loop below
+	local _tryGrab = _tryGrabTollbox
 
 	while true do
 		task.wait(0.2)
@@ -1839,24 +1881,9 @@ local function startESP()
 				p.CFrame = r.cf
 				p.Parent = workspace
 
-				local box = Instance.new("SelectionBox")
-				box.Adornee = p; box.Color3 = col
-				box.LineThickness = hasRareTag and 0.1 or 0.05
-				box.SurfaceTransparency = 0.7; box.SurfaceColor3 = col
-				box.Parent = p
-
-				-- Semi-transparent background panel: without it the text
-				-- gets lost against a light/busy ground or scenery, even
-				-- with the outline (TextStroke) already in place.
 				local bb = Instance.new("BillboardGui")
-				bb.Size = UDim2.fromOffset(220,54); bb.AlwaysOnTop = true; bb.MaxDistance = ESP_MAX_DIST
+				bb.Size = UDim2.fromOffset(180,48); bb.AlwaysOnTop = true; bb.MaxDistance = ESP_MAX_DIST
 				bb.Parent = p
-
-				local bg = Instance.new("Frame", bb)
-				bg.Size = UDim2.new(1,4,1,4); bg.Position = UDim2.new(0,-2,0,-2)
-				bg.BackgroundColor3 = Color3.fromRGB(0,0,0); bg.BackgroundTransparency = 0.4
-				bg.BorderSizePixel = 0
-				corner(bg, 6)
 
 				-- 3 lines: name (rarity if known), status, weight+distance+zone
 				local nameLbl = Instance.new("TextLabel", bb)
@@ -2185,49 +2212,62 @@ do
 end
 
 -- ============================================================
--- FLING — self-launch only (the local player only)
+-- FLING — proximity ejection (NPCs / guards that approach LP)
 -- ============================================================
--- Note: a version that would take physical control (NetworkOwner) of
--- OTHER players to forcibly launch them is NOT implemented here — that
--- amounts to manipulating other real people's characters without their
--- consent, which is outside the scope of a tool for your own account.
--- This button ONLY launches your own character (traversal/fun), with
--- no effect on other players.
--- FLING — infinite aerial toggle.
--- First click: launches the character upward (80 studs/s initial impulse)
--- then holds them in the air by clamping Y velocity to ≥ 4 every RenderStepped
--- frame (the character stays aloft indefinitely, slowly drifting upward).
--- Second click: releases the hold → normal gravity takes over, character falls.
-local _flingActive = false
-local _flingConn = nil
+-- Heartbeat loop: every 0.05 s, scan all workspace Humanoid models
+-- within FLING_RADIUS studs of the local player. Any model that is
+-- NOT a real player character gets an outward AssemblyLinearVelocity
+-- impulse (away from LP), launching it clear of the area. Real player
+-- characters are skipped entirely — we never touch another user's
+-- network-owned parts.
+local FLING_RADIUS  = 25   -- stud radius to check for threats
+local FLING_FORCE   = 120  -- launch speed (studs/s)
+local _flingActive  = false
+local _flingConn    = nil
+local _flingT       = 0
+
+local function _isPlayerChar(model)
+	for _, plr in ipairs(Players:GetPlayers()) do
+		if plr.Character == model then return true end
+	end
+	return false
+end
+
 local function startFling()
 	if _flingConn then _flingConn:Disconnect(); _flingConn = nil end
-	local myChar = LP.Character
-	local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
-	if not myRoot then return end
 	_flingActive = true
-	-- Initial launch
-	pcall(function()
-		myRoot.AssemblyLinearVelocity = Vector3.new(
-			myRoot.AssemblyLinearVelocity.X, 80,
-			myRoot.AssemblyLinearVelocity.Z)
-	end)
-	-- Hold in the air: clamp Y velocity so it never goes below 4 studs/s.
-	-- Physics applies gravity each frame (~3.3 studs/s reduction at 60fps),
-	-- our clamp re-applies 4, resulting in a gentle upward drift while the
-	-- character stays airborne indefinitely. No PlatformStand needed — the
-	-- character keeps full physics/collision and can still walk horizontally.
-	_flingConn = RunService.RenderStepped:Connect(function()
+	_flingT = 0
+	_flingConn = RunService.Heartbeat:Connect(function(dt)
 		if not _flingActive then return end
-		local char = LP.Character
-		local hrp = char and char:FindFirstChild("HumanoidRootPart")
-		if not hrp then return end
-		pcall(function()
-			local v = hrp.AssemblyLinearVelocity
-			if v.Y < 4 then
-				hrp.AssemblyLinearVelocity = Vector3.new(v.X, 4, v.Z)
+		_flingT = _flingT + dt
+		if _flingT < 0.05 then return end
+		_flingT = 0
+
+		local myChar = LP.Character
+		local myHRP  = myChar and myChar:FindFirstChild("HumanoidRootPart")
+		if not myHRP then return end
+		local myPos  = myHRP.Position
+
+		for _, desc in ipairs(workspace:GetDescendants()) do
+			if desc:IsA("Humanoid") then
+				local model = desc.Parent
+				if model and not _isPlayerChar(model) then
+					local hrp = model:FindFirstChild("HumanoidRootPart")
+					if hrp then
+						local diff = hrp.Position - myPos
+						if diff.Magnitude < FLING_RADIUS then
+							pcall(function()
+								local dir = diff.Magnitude > 0.1
+									and diff.Unit
+									or Vector3.new(math.random()-0.5, 1, math.random()-0.5).Unit
+								hrp.AssemblyLinearVelocity =
+									dir * FLING_FORCE + Vector3.new(0, 30, 0)
+							end)
+						end
+					end
+				end
 			end
-		end)
+		end
 	end)
 end
 local function stopFling()
@@ -2712,15 +2752,15 @@ do
 	end)
 end
 
-local minimized, fullHeight = false, 296
+local minimized, fullHeight = false, 268
 minBtn.MouseButton1Click:Connect(function()
 	minimized = not minimized
 	if minimized then
-		TweenService:Create(main, TweenInfo.new(0.2), {Size=UDim2.new(0,264,0,42)}):Play()
+		TweenService:Create(main, TweenInfo.new(0.2), {Size=UDim2.new(0,248,0,42)}):Play()
 		contentArea.Visible = false; sep.Visible = false; tabBar.Visible = false
 		minBtn.Text = "+"
 	else
-		TweenService:Create(main, TweenInfo.new(0.2), {Size=UDim2.new(0,264,0,fullHeight)}):Play()
+		TweenService:Create(main, TweenInfo.new(0.2), {Size=UDim2.new(0,248,0,fullHeight)}):Play()
 		contentArea.Visible = true; sep.Visible = true; tabBar.Visible = true
 		minBtn.Text = "–"
 	end
