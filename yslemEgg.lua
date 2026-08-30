@@ -344,16 +344,69 @@ pcall(function()
 	end)
 end)
 
--- Diagnostic AskFieldEggSnapshot (one-off snapshot, not used for farming)
+-- AskFieldEggSnapshot — periodic poll (every 3s while Auto Farm is active).
+-- More reliable than FieldEggShifted alone: directly requests the server's
+-- current live list of field eggs (with real UIDs), so Auto Farm has valid
+-- targets even when the push event doesn't fire.
+-- Also printed once on load for diagnostics.
 local _snapshotDebugPrinted = false
-task.delay(2, function()
-	if _snapshotDebugPrinted then return end
-	local ok, snap = _invokeRF("RF/EggWorld/AskFieldEggSnapshot")
-	if not ok or type(snap) ~= "table" then return end
-	_snapshotDebugPrinted = true
-	local dumpOk, dump = pcall(function() return HttpService:JSONEncode(snap) end)
-	print("[yslemEgg] AskFieldEggSnapshot:")
-	print(dumpOk and dump:sub(1, 800) or "<not serializable>")
+task.spawn(function()
+	while true do
+		task.wait(3)
+		local ok, snap = _invokeRF("RF/EggWorld/AskFieldEggSnapshot")
+		if ok and type(snap) ~= "table" then ok = false end
+		if not ok then
+			if not _snapshotDebugPrinted then
+				_snapshotDebugPrinted = true
+				print("[yslemEgg] AskFieldEggSnapshot: unavailable or returned non-table")
+			end
+		else
+			if not _snapshotDebugPrinted then
+				_snapshotDebugPrinted = true
+				local dumpOk, dump = pcall(function() return HttpService:JSONEncode(snap) end)
+				print("[yslemEgg] AskFieldEggSnapshot (first result):")
+				print(dumpOk and dump:sub(1, 800) or "<not serializable>")
+			end
+			-- Seed _fieldEggNet with every egg in the snapshot.
+			-- Keyed by UID (string), so the farm loop can call
+			-- AskFieldEggCarry with the real id — never with a made-up one.
+			local now2 = tick()
+			pcall(function()
+				for uid, data in pairs(snap) do
+					local uid2 = tostring(uid)
+					if type(data) == "table" then
+						local cf2, pos2
+						if typeof(data.BoundsCFrame) == "CFrame" then
+							cf2 = data.BoundsCFrame; pos2 = cf2.Position
+						elseif typeof(data.BottomCFrame) == "CFrame" then
+							cf2 = data.BottomCFrame; pos2 = cf2.Position
+						elseif typeof(data.CFrame) == "CFrame" then
+							cf2 = data.CFrame; pos2 = cf2.Position
+						end
+						if pos2 then
+							local mutation = type(data.Mutation) == "string" and data.Mutation or nil
+							local nestScale = type(data.NestScale) == "number" and data.NestScale or nil
+							local zone = _posToZone(pos2)
+							local tags2 = {}
+							local low2 = (mutation or ""):lower()
+							for _, kw in ipairs(_RARE_KEYWORDS) do
+								if low2:find(kw,1,true) then table.insert(tags2, kw) end
+							end
+							-- Only add if not already present (FieldEggShifted may have a
+							-- fresher entry with the same uid — don't overwrite it).
+							if not _fieldEggNet[uid2] then
+								_fieldEggNet[uid2] = {
+									pos=pos2, cf=cf2, mutation=mutation, nestScale=nestScale,
+									zone=zone, tags=tags2, uid=uid2,
+									t=now2, enabled=true, farmable=true,
+								}
+							end
+						end
+					end
+				end
+			end)
+		end
+	end
 end)
 
 local _eggScanSlotsFound, _eggScanPromptTotal, _eggScanPromptEnabled = false, 0, 0
@@ -1183,7 +1236,7 @@ end
 
 local CONTENT_Y = TAB_Y + 28 + 6
 local contentArea = Instance.new("Frame", main)
-contentArea.Size = UDim2.new(1,0,1,-CONTENT_Y-22)
+contentArea.Size = UDim2.new(1,0,1,-CONTENT_Y)
 contentArea.Position = UDim2.new(0,0,0,CONTENT_Y)
 contentArea.BackgroundTransparency = 1
 contentArea.ClipsDescendants = true
@@ -1235,34 +1288,8 @@ for _, name in ipairs(TABS) do
 	tabBtns[name].MouseButton1Click:Connect(function() switchTab(name) end)
 end
 
--- Status bar
-local statusBar = Instance.new("Frame", main)
-statusBar.Size = UDim2.new(1,0,0,22)
-statusBar.Position = UDim2.new(0,0,1,-22)
-statusBar.BackgroundColor3 = Color3.fromRGB(5,6,9)
-statusBar.BorderSizePixel = 0
-
-local statusDot = Instance.new("Frame", statusBar)
-statusDot.Size = UDim2.new(0,6,0,6)
-statusDot.Position = UDim2.new(0,10,0.5,-3)
-statusDot.BackgroundColor3 = C.DIM
-statusDot.BorderSizePixel = 0
-corner(statusDot, 3)
-
-local statusLbl = Instance.new("TextLabel", statusBar)
-statusLbl.BackgroundTransparency = 1
-statusLbl.Size = UDim2.new(1,-24,1,0)
-statusLbl.Position = UDim2.new(0,22,0,0)
-statusLbl.Text = "Idle"
-statusLbl.TextSize = 10; statusLbl.Font = Enum.Font.Gotham
-statusLbl.TextColor3 = C.DIM
-statusLbl.TextXAlignment = Enum.TextXAlignment.Left
-
-local function setStatus(txt, col)
-	statusLbl.Text = txt
-	statusLbl.TextColor3 = col or C.DIM
-	statusDot.BackgroundColor3 = col or C.DIM
-end
+-- Status bar removed — all setStatus calls are silent no-ops.
+local function setStatus(_txt, _col) end
 
 -- ============================================================
 -- FARM TAB
@@ -2166,19 +2193,42 @@ end
 -- consent, which is outside the scope of a tool for your own account.
 -- This button ONLY launches your own character (traversal/fun), with
 -- no effect on other players.
+-- FLING — infinite aerial toggle.
+-- First click: launches the character upward (80 studs/s initial impulse)
+-- then holds them in the air by clamping Y velocity to ≥ 4 every RenderStepped
+-- frame (the character stays aloft indefinitely, slowly drifting upward).
+-- Second click: releases the hold → normal gravity takes over, character falls.
 local _flingActive = false
 local _flingConn = nil
 local function startFling()
 	if _flingConn then _flingConn:Disconnect(); _flingConn = nil end
 	local myChar = LP.Character
 	local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
-	if not myRoot then setStatus("Fling: character not found", C.RED); return end
-	pcall(function()
-		myRoot.AssemblyLinearVelocity = Vector3.new(myRoot.AssemblyLinearVelocity.X, 90, myRoot.AssemblyLinearVelocity.Z)
-	end)
+	if not myRoot then return end
 	_flingActive = true
-	setStatus("Fling!", C.GREEN)
-	task.delay(0.3, function() _flingActive = false end)
+	-- Initial launch
+	pcall(function()
+		myRoot.AssemblyLinearVelocity = Vector3.new(
+			myRoot.AssemblyLinearVelocity.X, 80,
+			myRoot.AssemblyLinearVelocity.Z)
+	end)
+	-- Hold in the air: clamp Y velocity so it never goes below 4 studs/s.
+	-- Physics applies gravity each frame (~3.3 studs/s reduction at 60fps),
+	-- our clamp re-applies 4, resulting in a gentle upward drift while the
+	-- character stays airborne indefinitely. No PlatformStand needed — the
+	-- character keeps full physics/collision and can still walk horizontally.
+	_flingConn = RunService.RenderStepped:Connect(function()
+		if not _flingActive then return end
+		local char = LP.Character
+		local hrp = char and char:FindFirstChild("HumanoidRootPart")
+		if not hrp then return end
+		pcall(function()
+			local v = hrp.AssemblyLinearVelocity
+			if v.Y < 4 then
+				hrp.AssemblyLinearVelocity = Vector3.new(v.X, 4, v.Z)
+			end
+		end)
+	end)
 end
 local function stopFling()
 	_flingActive = false
@@ -2610,11 +2660,14 @@ for i, def in ipairs(_floatDefs) do
 			setAct(_bypassOn)
 		end)
 	elseif def.id == "fling" then
-		-- One-off action (self-launch): flash the green dot, like Hopper.
+		-- Persistent toggle: green dot = actively held in the air.
+		-- Click once → launch + hold aloft. Click again → release, fall normally.
 		_floatBtns["fling"].btn.MouseButton1Click:Connect(function()
-			setAct(true)
-			startFling()
-			task.delay(0.4, function() setAct(false) end)
+			if _flingActive then
+				stopFling(); setAct(false)
+			else
+				startFling(); setAct(true)
+			end
 		end)
 	elseif def.id == "hopper" then
 		-- One-off action (not a persistent on/off): flash the green dot
@@ -2664,11 +2717,11 @@ minBtn.MouseButton1Click:Connect(function()
 	minimized = not minimized
 	if minimized then
 		TweenService:Create(main, TweenInfo.new(0.2), {Size=UDim2.new(0,264,0,42)}):Play()
-		contentArea.Visible = false; sep.Visible = false; tabBar.Visible = false; statusBar.Visible = false
+		contentArea.Visible = false; sep.Visible = false; tabBar.Visible = false
 		minBtn.Text = "+"
 	else
 		TweenService:Create(main, TweenInfo.new(0.2), {Size=UDim2.new(0,264,0,fullHeight)}):Play()
-		contentArea.Visible = true; sep.Visible = true; tabBar.Visible = true; statusBar.Visible = true
+		contentArea.Visible = true; sep.Visible = true; tabBar.Visible = true
 		minBtn.Text = "–"
 	end
 end)
