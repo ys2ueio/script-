@@ -107,6 +107,45 @@ do
 	print(table.concat(lines, "\n"))
 end
 
+-- ── REMOTES CONFIRMÉS (Packages.Networking) ─────────────────
+-- Le rapport d'analyse yslemEgg a listé EN DIRECT (pas deviné) les
+-- vrais RemoteEvent/RemoteFunction du jeu sous
+-- ReplicatedStorage.Packages.Networking — leur NOM contient déjà le
+-- "chemin" complet sous forme de chaîne à slash (ex: instance nommée
+-- littéralement "RF/AwayEarnings/AskCollect", parentée directement
+-- sous Networking — pas une vraie hiérarchie de dossiers imbriqués).
+-- Bien plus fiable que les modules Library.*/Directory.* (0/16
+-- chargés, confirmé par capture d'écran) : ces remotes existent
+-- réellement, on les appelle en direct via InvokeServer/FireServer.
+local _NetworkingFolder = ReplicatedStorage:FindFirstChild("Packages")
+_NetworkingFolder = _NetworkingFolder and _NetworkingFolder:FindFirstChild("Networking")
+
+local function _getRemote(name)
+	if not _NetworkingFolder then return nil end
+	return _NetworkingFolder:FindFirstChild(name)
+end
+
+-- Invoque un RemoteFunction confirmé par son nom exact. Retourne
+-- (true, résultat) si l'appel aboutit, (false, raison) sinon — jamais
+-- d'erreur qui remonte, toujours sûr d'appeler même avec de mauvais
+-- arguments (le serveur rejette proprement, aucun risque de dégât).
+local function _invokeRF(name, ...)
+	local r = _getRemote(name)
+	if not r then return false, "introuvable" end
+	if not r:IsA("RemoteFunction") then return false, "pas une RemoteFunction" end
+	local ok, result = pcall(function(...) return r:InvokeServer(...) end, ...)
+	if ok then return true, result end
+	return false, result
+end
+
+local function _fireRE(name, ...)
+	local r = _getRemote(name)
+	if not r then return false end
+	if not r:IsA("RemoteEvent") then return false end
+	local ok = pcall(function(...) r:FireServer(...) end, ...)
+	return ok
+end
+
 -- ── ZONES GARDÉES : Speed Power requis par zone ─────────────
 -- Reproduit le calcul du jeu lui-même (RGSR = ResolveGuardSpeedRequirement)
 -- pour savoir si une zone (Forest/Desert/Prehistoric/...) est
@@ -905,103 +944,99 @@ end)
 
 makeRow(farmPage, "autoEquip", "Auto Equip Best", function(on) end)
 
--- ── AUTO CLAIM — index/free gifts/offline assets/group reward ──
+-- ── AUTO CLAIM — remotes confirmés par le rapport d'analyse ──
+-- AskCollect (gains hors-ligne), AskRedeemAll (codex), RedeemPerk
+-- (récompense de groupe) — les 3 vus réellement dans
+-- ReplicatedStorage.Packages.Networking, tous sans coût (récupèrent
+-- des gains déjà acquis, ne dépensent rien). InvokeServer sans
+-- argument : si un remote en attend un, le serveur rejette
+-- proprement, aucun risque.
 task.spawn(function()
 	local lastClaim = 0
 	while true do
 		task.wait(1)
 		if St.autoClaim and (os.clock() - lastClaim) >= 5 then
 			lastClaim = os.clock()
-			pcall(function()
-				if Network and NM then
-					if NM.Index and NM.Index.REQUEST_CLAIM_ALL then Network.Invoke(NM.Index.REQUEST_CLAIM_ALL) end
-					if NM.FreeGifts and NM.FreeGifts.REQUEST_CLAIM then Network.Invoke(NM.FreeGifts.REQUEST_CLAIM) end
-					if NM.OfflineAssets and NM.OfflineAssets.REQUEST_REDEEM then Network.Invoke(NM.OfflineAssets.REQUEST_REDEEM) end
-					if NM.GroupReward and NM.GroupReward.CLAIM_REWARD then Network.Invoke(NM.GroupReward.CLAIM_REWARD) end
-				end
-			end)
+			local okAway = _invokeRF("RF/AwayEarnings/AskCollect")
+			local okCodex = _invokeRF("RF/Codex/AskRedeemAll")
+			local okGroup = _invokeRF("RF/GroupPerk/RedeemPerk")
+			if okAway or okCodex or okGroup then
+				setStatus("Claim: away/codex/group tentes", C_GREEN)
+			end
 		end
 	end
 end)
 
 makeRow(farmPage, "autoClaim", "Auto Claim", function(on) end)
 
--- ── AUTO UPGRADE — vraies conditions d'argent (Save.Get + Directory) ──
--- Reproduit exactement tryUpgradePen / tryUpgradeTreadmill / tryBuyTrails
--- de la source d'origine : lit le vrai solde du joueur (Save.Get()) et
--- le vrai coût du prochain palier (Bases/Treadmills/Trails directory)
--- avant d'acheter — jamais de tentative gaspillée sur un remote générique.
-local function tryUpgradePen(data)
-	local nextLevel = data.BaseUpgradeLevel + 1
-	local nextConfig = Bases and Bases.BASES and Bases.BASES[nextLevel]
-	if nextConfig == nil then return end
-	if data.Money >= nextConfig.Cost then
-		pcall(function() Network.Fire(PlotsNet.REQUEST_BASE_UPGRADE) end)
-	end
-end
-
-local function tryUpgradeTreadmill(data)
-	local nextLevel = data.TreadmillUpgradeLevel + 1
-	local nextConfig = Treadmills and Treadmills.GetByUpgradeLevel and Treadmills.GetByUpgradeLevel(nextLevel)
-	if nextConfig == nil then return end
-	if data.Money >= nextConfig.Price then
-		pcall(function() Network.Invoke(TreadmillsNet.REQUEST_UPGRADE, nextConfig._id) end)
-	end
-end
-
-local function tryBuyTrails(data)
-	if not Trails or not Trails.Directory then return end
-	local affordable = {}
-	for name, cfg in pairs(Trails.Directory) do
-		if cfg.DisplayInShop and not data.TrailInventory[name] then
-			if data.Money >= cfg.Price then
-				table.insert(affordable, {name = name, price = cfg.Price})
-			end
-		end
-	end
-	table.sort(affordable, function(a, b) return a.price < b.price end)
-	if #affordable > 0 then
-		local target = affordable[#affordable]
-		pcall(function() Network.Invoke(TrailsNet.REQUEST_PURCHASE, target.name) end)
-	end
-end
-
+-- ── AUTO UPGRADE PEN — "+1 EQUIP" (confirmé par capture d'écran) ──
+-- Le panneau Pen Roster montre un bouton "+1 EQUIP [$1T]" — coût en
+-- argent du jeu uniquement (pas de Robux visible). RF/PenRoster/
+-- AskWearLimit est le remote le plus probable pour "augmenter la
+-- limite d'équipement" vu son nom — best-effort, pcall protégé, le
+-- serveur rejette si le nom/args ne correspondent pas exactement.
 task.spawn(function()
-	local lastPen, lastTM, lastTrail = 0, 0, 0
+	local lastPen = 0
 	while true do
-		task.wait(1.5)
-		if St.autoUpgradePen or St.autoUpgradeTM or St.autoBuyTrails then
-			local ok, data = pcall(function() return Save and Save.Get and Save.Get() end)
-			if ok and data then
-				local now = os.clock()
-				if St.autoUpgradePen and PlotsNet and (now - lastPen > 1.5) then
-					pcall(tryUpgradePen, data); lastPen = now
-				end
-				if St.autoUpgradeTM and TreadmillsNet and (now - lastTM > 1.5) then
-					pcall(tryUpgradeTreadmill, data); lastTM = now
-				end
-				if St.autoBuyTrails and TrailsNet and (now - lastTrail > 3) then
-					pcall(tryBuyTrails, data); lastTrail = now
-				end
-			end
+		task.wait(2)
+		if St.autoUpgradePen and (os.clock() - lastPen) >= 3 then
+			lastPen = os.clock()
+			local ok = _invokeRF("RF/PenRoster/AskWearLimit")
+			if ok then setStatus("Pen: +1 Equip tente", C_GREEN) end
 		end
 	end
 end)
 
 makeRow(farmPage, "autoUpgradePen", "Auto Upgrade Pen", function(on) end)
-makeRow(farmPage, "autoUpgradeTM", "Auto Upgrade Treadmill", function(on) end)
-makeRow(farmPage, "autoBuyTrails", "Auto Buy Trails", function(on) end)
 
--- ── AUTO RUN TREADMILL ───────────────────────────────────────
--- Désactive le mode "lent" du tapis roulant en continu (comme la
--- source d'origine) — permet de rester en vitesse normale sur le
--- tapis au lieu de la vitesse ralentie par défaut du jeu.
+-- ── AUTO UPGRADE TREADMILL — "Tier Raise" (confirmé) ──────────
+task.spawn(function()
+	local lastTM = 0
+	while true do
+		task.wait(2)
+		if St.autoUpgradeTM and (os.clock() - lastTM) >= 3 then
+			lastTM = os.clock()
+			local ok = _invokeRF("RF/Treadmill/AskTierRaise")
+			if ok then setStatus("Treadmill: tier raise tente", C_GREEN) end
+		end
+	end
+end)
+
+makeRow(farmPage, "autoUpgradeTM", "Auto Upgrade Treadmill", function(on) end)
+
+-- ── AUTO BUY TRAILS — volontairement PAS automatisé ──────────
+-- Le Trail Shop (capture d'écran) affiche des prix MIXTES : certains
+-- trails coûtent de l'argent du jeu ($300T), d'autres affichent EN
+-- PLUS une icône Robux (999) à côté — impossible de distinguer les
+-- deux depuis le client de façon fiable sans risquer de déclencher un
+-- achat qui débite de vrais Robux. Par sécurité ("sans rien
+-- endommager"), ce toggle reste un no-op : l'équipement/déséquipement
+-- de trails DÉJÀ possédés serait sûr (AskChoose/AskDoff, aucun coût),
+-- mais l'achat (AskPurchase) est laissé 100% manuel.
+-- [FIX pattern forward-reference] makeRow() rafraîchit le pill AVANT
+-- d'appeler onToggle — si on remet St[key] à false à l'intérieur de
+-- onToggle, le pill affiche encore "ON" tant qu'on ne rappelle pas son
+-- propre refresh(). buyTrailsRefresh doit être déclaré AVANT la
+-- closure qui le référence (même piège forward-reference que
+-- _bypassPillRefresh plus haut dans ce fichier).
+local buyTrailsRefresh
+local _, _, _r1 = makeRow(farmPage, "autoBuyTrails", "Auto Buy Trails", function(on)
+	if on then
+		setStatus("Buy Trails: desactive par securite (prix Robux)", C_YELLOW)
+		St.autoBuyTrails = false
+		if buyTrailsRefresh then buyTrailsRefresh() end
+	end
+end)
+buyTrailsRefresh = _r1
+
+-- ── AUTO RUN TREADMILL — désactive "Slow Mode" (confirmé) ────
+-- Le toggle "Slow Mode" visible en jeu (capture d'écran, bas-gauche)
+-- correspond à RF/Treadmill/AskSlowToggleSet(bool) — false = vitesse
+-- normale au lieu du mode ralenti par défaut.
 task.spawn(function()
 	while true do
-		if St.autoRunTreadmill and TreadmillsNet then
-			pcall(function()
-				Network.Invoke(TreadmillsNet.REQUEST_SET_SLOW_TOGGLE_ENABLED, false)
-			end)
+		if St.autoRunTreadmill then
+			_invokeRF("RF/Treadmill/AskSlowToggleSet", false)
 		end
 		task.wait(10)
 	end
