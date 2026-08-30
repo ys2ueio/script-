@@ -64,6 +64,21 @@ PlotsNet      = Constants and Constants.NETWORK_MAP and Constants.NETWORK_MAP.Pl
 TreadmillsNet = Constants and Constants.NETWORK_MAP and Constants.NETWORK_MAP.Treadmills
 TrailsNet     = Constants and Constants.NETWORK_MAP and Constants.NETWORK_MAP.Trails
 
+-- Print immédiat en console (F9), sans dépendre de l'UI/du scroll —
+-- Auto Farm ne dépend d'AUCUN de ces modules (voir scanner cachedEggs
+-- plus bas), mais Auto Hatch/Equip/Claim/Upgrade/Buy Trails et le
+-- système de zones gardées EN dépendent tous. Si un nom ci-dessous
+-- dit ECHEC, la feature correspondante est un no-op tant que ce
+-- chemin ne sera pas corrigé (le jeu a peut-être renommé sa structure
+-- interne depuis la source d'origine dont ces chemins viennent).
+do
+	local lines = {"[yslemEgg] Statut des modules du jeu :"}
+	for _, name in ipairs({"EggCmds","Network","Ragdoll","PlotCmds","GEP","GCP","RGSR","SPP","GuardsD","AreasD","SlotId","Save","Constants","Bases","Treadmills","Trails"}) do
+		table.insert(lines, "  "..(_ModuleStatus[name] and "OK    " or "ECHEC ")..name)
+	end
+	print(table.concat(lines, "\n"))
+end
+
 -- ── ZONES GARDÉES : Speed Power requis par zone ─────────────
 -- Reproduit le calcul du jeu lui-même (RGSR = ResolveGuardSpeedRequirement)
 -- pour savoir si une zone (Forest/Desert/Prehistoric/...) est
@@ -125,70 +140,120 @@ local function areaUnlocked(areaId)
 end
 
 -- ── SCAN D'ŒUFS EN DIRECT ────────────────────────────────────
--- Utilise le vrai snapshot serveur (EggCmds.GetAreaEggSnapshot) quand
--- disponible — bien plus fiable qu'une recherche par nom "egg" dans
--- workspace — avec repli sur les ProximityPrompt physiques (œufs
--- tombés au sol, hors snapshot). Tourne en continu (comme la source
--- d'origine) pour que la donnée soit déjà chaude dès qu'une feature
--- l'utilise, pas seulement pendant qu'Auto Farm/ESP est actif.
+-- [FIX] L'ancienne version dépendait d'abord de EggCmds.GetAreaEggSnapshot
+-- (module ReplicatedStorage.Library.Client.EggCmds) — si ce module ne
+-- charge pas dans ce jeu (voir diagnostic 'Modules: X/Y' de l'onglet
+-- Farm), cette source ne donnait RIEN, et le repli ne captait que les
+-- œufs tombés au sol avec un mot-clé précis. Nouvelle approche, 100%
+-- indépendante de tout module client : `workspace.AreaEggSlotsClient`
+-- est un dossier CONFIRMÉ réel par le rapport d'analyse (789
+-- descendants) — son nom même indique qu'il contient les slots d'œufs
+-- par zone rendus au client. Chaque ProximityPrompt qu'il contient est
+-- présumé être un œuf, sans avoir besoin de deviner un mot-clé.
+-- En plus de la position, on lit directement le TEXTE déjà affiché à
+-- l'écran (BillboardGui/SurfaceGui/TextLabel du même Model) pour en
+-- extraire mutation et poids — ce que le jeu montre au joueur, donc
+-- toujours exact, jamais une donnée recalculée à la main.
+local _RARE_KEYWORDS = {
+	"secret","eternal","divine","divin","mythic","celestial","ancient",
+	"rainbow","golden","shiny","radiant","corrupted","void","legendary",
+}
+
+-- Cherche tout TextLabel (BillboardGui/SurfaceGui) sous `root` et
+-- renvoie le texte concaténé + les tags de rareté/mutation trouvés
+-- dedans + un poids en kg si présent (ex: "2.4 kg", "150kg").
+local function _readEggLabels(root)
+	local texts = {}
+	pcall(function()
+		for _, d in ipairs(root:GetDescendants()) do
+			if d:IsA("TextLabel") and d.Text ~= "" then
+				table.insert(texts, d.Text)
+			end
+		end
+	end)
+	local full = table.concat(texts, " | ")
+	local low = full:lower()
+	local tags = {}
+	for _, kw in ipairs(_RARE_KEYWORDS) do
+		if low:find(kw, 1, true) then table.insert(tags, kw) end
+	end
+	local weight = full:match("([%d][%d%.,]*)%s*[Kk][Gg]")
+	return full, tags, weight
+end
+
+-- Remonte de prompt.Parent jusqu'au premier Model ancêtre (là où vivent
+-- généralement les BillboardGui d'un spawn d'œuf) ; à défaut utilise
+-- directement la Part porteuse du prompt.
+local function _promptOwnerModel(prompt)
+	local part = prompt.Parent
+	if not part then return nil, nil end
+	if not part:IsA("BasePart") then
+		local anc = part
+		while anc and not anc:IsA("BasePart") do anc = anc.Parent end
+		part = anc
+	end
+	if not part then return nil, nil end
+	local model = part
+	while model and model.Parent and model.Parent ~= workspace and not model:IsA("Model") do
+		model = model.Parent
+	end
+	return part, (model and model:IsA("Model")) and model or part
+end
+
 local cachedEggs = {}
 task.spawn(function()
 	while true do
 		local eggs = {}
-		if EggCmds and EggCmds.GetAreaEggSnapshot then
-			local ok, snap = pcall(function() return EggCmds.GetAreaEggSnapshot() end)
-			if ok and snap and snap.Records then
-				for _, r in ipairs(snap.Records) do
-					if r.State ~= "Equipped" and r.State ~= "Hatched" and r.State ~= "Claimed" and r.State ~= "Incubating" then
-						local eggCF
-						if typeof(r.BoundsCFrame) == "CFrame" then eggCF = r.BoundsCFrame
-						elseif typeof(r.CFrame) == "CFrame" then eggCF = r.CFrame
-						elseif r.Model and typeof(r.Model) == "Instance" and r.Model:IsA("Model") then eggCF = r.Model:GetPivot()
-						elseif r.Model and typeof(r.Model) == "Instance" and r.Model:IsA("BasePart") then eggCF = r.Model.CFrame end
-						local eggSize
-						if typeof(r.BoundsSize) == "Vector3" then eggSize = r.BoundsSize
-						elseif typeof(r.Size) == "Vector3" then eggSize = r.Size
-						elseif r.Model and typeof(r.Model) == "Instance" and r.Model:IsA("Model") then
-							local _, sz = r.Model:GetBoundingBox(); eggSize = sz
-						end
-						if eggCF then
+		local slotsRoot = workspace:FindFirstChild("AreaEggSlotsClient")
+
+		if slotsRoot then
+			pcall(function()
+				for _, prompt in ipairs(slotsRoot:GetDescendants()) do
+					if prompt:IsA("ProximityPrompt") and prompt.Enabled then
+						local part, model = _promptOwnerModel(prompt)
+						if part then
+							local full, tags, weight = _readEggLabels(model or part)
 							eggs[#eggs+1] = {
-								uid = r.Uid, cf = eggCF, pos = eggCF.Position, size = eggSize,
-								area = r.AreaId, cat = r.AssetCategory, nest = r.NestId,
+								prompt = prompt, part = part,
+								pos = part.Position, cf = part.CFrame,
+								area = tostring(model and model.Name or part.Name),
+								cat = prompt.ObjectText ~= "" and prompt.ObjectText or (model and model.Name or part.Name),
+								mutation = tags[1], tags = tags, weight = weight, rawText = full,
 							}
 						end
 					end
 				end
-			end
-		end
-		pcall(function()
-			for _, prompt in ipairs(workspace:GetDescendants()) do
-				if prompt:IsA("ProximityPrompt") and prompt.Enabled then
-					local action = prompt.ActionText:lower()
-					local objTxt = prompt.ObjectText:lower()
-					local parentName = (prompt.Parent and prompt.Parent.Name or ""):lower()
-					if action:find("grab") or action:find("steal") or action:find("take")
-						or action:find("pick") or action:find("collect")
-						or objTxt:find("egg") or parentName:find("egg") or parentName:find("drop") then
-						local part = prompt.Parent
-						if part and part:IsA("BasePart") then
-							local isDupe = false
-							for _, e in ipairs(eggs) do
-								if (e.pos - part.Position).Magnitude < 3 then isDupe = true; break end
-							end
-							if not isDupe then
+			end)
+		else
+			-- Repli si le dossier a disparu/été renommé : scan mot-clé
+			-- classique sur tout workspace (moins précis, mais jamais
+			-- totalement aveugle).
+			pcall(function()
+				for _, prompt in ipairs(workspace:GetDescendants()) do
+					if prompt:IsA("ProximityPrompt") and prompt.Enabled then
+						local action = prompt.ActionText:lower()
+						local objTxt = prompt.ObjectText:lower()
+						local parentName = (prompt.Parent and prompt.Parent.Name or ""):lower()
+						if action:find("grab") or action:find("steal") or action:find("take")
+							or action:find("pick") or action:find("collect")
+							or objTxt:find("egg") or parentName:find("egg") or parentName:find("drop") then
+							local part, model = _promptOwnerModel(prompt)
+							if part then
+								local full, tags, weight = _readEggLabels(model or part)
 								eggs[#eggs+1] = {
-									uid = "Phys_"..tostring(prompt:GetDebugId()),
-									cf = part.CFrame, pos = part.Position, size = part.Size,
-									area = "Dropped", cat = objTxt ~= "" and prompt.ObjectText or part.Name,
-									isPhysical = true, prompt = prompt,
+									prompt = prompt, part = part,
+									pos = part.Position, cf = part.CFrame,
+									area = "Dropped",
+									cat = objTxt ~= "" and prompt.ObjectText or part.Name,
+									mutation = tags[1], tags = tags, weight = weight, rawText = full,
 								}
 							end
 						end
 					end
 				end
-			end
-		end)
+			end)
+		end
+
 		cachedEggs = eggs
 		task.wait(0.35)
 	end
@@ -218,6 +283,7 @@ local C_OFF_BG = Color3.fromRGB(0,0,0)
 local C_GREEN  = Color3.fromRGB(60,220,120)
 local C_RED    = Color3.fromRGB(220,60,60)
 local C_YELLOW = Color3.fromRGB(230,200,90)
+local C_GOLD   = Color3.fromRGB(255,200,60)
 
 -- ============================================================
 -- STATE
@@ -712,26 +778,13 @@ task.spawn(function()
 
 				local spamming = true
 				task.spawn(function()
-					local lastBuy = 0
+					-- Chaque œuf du scanner porte maintenant toujours son vrai
+					-- ProximityPrompt (AreaEggSlotsClient ou repli mot-clé) — plus
+					-- besoin de deviner isPhysical/uid, on fire directement dessus.
 					while spamming do
 						pcall(function()
-							if bestEgg.isPhysical and bestEgg.prompt then
-								if fireproximityprompt then fireproximityprompt(bestEgg.prompt) end
-							else
-								for _, obj in ipairs(workspace:GetDescendants()) do
-									if obj:IsA("ProximityPrompt") and obj.Parent
-										and (obj.Parent.Position - bestEgg.pos).Magnitude < 10 then
-										if fireproximityprompt then fireproximityprompt(obj) end
-									end
-								end
-							end
-							if not bestEgg.isPhysical and (os.clock() - lastBuy) > 0.1 then
-								lastBuy = os.clock()
-								task.spawn(function()
-									if Network and NM and NM.Eggs and NM.Eggs.BUY then
-										Network.Invoke(NM.Eggs.BUY, bestEgg.uid, 1)
-									end
-								end)
+							if bestEgg.prompt and fireproximityprompt then
+								fireproximityprompt(bestEgg.prompt)
 							end
 						end)
 						task.wait(0.05)
@@ -1217,14 +1270,15 @@ end)
 -- ============================================================
 local visualPage = pages["Visual"]
 
--- ── EGG ESP — basé sur le vrai snapshot serveur (cachedEggs) ────
--- Remplace la recherche par nom "egg" dans workspace (pouvait louper
--- des objets mal nommés) par les données déjà collectées par le
--- scanner cachedEggs (EggCmds.GetAreaEggSnapshot + repli physique) —
--- même source que Auto Farm, donc ESP montre exactement ce qu'Auto
--- Farm est capable de cibler. Vert = zone accessible (Speed Power
--- suffisante), rouge = zone verrouillée avec le Speed Power requis
--- affiché, pour savoir en un coup d'œil où farmer.
+-- ── EGG ESP — mutation/poids lus directement dans le texte affiché ──
+-- Utilise cachedEggs (scanner AreaEggSlotsClient + lecture BillboardGui,
+-- voir plus haut) — chaque entrée porte déjà .mutation/.tags/.weight
+-- extraits du texte RÉELLEMENT affiché par le jeu (BillboardGui sur le
+-- Model de l'œuf), donc toujours exact : pas de recalcul, pas de
+-- supposition, juste ce que le joueur voit déjà à l'écran. Or/doré =
+-- au moins un tag rare détecté (secret/eternal/divine/mythic/...),
+-- vert = normal, rouge = zone verrouillée (Speed Power insuffisante,
+-- si le système de zones gardées a pu charger).
 local function _shortNum(n)
 	if not n then return "?" end
 	local a = math.abs(n)
@@ -1255,41 +1309,60 @@ local function startESP()
 		for _, r in ipairs(cachedEggs) do
 			pcall(function()
 				local unlocked = areaUnlocked(r.area)
-				local col = unlocked and C_GREEN or C_RED
+				local hasRareTag = r.tags and #r.tags > 0
+				local col = (not unlocked) and C_RED or (hasRareTag and C_GOLD or C_GREEN)
 
+				local part = r.part
 				local p = Instance.new("Part")
 				p.Anchored = true; p.CanCollide = false; p.CanQuery = false; p.Transparency = 1
-				p.Size = (typeof(r.size) == "Vector3" and r.size.Magnitude > 0.5) and r.size or Vector3.new(3.5,3.5,3.5)
+				p.Size = (part and part:IsA("BasePart") and part.Size.Magnitude > 0.5) and part.Size or Vector3.new(3.5,3.5,3.5)
 				p.CFrame = r.cf
 				p.Parent = workspace
 
 				local box = Instance.new("SelectionBox")
 				box.Adornee = p
 				box.Color3 = col
-				box.LineThickness = 0.05
+				box.LineThickness = hasRareTag and 0.1 or 0.05
 				box.SurfaceTransparency = 0.7
 				box.SurfaceColor3 = col
 				box.Parent = p
 
 				local bb = Instance.new("BillboardGui")
-				bb.Size = UDim2.fromOffset(200, 22)
+				bb.Size = UDim2.fromOffset(220, 34)
 				bb.AlwaysOnTop = true
 				bb.MaxDistance = 800
 				bb.Parent = p
-				local tl = Instance.new("TextLabel", bb)
-				tl.Size = UDim2.fromScale(1,1)
-				tl.BackgroundTransparency = 1
-				tl.Font = Enum.Font.GothamBold
-				tl.TextSize = 12
-				tl.TextStrokeTransparency = 0.3
-				tl.TextColor3 = col
-				local areaLabel = tostring(r.area or "Dropped")
-				if unlocked then
-					tl.Text = tostring(r.cat or "Egg").."  ("..areaLabel..")"
-				else
-					local A = AREA[r.area]
-					tl.Text = areaLabel.."  LOCKED ".._shortNum(A and A.reqSP)
+
+				local nameLbl = Instance.new("TextLabel", bb)
+				nameLbl.Size = UDim2.new(1,0,0.55,0)
+				nameLbl.BackgroundTransparency = 1
+				nameLbl.Font = Enum.Font.GothamBold
+				nameLbl.TextSize = 12
+				nameLbl.TextStrokeTransparency = 0.3
+				nameLbl.TextColor3 = col
+				nameLbl.Text = tostring(r.cat or "Egg")
+
+				local detailLbl = Instance.new("TextLabel", bb)
+				detailLbl.Size = UDim2.new(1,0,0.45,0)
+				detailLbl.Position = UDim2.new(0,0,0.55,0)
+				detailLbl.BackgroundTransparency = 1
+				detailLbl.Font = Enum.Font.Gotham
+				detailLbl.TextSize = 10
+				detailLbl.TextStrokeTransparency = 0.4
+				detailLbl.TextColor3 = C_WHITE
+
+				local parts = {}
+				if hasRareTag then
+					local upper = {}
+					for _, t in ipairs(r.tags) do table.insert(upper, t:upper()) end
+					table.insert(parts, table.concat(upper, "/"))
 				end
+				if r.weight then table.insert(parts, r.weight.."kg") end
+				if not unlocked then
+					local A = AREA[r.area]
+					table.insert(parts, "LOCKED ".._shortNum(A and A.reqSP))
+				end
+				detailLbl.Text = #parts > 0 and table.concat(parts, "  ·  ") or tostring(r.area or "")
 
 				table.insert(_espParts, p)
 			end)
