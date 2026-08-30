@@ -267,16 +267,65 @@ local function _promptOwnerModel(prompt)
 	return part, (model and model:IsA("Model")) and model or part
 end
 
+-- [FIX] Auto Claim (remotes Packages.Networking en direct) marche —
+-- preuve que _invokeRF/le namespace Networking fonctionnent bien.
+-- Auto Farm échouait donc à cause de la DÉTECTION (ce bloc), pas de
+-- l'appel réseau. Le scan AreaEggSlotsClient ne trouvait rien
+-- d'exploitable en jeu. Ajout d'un diagnostic (une seule fois, en
+-- console) qui dit EXACTEMENT ce qui se passe — dossier absent,
+-- présent mais vide, ou prompts trouvés — au lieu de deviner une
+-- 3e fois à l'aveugle. En parallèle, tentative d'un vrai snapshot
+-- réseau confirmé (RF/EggWorld/AskFieldEggSnapshot, même famille de
+-- remotes que Claim) : sa structure exacte est inconnue, donc son
+-- contenu brut est imprimé une fois pour calibrer, et exploité au
+-- mieux (uid/position détectés génériquement) s'il répond.
+local _eggDebugPrinted = false
+local _snapshotDebugPrinted = false
+
+local function _tryNetworkEggSnapshot()
+	local ok, snap = _invokeRF("RF/EggWorld/AskFieldEggSnapshot")
+	if not ok or type(snap) ~= "table" then return nil end
+	if not _snapshotDebugPrinted then
+		_snapshotDebugPrinted = true
+		local dumpOk, dump = pcall(function() return HttpService:JSONEncode(snap) end)
+		print("[yslemEgg] AskFieldEggSnapshot a repondu — structure brute (calibrage) :")
+		print(dumpOk and dump:sub(1, 1500) or "<non serialisable>")
+	end
+	local records = snap.Records or snap.Eggs or snap.Data or snap
+	if type(records) ~= "table" then return nil end
+	local out = {}
+	for k, r in pairs(records) do
+		if type(r) == "table" then
+			local uid = r.Uid or r.UID or r.Id or r.ID or r.uid or (type(k) == "string" and k) or nil
+			local posSrc = r.Position or r.Pos or r.CFrame or r.BoundsCFrame
+			local pos = nil
+			if typeof(posSrc) == "Vector3" then pos = posSrc
+			elseif typeof(posSrc) == "CFrame" then pos = posSrc.Position end
+			if uid and pos then
+				out[#out+1] = {
+					uid = uid, pos = pos, cf = CFrame.new(pos),
+					area = tostring(r.AreaId or r.Area or "Field"),
+					cat = tostring(r.AssetCategory or r.Category or r.Name or "Egg"),
+					netOnly = true,  -- pas de prompt physique associé, grab via remote uniquement
+				}
+			end
+		end
+	end
+	return #out > 0 and out or nil
+end
+
 local cachedEggs = {}
 task.spawn(function()
 	while true do
 		local eggs = {}
 		local slotsRoot = workspace:FindFirstChild("AreaEggSlotsClient")
+		local promptCount = 0
 
 		if slotsRoot then
 			pcall(function()
 				for _, prompt in ipairs(slotsRoot:GetDescendants()) do
 					if prompt:IsA("ProximityPrompt") and prompt.Enabled then
+						promptCount = promptCount + 1
 						local part, model = _promptOwnerModel(prompt)
 						if part then
 							local full, tags, weight = _readEggLabels(model or part)
@@ -304,6 +353,7 @@ task.spawn(function()
 						if action:find("grab") or action:find("steal") or action:find("take")
 							or action:find("pick") or action:find("collect")
 							or objTxt:find("egg") or parentName:find("egg") or parentName:find("drop") then
+							promptCount = promptCount + 1
 							local part, model = _promptOwnerModel(prompt)
 							if part then
 								local full, tags, weight = _readEggLabels(model or part)
@@ -319,6 +369,30 @@ task.spawn(function()
 					end
 				end
 			end)
+		end
+
+		-- Diagnostic une seule fois : dit EXACTEMENT où ça bloque.
+		if not _eggDebugPrinted then
+			_eggDebugPrinted = true
+			if not slotsRoot then
+				print("[yslemEgg] AreaEggSlotsClient INTROUVABLE dans workspace — repli mot-cle utilise, "..#eggs.." oeuf(s) trouve(s)")
+			else
+				print("[yslemEgg] AreaEggSlotsClient trouve — "..promptCount.." ProximityPrompt(s) dedans, "..#eggs.." exploitable(s)")
+			end
+		end
+
+		-- Complète avec le snapshot réseau (uid+position génériques) —
+		-- ajouté seulement pour les zones pas déjà couvertes par un
+		-- prompt physique (évite les doublons proches).
+		local netEggs = _tryNetworkEggSnapshot()
+		if netEggs then
+			for _, ne in ipairs(netEggs) do
+				local isDupe = false
+				for _, e in ipairs(eggs) do
+					if (e.pos - ne.pos).Magnitude < 5 then isDupe = true; break end
+				end
+				if not isDupe then eggs[#eggs+1] = ne end
+			end
 		end
 
 		cachedEggs = eggs
@@ -876,7 +950,7 @@ task.spawn(function()
 			end
 
 			if #validEggs == 0 then
-				setStatus("Farm: aucun oeuf detecte", C_DIM)
+				setStatus("Farm: aucun oeuf (voir console F9)", C_DIM)
 			else
 				local myPos = rootPart.Position
 				table.sort(validEggs, function(a, b)
@@ -894,13 +968,18 @@ task.spawn(function()
 
 				local spamming = true
 				task.spawn(function()
-					-- Chaque œuf du scanner porte maintenant toujours son vrai
-					-- ProximityPrompt (AreaEggSlotsClient ou repli mot-clé) — plus
-					-- besoin de deviner isPhysical/uid, on fire directement dessus.
+					-- Deux sources possibles : un vrai ProximityPrompt
+					-- (AreaEggSlotsClient ou repli mot-clé) → fireproximityprompt ;
+					-- ou une entrée venue du snapshot réseau confirmé
+					-- (RF/EggWorld/AskFieldEggSnapshot, netOnly=true, pas de
+					-- prompt physique) → grab via RF/EggWorld/AskFieldEggCarry,
+					-- même famille de remote qu'Auto Claim (qui marche).
 					while spamming do
 						pcall(function()
 							if bestEgg.prompt and fireproximityprompt then
 								fireproximityprompt(bestEgg.prompt)
+							elseif bestEgg.netOnly and bestEgg.uid then
+								_invokeRF("RF/EggWorld/AskFieldEggCarry", bestEgg.uid)
 							end
 						end)
 						task.wait(0.05)
