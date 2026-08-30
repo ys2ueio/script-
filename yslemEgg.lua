@@ -1,6 +1,6 @@
 -- ============================================================
 -- yslemEgg — Steal An Egg Hub
--- Refonte complète — nouvelle UI + moteur de mouvement unifié
+-- Complete rebuild — new UI + unified movement engine
 -- ============================================================
 -- loadstring(game:HttpGet("https://raw.githubusercontent.com/ys2ueio/script-/refs/heads/main/yslemEgg.lua"))()
 
@@ -17,7 +17,7 @@ local ProximityPromptService = game:GetService("ProximityPromptService")
 local LP                 = Players.LocalPlayer
 if not LP.Character then LP.CharacterAdded:Wait() end
 
--- kill previous instance (relance propre)
+-- kill previous instance (clean relaunch)
 pcall(function()
 	local old = game:GetService("CoreGui"):FindFirstChild("yslemEggGui")
 	if old then old:Destroy() end
@@ -26,14 +26,14 @@ pcall(function()
 end)
 
 -- ============================================================
--- DÉCOUVERTE DES MODULES DU JEU — par NOM, pas par chemin figé
+-- GAME MODULE DISCOVERY — by NAME, not a fixed path
 -- ============================================================
--- Une seule passe sur tout ReplicatedStorage, indexée par nom de
--- ModuleScript — peu importe où le jeu l'a réellement placé (vérifié :
--- les vrais dossiers sont Shared.*/Data.*, pas Library.*/Directory.*
--- comme le supposait la source de référence de départ). Chaque
--- require() est isolé dans son propre pcall — une entrée cassée ne
--- désactive plus que la feature qui en dépend, jamais les autres.
+-- One single pass over all of ReplicatedStorage, indexed by
+-- ModuleScript name — regardless of where the game actually placed it
+-- (verified: the real folders are Shared.*/Data.*, not
+-- Library.*/Directory.* as the original reference source assumed).
+-- Each require() is isolated in its own pcall — a broken entry only
+-- disables the feature that depends on it, never the others.
 local _moduleIndex = {}
 for _, inst in ipairs(ReplicatedStorage:GetDescendants()) do
 	if inst:IsA("ModuleScript") and not _moduleIndex[inst.Name] then
@@ -75,14 +75,14 @@ local _MODULE_NAMES = {
 	"AreaEggSlotIdentity","Save","Constants","Bases","Treadmills","Trails",
 }
 do
-	local lines = {"[yslemEgg] Statut des modules du jeu :"}
+	local lines = {"[yslemEgg] Game module status:"}
 	for _, name in ipairs(_MODULE_NAMES) do
 		if _ModuleStatus[name] then
-			table.insert(lines, "  OK          "..name.."  (".._ModuleFound[name]..")")
+			table.insert(lines, "  OK        "..name.."  (".._ModuleFound[name]..")")
 		elseif _ModuleFound[name] then
-			table.insert(lines, "  ECHEC       "..name.."  (trouve a ".._ModuleFound[name]..", require() plante)")
+			table.insert(lines, "  FAILED    "..name.."  (found at ".._ModuleFound[name]..", require() failed)")
 		else
-			table.insert(lines, "  INTROUVABLE "..name)
+			table.insert(lines, "  NOT FOUND "..name)
 		end
 	end
 	print(table.concat(lines, "\n"))
@@ -92,27 +92,27 @@ if SlotId then
 		local keys = {}
 		for k, v in pairs(SlotId) do table.insert(keys, tostring(k).." ("..typeof(v)..")") end
 		table.sort(keys)
-		print("[yslemEgg] AreaEggSlotIdentity — cles disponibles :\n  "..table.concat(keys, "\n  "))
+		print("[yslemEgg] AreaEggSlotIdentity — available keys:\n  "..table.concat(keys, "\n  "))
 	end)
 end
 
 -- ============================================================
--- REMOTES CONFIRMÉS (ReplicatedStorage.Packages.Networking)
+-- CONFIRMED REMOTES (ReplicatedStorage.Packages.Networking)
 -- ============================================================
--- Le rapport d'analyse yslemEgg a listé en direct les vrais Remote*
--- du jeu — leur Name contient déjà le "chemin" complet sous forme de
--- chaîne à slash (ex: instance nommée littéralement
--- "RF/AwayEarnings/AskCollect", parentée directement sous Networking,
--- pas une vraie hiérarchie de dossiers imbriqués). Auto Claim confirmé
--- fonctionnel avec ce système — bien plus fiable que les modules
--- Library.*/Directory.* d'origine.
+-- The yslemEgg analysis report listed the game's real Remote* instances
+-- live — their Name already contains the full "path" as a slash
+-- string (e.g. an instance literally named
+-- "RF/AwayEarnings/AskCollect", parented directly under Networking,
+-- not a real nested folder hierarchy). Auto Claim confirmed working
+-- with this system — far more reliable than the original
+-- Library.*/Directory.* modules.
 local _NetworkingFolder = ReplicatedStorage:FindFirstChild("Packages")
 _NetworkingFolder = _NetworkingFolder and _NetworkingFolder:FindFirstChild("Networking")
 
--- Accepte un nom complet ("RF/Famille/Action") ou juste l'action
--- ("Action") — repli automatique sur tout enfant du dossier dont le
--- nom SE TERMINE par ce suffixe, pour ne pas avoir à deviner la
--- famille exacte de chaque nouvelle action découverte.
+-- Accepts either a full name ("RF/Family/Action") or just the action
+-- ("Action") — auto-fallback on any child of the folder whose name
+-- ENDS with that suffix, so we never have to guess the exact family
+-- of a newly discovered action.
 local function _getRemote(name)
 	if not _NetworkingFolder then return nil end
 	local exact = _NetworkingFolder:FindFirstChild(name)
@@ -128,7 +128,7 @@ end
 
 local function _invokeRF(name, ...)
 	local r = _getRemote(name)
-	if not r or not r:IsA("RemoteFunction") then return false, "introuvable" end
+	if not r or not r:IsA("RemoteFunction") then return false, "not found" end
 	local ok, result = pcall(function(...) return r:InvokeServer(...) end, ...)
 	return ok, result
 end
@@ -140,7 +140,7 @@ local function _fireRE(name, ...)
 end
 
 -- ============================================================
--- ZONES GARDÉES — Speed Power requis par zone
+-- GUARDED ZONES — Speed Power required per zone
 -- ============================================================
 local EXIT_DIR = Vector3.new(-1,0,0)
 local AREA = {}
@@ -189,15 +189,15 @@ local function areaUnlocked(areaId)
 end
 
 -- ============================================================
--- ZONE SÛRE — destination d'Auto Farm après une prise (échapper aux
--- gardes, cohérent avec EXIT_DIR/SeparationLine déjà utilisés ci-dessus
--- pour les calculs d'échappement). Découverte dynamique, mise en cache
--- une fois trouvée (position statique) :
---   1. Toute instance dont le nom contient "safe" quelque part dans
---      workspace (le plus fiable si le jeu la nomme explicitement).
---   2. Repli : un point loin de la SeparationLine dans la direction
---      EXIT_DIR déjà calculée (littéralement "la direction pour sortir
---      d'une zone gardée" dans ce hub).
+-- SAFE ZONE — Auto Farm's destination after a successful grab (escape
+-- the guards, consistent with the EXIT_DIR/SeparationLine already used
+-- above for escape calculations). Dynamic discovery, cached once found
+-- (static position):
+--   1. Any instance whose name contains "safe" anywhere in workspace
+--      (the most reliable option if the game names it explicitly).
+--   2. Fallback: a point far from the SeparationLine along the already
+--      computed EXIT_DIR (literally "the direction to exit a guarded
+--      zone" in this hub).
 -- ============================================================
 local _safeZonePos = nil
 local function _findSafeZonePos()
@@ -226,19 +226,19 @@ local function _findSafeZonePos()
 end
 
 -- ============================================================
--- SCANNER D'ŒUFS — 3 sources complémentaires :
---   1. RE/EggWorld/FieldEggShifted  — œufs physiquement dans le monde
---      (BoundsCFrame = position réelle, Mutation = rareté, NestScale =
---      poids proxy) ; fournit les données les plus riches et fiables.
---   2. AreaEggSlotsClient:GetChildren() — slots LP parsés par nom
---      (FirstAreaEgg_{userId}_{N}_{Zone}:Slot_{N}) pour la zone/île.
---   3. Fallback ProximityPrompt (autres jeux, œufs au sol).
+-- EGG SCANNER — 3 complementary sources:
+--   1. RE/EggWorld/FieldEggShifted  — eggs physically in the world
+--      (BoundsCFrame = real position, Mutation = rarity, NestScale =
+--      weight proxy); provides the richest, most reliable data.
+--   2. AreaEggSlotsClient:GetChildren() — LP's own slots parsed by
+--      name (FirstAreaEgg_{userId}_{N}_{Zone}:Slot_{N}) for zone/island.
+--   3. ProximityPrompt fallback (other games, eggs on the ground).
 -- ============================================================
 local _RARE_KEYWORDS = {
 	"secret","eternal","divine","divin","mythic","celestial","ancient",
 	"rainbow","golden","shiny","radiant","corrupted","void","legendary",
 }
--- Utilisé par le fallback ProximityPrompt (source 3)
+-- Used by the ProximityPrompt fallback (source 3)
 local function _readEggLabels(root)
 	local texts = {}
 	pcall(function()
@@ -271,10 +271,10 @@ local function _promptOwnerModel(prompt)
 	return part, (model and model:IsA("Model")) and model or part
 end
 
--- Cache réseau : uid → {pos,cf,mutation,nestScale,zone,tags,t}
+-- Network cache: uid → {pos,cf,mutation,nestScale,zone,tags,t}
 local _fieldEggNet = {}
 
--- Zone depuis position monde (AREA doit être construit avant ce bloc)
+-- Zone from world position (AREA must be built before this block)
 local function _posToZone(pos)
 	for zn, A in pairs(AREA) do
 		if A.cf and A.size then
@@ -286,9 +286,9 @@ local function _posToZone(pos)
 	return "?"
 end
 
--- Source 1 : écoute RE/EggWorld/FieldEggShifted
--- Signature observée dans l'analyse : (slotId?, {BoundsCFrame, BottomCFrame,
--- Mutation, NestScale, HasParasite, ...}) ou juste ({...}).
+-- Source 1: listens to RE/EggWorld/FieldEggShifted
+-- Signature observed in the analysis: (slotId?, {BoundsCFrame, BottomCFrame,
+-- Mutation, NestScale, HasParasite, ...}) or just ({...}).
 pcall(function()
 	local re = _getRemote("RE/EggWorld/FieldEggShifted")
 	if not (re and re:IsA("RemoteEvent")) then return end
@@ -312,11 +312,11 @@ pcall(function()
 		end
 		if not pos2 then return end
 
-		-- N'invente JAMAIS d'identifiant : si aucun vrai id n'est présent
-		-- dans l'event (ni en 1er argument, ni comme champ de la table),
-		-- l'oeuf reste affiché en ESP mais Auto Farm ne le ciblera pas
-		-- (farmable=false) — un faux id ferait échouer AskFieldEggCarry
-		-- silencieusement, ce qui causait le "grab pas / grab mal" signalé.
+		-- NEVER invents an id: if no real id is present in the event
+		-- (neither as the 1st argument nor as a table field), the egg
+		-- still shows in ESP but Auto Farm won't target it
+		-- (farmable=false) — a fake id would make AskFieldEggCarry fail
+		-- silently, which was the reported "doesn't grab / grabs badly".
 		if not realUid then
 			for _, k in ipairs(_ID_KEYS) do
 				local v = data[k]
@@ -334,7 +334,7 @@ pcall(function()
 			if low:find(kw, 1, true) then table.insert(tags, kw) end
 		end
 
-		-- Clé de cache stable même sans id réel (position arrondie).
+		-- Stable cache key even without a real id (rounded position).
 		local cacheKey = realUid or string.format("%.0f_%.0f_%.0f", pos2.X, pos2.Y, pos2.Z)
 		_fieldEggNet[cacheKey] = {
 			pos=pos2, cf=cf2, mutation=mutation, nestScale=nestScale,
@@ -344,7 +344,7 @@ pcall(function()
 	end)
 end)
 
--- Diagnostic AskFieldEggSnapshot (snapshot ponctuel, pas utilisé pour le farm)
+-- Diagnostic AskFieldEggSnapshot (one-off snapshot, not used for farming)
 local _snapshotDebugPrinted = false
 task.delay(2, function()
 	if _snapshotDebugPrinted then return end
@@ -353,7 +353,7 @@ task.delay(2, function()
 	_snapshotDebugPrinted = true
 	local dumpOk, dump = pcall(function() return HttpService:JSONEncode(snap) end)
 	print("[yslemEgg] AskFieldEggSnapshot:")
-	print(dumpOk and dump:sub(1, 800) or "<non serialisable>")
+	print(dumpOk and dump:sub(1, 800) or "<not serializable>")
 end)
 
 local _eggScanSlotsFound, _eggScanPromptTotal, _eggScanPromptEnabled = false, 0, 0
@@ -365,11 +365,11 @@ task.spawn(function()
 		local total, enabledCount = 0, 0
 		local slotsRoot = workspace:FindFirstChild("AreaEggSlotsClient", true)
 
-		-- Anti-doublon entre les 3 sources : le même oeuf physique peut être
-		-- vu par le réseau ET par un ProximityPrompt du monde. Sans ça,
-		-- deux billboards ESP quasi superposés au même endroit — c'est ce
-		-- qui rendait l'affichage illisible. On garde la première trouvaille
-		-- (l'ordre des sources ci-dessous = ordre de priorité).
+		-- Cross-source deduplication: the same physical egg can be seen
+		-- by BOTH the network listener AND a ProximityPrompt in the
+		-- world. Without this, two ESP billboards would sit almost on
+		-- top of each other, which is what made the display unreadable.
+		-- Keeps the first match found (source order below = priority).
 		local function _tooClose(pos)
 			for _, ex in ipairs(eggs) do
 				if (ex.pos - pos).Magnitude < 4 then return true end
@@ -377,12 +377,12 @@ task.spawn(function()
 			return false
 		end
 
-		-- Source 1 : réseau FieldEggShifted — TTL 60s
-		-- NOTE poids : NestScale est un facteur d'échelle du modèle (~0.5-2),
-		-- PAS un poids en kg — l'afficher avec "kg" serait un mensonge visuel.
-		-- On ne fixe donc PAS .weight ici (l'ESP l'omet proprement) ; seul un
-		-- poids réellement lu en jeu (sources 2/3, via les TextLabels du
-		-- modèle) est affiché avec l'unité kg.
+		-- Source 1: network FieldEggShifted — 60s TTL
+		-- WEIGHT NOTE: NestScale is a model scale factor (~0.5-2), NOT a
+		-- weight in kg — displaying it with "kg" would be a visual lie.
+		-- So .weight is NOT set here (ESP cleanly omits it); only a
+		-- weight actually read in-game (sources 2/3, via the model's
+		-- TextLabels) is shown with the kg unit.
 		local now2 = tick()
 		for cacheKey, e in pairs(_fieldEggNet) do
 			if now2 - e.t > 60 then
@@ -391,7 +391,7 @@ task.spawn(function()
 				total = total + 1; enabledCount = enabledCount + 1
 				eggs[#eggs+1] = {
 					pos=e.pos, cf=e.cf, area=e.zone,
-					cat=e.mutation or (e.zone.." Oeuf"),
+					cat=e.mutation or (e.zone.." Egg"),
 					mutation=e.mutation, tags=e.tags,
 					weight=nil, scale=e.nestScale, rawText=e.mutation or "",
 					enabled=true, uid=e.uid, netOnly=true, farmable=e.farmable,
@@ -399,17 +399,17 @@ task.spawn(function()
 			end
 		end
 
-		-- Source 2 : AreaEggSlotsClient:GetChildren() — slots LP par nom
+		-- Source 2: AreaEggSlotsClient:GetChildren() — LP's own slots by name
 		if slotsRoot then
 			_eggScanSlotsFound = true
 			for _, slot in ipairs(slotsRoot:GetChildren()) do
 				pcall(function()
 					local sname = slot.Name
-					-- Filtrer : uniquement les slots du LP (contient UserId)
+					-- Filter: only LP's own slots (contains UserId)
 					if not sname:find(tostring(LP.UserId), 1, true) then return end
-					-- Extraire la zone : FirstAreaEgg_{id}_{N}_{Zone}:Slot_{N}
+					-- Extract the zone: FirstAreaEgg_{id}_{N}_{Zone}:Slot_{N}
 					local zone = sname:match("_(%u[%a%s]+):Slot") or "?"
-					-- Position depuis le slot ou premier BasePart descendant
+					-- Position from the slot itself or the first BasePart descendant
 					local pos3, cf3
 					if slot:IsA("BasePart") then
 						pos3=slot.Position; cf3=slot.CFrame
@@ -420,24 +420,24 @@ task.spawn(function()
 					end
 					if not pos3 then return end
 					if _tooClose(pos3) then return end
-					-- Rareté via attributs, poids réel via les TextLabels du
-					-- modèle (même lecture que la source 3 — fiable et déjà
-					-- affichée en kg par le jeu lui-même, contrairement à un
-					-- attribut de scale qu'on ne connait pas avec certitude).
+					-- Rarity via attributes, real weight via the model's
+					-- TextLabels (same read as source 3 — reliable and
+					-- already shown in kg by the game itself, unlike a
+					-- scale attribute we can't be certain about).
 					local mutation2 = slot:GetAttribute("Mutation") or slot:GetAttribute("EggType")
 					local rawText2, tags2, weight2 = _readEggLabels(slot)
-					local cat2 = mutation2 or (tags2[1] and tags2[1]:upper()) or (zone.." Oeuf")
+					local cat2 = mutation2 or (tags2[1] and tags2[1]:upper()) or (zone.." Egg")
 					total = total + 1; enabledCount = enabledCount + 1
 					eggs[#eggs+1] = {
 						slot=slot, pos=pos3, cf=cf3, area=zone,
 						cat=cat2,
 						mutation=mutation2 or tags2[1], tags=tags2,
 						weight=weight2, rawText=rawText2,
-						-- Ces slots sont TES propres oeufs déjà pris, en train de
-						-- pousser dans ta base — pas des oeufs sauvages à voler.
-						-- AskFieldEggCarry attend l'id d'un oeuf du monde, pas un
-						-- nom de slot : les cibler causait des "grab" qui ne
-						-- faisaient rien. On les affiche (ESP) sans les farmer.
+						-- These slots are YOUR OWN eggs already taken and
+						-- growing in your base — not wild eggs to steal.
+						-- AskFieldEggCarry expects a world egg's id, not a
+						-- slot name: targeting them caused "grabs" that did
+						-- nothing. Shown in ESP, but never farmed.
 						enabled=true, uid=sname, farmable=false,
 					}
 				end)
@@ -446,16 +446,16 @@ task.spawn(function()
 			_eggScanSlotsFound = false
 		end
 
-		-- Source 3 : fallback ProximityPrompt (autres jeux / œufs au sol)
+		-- Source 3: ProximityPrompt fallback (other games / eggs on the ground)
 		pcall(function()
 			for _, prompt in ipairs(workspace:GetDescendants()) do
 				if prompt:IsA("ProximityPrompt") then
 					local action = prompt.ActionText:lower()
 					local objTxt = prompt.ObjectText:lower()
 					local parentName = (prompt.Parent and prompt.Parent.Name or ""):lower()
-					-- Exclut explicitement les prompts de vente (marchands) —
-					-- sinon un prompt "Sell Egg" pourrait être compté comme un
-					-- oeuf à farmer au lieu d'une cible de livraison.
+					-- Explicitly excludes sell prompts (merchants) — otherwise
+					-- a "Sell Egg" prompt could get counted as an egg to farm
+					-- instead of a delivery target.
 					local isSellPrompt = action:find("sell",1,true) or objTxt:find("sell",1,true)
 						or action:find("vend",1,true) or objTxt:find("vend",1,true)
 					if not isSellPrompt and (action:find("grab") or action:find("steal") or action:find("take")
@@ -468,8 +468,8 @@ task.spawn(function()
 							total = total + 1
 							if prompt.Enabled then enabledCount = enabledCount + 1 end
 							local full, tags3, weight3 = _readEggLabels(model or part)
-							-- Priorité à une vraie rareté trouvée dans les labels du
-							-- modèle plutôt qu'au texte générique du prompt ("Egg").
+							-- Prioritize a real rarity found in the model's labels
+							-- over the prompt's generic text ("Egg").
 							local cat3 = (tags3[1] and tags3[1]:upper())
 								or (objTxt ~= "" and prompt.ObjectText) or part.Name
 							eggs[#eggs+1] = {
@@ -493,23 +493,23 @@ task.spawn(function()
 end)
 
 -- ============================================================
--- PALETTE — IDENTIQUE à Moon Hub (mêmes valeurs RGB exactes, relues
--- directement dans moon_hub_patched.lua) : fond noir pur, accent bleu
--- 90-160-255, mêmes gris/argents, même dégradé "living" 4 tons.
+-- PALETTE — same as Moon Hub (exact same RGB values, read straight
+-- from moon_hub_patched.lua): pure black background, blue accent
+-- 90-160-255, same greys/silvers, same 4-tone "living" gradient.
 -- ============================================================
--- NOTE : regroupées dans UNE table (au lieu de ~25 locals séparées) —
--- Lua 5.1 limite une fonction (donc tout le chunk racine) à 200 locals
--- actives ; avec ~200 features/handlers dans ce hub, chaque local évitée
--- compte. Toutes les couleurs restent accessibles via C.NOM partout dans
--- le fichier (remplacement mécanique de C_NOM -> C.NOM).
+-- NOTE: grouped into ONE table (instead of ~25 separate locals) —
+-- Lua 5.1 caps a function (so the whole root chunk) at 200 active
+-- locals; with ~200 features/handlers in this hub, every local saved
+-- counts. Every color stays accessible via C.NAME throughout the file
+-- (mechanical replacement of C_NAME -> C.NAME).
 local C = {
 	BG       = Color3.fromRGB(0,0,0),
 	HEADER   = Color3.fromRGB(0,0,0),
-	ROW      = Color3.fromRGB(0,0,0),     -- rows Moon Hub : noir + BackgroundTransparency 0.35 (pas une couleur pleine)
+	ROW      = Color3.fromRGB(0,0,0),     -- Moon Hub rows: black + 0.35 BackgroundTransparency (not a flat color)
 	BORDER   = Color3.fromRGB(40,46,58),
 	WHITE    = Color3.fromRGB(255,255,255),
-	MOON     = Color3.fromRGB(90,160,255),   -- accent principal (= mon ancien C.ACCENT)
-	MOON2    = Color3.fromRGB(160,200,255),  -- accent clair (= mon ancien C.ACCENT2)
+	MOON     = Color3.fromRGB(90,160,255),   -- main accent (= my old C.ACCENT)
+	MOON2    = Color3.fromRGB(160,200,255),  -- light accent (= my old C.ACCENT2)
 	MOONTEXT = Color3.fromRGB(0,10,20),
 	DIM      = Color3.fromRGB(110,120,140),
 	TABIDLE  = Color3.fromRGB(160,200,255),
@@ -519,19 +519,19 @@ local C = {
 	SILVER2  = Color3.fromRGB(140,165,210),
 	RED      = Color3.fromRGB(220,60,60),
 	GREEN    = Color3.fromRGB(60,220,120),
-	YELLOW   = Color3.fromRGB(230,200,90),   -- pas dans Moon Hub par défaut, ajouté pour les diagnostics
-	GOLD     = Color3.fromRGB(255,200,60),   -- idem, pour les mutations rares de l'ESP
+	YELLOW   = Color3.fromRGB(230,200,90),   -- not in Moon Hub by default, added for diagnostics
+	GOLD     = Color3.fromRGB(255,200,60),   -- same, for ESP's rare mutations
 	DEEP1    = Color3.fromRGB(4,7,16),
 	DEEP2    = Color3.fromRGB(14,28,58),
 	DEEP3    = Color3.fromRGB(40,80,165),
 	DEEP4    = Color3.fromRGB(90,150,255),
 }
--- Alias pour compat avec le reste du fichier (noms déjà utilisés partout)
+-- Alias for compatibility with the rest of the file (names already used everywhere)
 C.ACCENT, C.ACCENT2 = C.MOON, C.MOON2
 C.TRACKOFF = C.OFF_BG
 
 -- ============================================================
--- ÉTAT — St entière est persistée (que des valeurs simples)
+-- STATE — all of St is persisted (simple values only)
 -- ============================================================
 local St = {
 	instantGrab      = false,
@@ -563,11 +563,11 @@ local St = {
 }
 
 -- ============================================================
--- SAUVEGARDE / CHARGEMENT
+-- SAVE / LOAD
 -- ============================================================
--- Exclus volontairement : Bypass Anti-Cheat (jamais ré-appliqué seul
--- au chargement — action à risque sur le character) et AimBat
--- (comportement agressif, ne doit démarrer que sur un clic frais).
+-- Deliberately excluded: Bypass Anti-Cheat (never re-applied alone on
+-- load — a risky action on the character) and AimBat (aggressive
+-- behavior, must only start on a fresh click).
 local CONFIG_FILE = "yslemEgg_Config.json"
 local function loadConfig()
 	local ok, raw = pcall(function()
@@ -597,32 +597,31 @@ local function saveConfig()
 end
 
 -- ============================================================
--- MOTEUR DE MOUVEMENT UNIFIÉ
+-- UNIFIED MOVEMENT ENGINE
 -- ============================================================
--- [FIX MAJEUR] L'ancienne version faisait cohabiter DEUX systèmes de
--- mouvement séparés : Speed Boost (proxy Part + AssemblyLinearVelocity
--- en continu) et Auto Farm (Tween + PlatformStand ponctuel). Quand les
--- deux étaient actifs (Speed Boost restant activé entre sessions grâce
--- à la sauvegarde), ils se battaient pour le contrôle du personnage
--- chaque frame — le Tween d'Auto Farm se faisait écraser par les
--- écritures continues du proxy, donnant un mouvement cassé ou nul.
--- Anti Ragdoll (ChangeState toutes les 0.1s) coupait aussi le
--- PlatformStand du swoop en plein trajet. Une seule autorité de
--- mouvement par frame, choisie par priorité, élimine ces conflits :
--- AimBat (pilote hrp directement, prioritaire — combat) > Auto Farm
--- (pathing actif vers un œuf) > Speed Boost (déplacement manuel WASD).
+-- [MAJOR FIX] The old version ran TWO separate movement systems side
+-- by side: Speed Boost (proxy Part + continuous AssemblyLinearVelocity)
+-- and Auto Farm (Tween + one-off PlatformStand). When both were active
+-- (Speed Boost staying on across sessions thanks to the save), they
+-- fought over character control every frame — Auto Farm's Tween got
+-- overwritten by the proxy's continuous writes, causing broken or dead
+-- movement. Anti Ragdoll (ChangeState every 0.1s) also cut the swoop's
+-- PlatformStand mid-path. A single movement authority per frame,
+-- chosen by priority, eliminates these conflicts: AimBat (drives hrp
+-- directly, top priority — combat) > Auto Farm (actively pathing to an
+-- egg) > Speed Boost (manual WASD movement).
 local _aimBatActive = false
 local _farmMoving = false
 local _farmTargetPos = nil
 local _farmSpeed = 40
--- Rempli par la boucle Auto Farm plus bas — exposé ici pour que le
--- toggle "autoFarm" puisse forcer un arrêt COMPLET et IMMÉDIAT dès le
--- clic (au lieu d'attendre jusqu'à 0.2s le prochain passage de boucle).
+-- Filled in by the Auto Farm loop further below — exposed here so the
+-- "autoFarm" toggle can force a COMPLETE, IMMEDIATE stop on click
+-- (instead of waiting up to 0.2s for the next loop pass).
 local _farmFullStopRef = function() end
 
--- (bloc do..end : ces variables ne servent qu'au moteur de mouvement,
--- on les libère du compte de locals du chunk racine après "end" — même
--- limite 200 locals que pour la palette, cf. commentaire plus haut)
+-- (do..end block: these variables are only used by the movement
+-- engine — releasing them from the root chunk's local count after
+-- "end", same 200-local limit as for the palette, see comment above)
 local startSpeed, stopSpeed
 do
 	local _proxy, _ownConn = nil, nil
@@ -654,7 +653,7 @@ do
 	RunService.RenderStepped:Connect(function(dt)
 		local char = LP.Character
 		if not char then _cleanProxy(); return end
-		if _aimBatActive then return end  -- AimBat pilote hrp directement, ne pas interférer
+		if _aimBatActive then return end  -- AimBat drives hrp directly, don't interfere
 
 		local hum = char:FindFirstChildOfClass("Humanoid")
 		local hrp = char:FindFirstChild("HumanoidRootPart")
@@ -702,7 +701,7 @@ do
 end
 
 -- ============================================================
--- UI — SYSTÈME DE DESIGN
+-- UI — DESIGN SYSTEM
 -- ============================================================
 local function corner(inst, r) local c = Instance.new("UICorner", inst); c.CornerRadius = UDim.new(0, r or 8); return c end
 local function stroke(inst, col, th, tr)
@@ -722,9 +721,9 @@ local function label(parent, text, size, color, font, ax, ay)
 	return l
 end
 
--- Dégradés/liserés "vivants" — identique à Moon Hub : rotation continue,
--- UN FRAME SUR DEUX (perf), incrément doublé (1.2) pour compenser le
--- demi-taux et garder la même vitesse perçue (~0.6/frame en moyenne).
+-- "Living" gradients/strokes — same as Moon Hub: continuous rotation,
+-- EVERY OTHER FRAME (perf), doubled increment (1.2) to compensate for
+-- the half-rate and keep the same perceived speed (~0.6/frame average).
 local _liveGrads, _liveStrokes = {}, {}
 local _livingFrameToggle = false
 RunService.RenderStepped:Connect(function()
@@ -737,7 +736,7 @@ RunService.RenderStepped:Connect(function()
 		if g and g.Parent then g.Rotation = (g.Rotation + 1.2) % 360 end
 	end
 end)
--- addLivingTextGradient Moon Hub : DEEP4 -> DEEP3 -> DEEP4 -> DEEP3 -> DEEP4
+-- Moon Hub's addLivingTextGradient: DEEP4 -> DEEP3 -> DEEP4 -> DEEP3 -> DEEP4
 local function liveGrad(inst)
 	local g = Instance.new("UIGradient", inst)
 	g.Color = ColorSequence.new({
@@ -747,7 +746,7 @@ local function liveGrad(inst)
 	})
 	table.insert(_liveGrads, g); return g
 end
--- addLivingStroke Moon Hub : liseré base DEEP3 + dégradé interne
+-- Moon Hub's addLivingStroke: DEEP3 base stroke + inner gradient
 -- DEEP1 -> DEEP2 -> DEEP1 -> DEEP2 -> DEEP1
 local function addLivingStroke(parent, thickness)
 	local s = Instance.new("UIStroke", parent)
@@ -761,7 +760,7 @@ local function addLivingStroke(parent, thickness)
 	})
 	table.insert(_liveStrokes, g); return s
 end
--- makeDivider Moon Hub : ligne 1px DEEP3 + dégradé vivant, entre chaque row
+-- Moon Hub's makeDivider: 1px DEEP3 line + living gradient, between every row
 local function makeDivider(page)
 	local d = Instance.new("Frame", page)
 	d.Size = UDim2.new(1,-12,0,1)
@@ -771,22 +770,22 @@ local function makeDivider(page)
 	return d
 end
 
--- Section header — hiérarchie visuelle (regroupe des rows par thème)
+-- Section header — visual grouping for a block of rows.
 local function sectionHeader(page, text)
 	local wrap = Instance.new("Frame", page)
-	wrap.Size = UDim2.new(1,-12,0,20)
+	wrap.Size = UDim2.new(1,-12,0,18)
 	wrap.BackgroundTransparency = 1
 	local lbl = label(wrap, text:upper(), UDim2.new(1,-8,1,0), C.DIM, Enum.Font.GothamBold)
-	lbl.TextSize = 10
+	lbl.TextSize = 9
 	lbl.Position = UDim2.new(0,4,0,0)
 	return wrap
 end
 
--- Switch "pill" Moon Hub exact : pill 40x20 (ON = C.ON_BG, OFF = C.OFF_BG,
--- transparence 0.1) + liseré vivant + bille 14x14 (ON = C.WHITE à droite,
--- OFF = C.SILVER2 à gauche) + halo respirant (UIStroke épaisseur 2.5,
--- couleur C.MOON, Transparency oscillant 0.35<->0.85 toutes les 0.9s,
--- actif seulement quand ON).
+-- "Pill" switch: pill 40x20 (ON = C.ON_BG, OFF = C.OFF_BG, 0.1
+-- transparency) + living stroke + 14x14 knob (ON = C.WHITE on the
+-- right, OFF = C.SILVER2 on the left) + breathing glow (UIStroke
+-- thickness 2.5, C.MOON color, Transparency oscillating 0.35<->0.85
+-- every 0.9s, active only when ON).
 local function makeSwitch(parent, initial)
 	local pill = Instance.new("Frame", parent)
 	pill.Size = UDim2.new(0,40,0,20)
@@ -835,18 +834,17 @@ local function makeSwitch(parent, initial)
 	return pill, btn, setState
 end
 
--- Row à toggle — style Moon Hub exact (fond noir + transparence 0.35,
--- 0.15 au survol ; liseré vivant ; libellé en dégradé vivant ; pastille
--- + halo respirant ; divider après chaque row). S'enregistre
--- automatiquement pour la restauration/activation post-sauvegarde
--- (_toggleRegistry) et sauvegarde à chaque clic.
+-- Toggle row (dark background + 0.35 transparency, 0.15 on hover;
+-- living stroke; living-gradient label; knob + breathing glow; a
+-- divider after each row). Registers itself for post-load
+-- restoration/activation (_toggleRegistry) and saves on every click.
 local function makeRow(page, key, displayName, onToggle)
 	local row = Instance.new("Frame", page)
-	row.Size = UDim2.new(1,-12,0,32)
+	row.Size = UDim2.new(1,-12,0,28)
 	row.BackgroundColor3 = C.ROW
 	row.BackgroundTransparency = 0.35
 	row.BorderSizePixel = 0
-	corner(row, 12)
+	corner(row, 10)
 	addLivingStroke(row, 1)
 	local pad = Instance.new("UIPadding", row)
 	pad.PaddingLeft = UDim.new(0,10); pad.PaddingRight = UDim.new(0,10)
@@ -859,7 +857,7 @@ local function makeRow(page, key, displayName, onToggle)
 	end)
 
 	local nameLbl = label(row, displayName, UDim2.new(1,-62,1,0), C.WHITE, Enum.Font.GothamBold)
-	nameLbl.TextSize = 11
+	nameLbl.TextSize = 10.5
 	liveGrad(nameLbl)
 
 	local pill, btn, setSwitch = makeSwitch(row, key and St[key] or false)
@@ -881,26 +879,26 @@ local function makeRow(page, key, displayName, onToggle)
 	return row, btn, refresh
 end
 
--- Slider — track dégradé + thumb, valeur affichée en tabular-ish
+-- Slider — gradient track + thumb, value shown in a tabular-ish format.
 local function makeSlider(page, key, displayName, minV, maxV, fmt)
 	local row = Instance.new("Frame", page)
-	row.Size = UDim2.new(1,-12,0,46)
+	row.Size = UDim2.new(1,-12,0,40)
 	row.BackgroundColor3 = C.ROW
 	row.BackgroundTransparency = 0.35
-	row.BorderSizePixel = 0; corner(row, 12)
+	row.BorderSizePixel = 0; corner(row, 10)
 	addLivingStroke(row, 1)
 	local pad = Instance.new("UIPadding", row)
 	pad.PaddingLeft = UDim.new(0,10); pad.PaddingRight = UDim.new(0,10)
 
-	local nameLbl = label(row, displayName, UDim2.new(0.6,0,0,20), C.WHITE, Enum.Font.GothamMedium)
-	nameLbl.TextSize = 12; nameLbl.Position = UDim2.new(0,0,0,4)
+	local nameLbl = label(row, displayName, UDim2.new(0.6,0,0,18), C.WHITE, Enum.Font.GothamMedium)
+	nameLbl.TextSize = 11; nameLbl.Position = UDim2.new(0,0,0,3)
 
-	local valLbl = label(row, "", UDim2.new(0.4,0,0,20), C.ACCENT2, Enum.Font.GothamBold, Enum.TextXAlignment.Right)
-	valLbl.TextSize = 12; valLbl.Position = UDim2.new(0.6,0,0,4)
+	local valLbl = label(row, "", UDim2.new(0.4,0,0,18), C.ACCENT2, Enum.Font.GothamBold, Enum.TextXAlignment.Right)
+	valLbl.TextSize = 11; valLbl.Position = UDim2.new(0.6,0,0,3)
 
 	local track = Instance.new("Frame", row)
 	track.Size = UDim2.new(1,0,0,5)
-	track.Position = UDim2.new(0,0,1,-13)
+	track.Position = UDim2.new(0,0,1,-11)
 	track.BackgroundColor3 = C.TRACKOFF
 	track.BorderSizePixel = 0; corner(track, 3)
 
@@ -951,28 +949,126 @@ local function makeSlider(page, key, displayName, minV, maxV, fmt)
 	return row, setVal
 end
 
--- Bouton d'action simple (pas de toggle, juste un clic) — même habillage
--- de row que makeRow (transparence 0.35, coins 12, liseré vivant) pour
--- une interface cohérente de bout en bout.
+-- Simple action button (no toggle, just a click) — same row dressing
+-- as makeRow (0.35 transparency, rounded corners, living stroke) for a
+-- consistent look throughout.
 local function makeButton(page, displayName, btnText, onClick, danger)
 	local row = Instance.new("Frame", page)
-	row.Size = UDim2.new(1,-12,0,32)
+	row.Size = UDim2.new(1,-12,0,28)
 	row.BackgroundColor3 = C.ROW; row.BackgroundTransparency = 0.35
-	row.BorderSizePixel = 0; corner(row, 12)
+	row.BorderSizePixel = 0; corner(row, 10)
 	addLivingStroke(row, 1)
 	local pad = Instance.new("UIPadding", row)
 	pad.PaddingLeft = UDim.new(0,10); pad.PaddingRight = UDim.new(0,10)
-	label(row, displayName, UDim2.new(1,-64,1,0), C.WHITE, Enum.Font.GothamMedium).TextSize = 12
+	label(row, displayName, UDim2.new(1,-60,1,0), C.WHITE, Enum.Font.GothamMedium).TextSize = 11
 	local btn = Instance.new("TextButton", row)
-	btn.Size = UDim2.new(0,56,0,20)
-	btn.Position = UDim2.new(1,-56,0.5,-10)
+	btn.Size = UDim2.new(0,52,0,18)
+	btn.Position = UDim2.new(1,-52,0.5,-9)
 	btn.BackgroundColor3 = danger and Color3.fromRGB(58,20,20) or Color3.fromRGB(20,32,54)
 	btn.TextColor3 = danger and C.RED or C.ACCENT2
-	btn.Text = btnText; btn.TextSize = 10; btn.Font = Enum.Font.GothamBold
-	btn.BorderSizePixel = 0; corner(btn, 7)
+	btn.Text = btnText; btn.TextSize = 9.5; btn.Font = Enum.Font.GothamBold
+	btn.BorderSizePixel = 0; corner(btn, 6)
 	if onClick then btn.MouseButton1Click:Connect(onClick) end
 	makeDivider(page)
 	return row, btn
+end
+
+-- Swipeable option carousel: a centered card showing the current choice,
+-- with previous/next arrow buttons, real drag-to-swipe (touch or mouse),
+-- and a dot-page indicator underneath. Used to pick one of many named
+-- options (islands, rarity tiers) without a cramped button grid.
+local function makeCarousel(parent, titleText, options, labels, initialValue, onChange)
+	local titleLbl2 = label(parent, titleText:upper(), UDim2.new(1,0,0,12), C.DIM, Enum.Font.GothamBold)
+	titleLbl2.TextSize = 9
+
+	local wrap = Instance.new("Frame", parent)
+	wrap.Size = UDim2.new(1,0,0,30)
+	wrap.Position = UDim2.new(0,0,0,13)
+	wrap.BackgroundTransparency = 1
+
+	local idx = 1
+	for i, v in ipairs(options) do if v == initialValue then idx = i; break end end
+
+	local function arrowBtn(dir)
+		local b = Instance.new("TextButton", wrap)
+		b.Size = UDim2.new(0,22,1,0)
+		b.Position = dir < 0 and UDim2.new(0,0,0,0) or UDim2.new(1,-22,0,0)
+		b.BackgroundColor3 = Color3.fromRGB(12,18,32)
+		b.Text = dir < 0 and "<" or ">"
+		b.TextColor3 = C.ACCENT2; b.TextSize = 13; b.Font = Enum.Font.GothamBold
+		b.BorderSizePixel = 0; corner(b, 6)
+		return b
+	end
+	local prevBtn = arrowBtn(-1)
+	local nextBtn = arrowBtn(1)
+
+	local card = Instance.new("Frame", wrap)
+	card.Size = UDim2.new(1,-52,1,0)
+	card.Position = UDim2.new(0,26,0,0)
+	card.BackgroundColor3 = Color3.fromRGB(12,18,32)
+	card.BorderSizePixel = 0
+	corner(card, 6)
+	addLivingStroke(card, 1)
+	local cardLbl = label(card, labels[idx], UDim2.new(1,0,1,0), C.WHITE, Enum.Font.GothamBold, Enum.TextXAlignment.Center)
+	cardLbl.TextSize = 11
+
+	local dots = Instance.new("Frame", parent)
+	dots.Size = UDim2.new(1,0,0,6)
+	dots.Position = UDim2.new(0,0,0,45)
+	dots.BackgroundTransparency = 1
+	local dotList = Instance.new("UIListLayout", dots)
+	dotList.FillDirection = Enum.FillDirection.Horizontal
+	dotList.HorizontalAlignment = Enum.HorizontalAlignment.Center
+	dotList.Padding = UDim.new(0,3)
+	local dotObjs = {}
+	for i in ipairs(options) do
+		local d = Instance.new("Frame", dots)
+		d.Size = UDim2.new(0,4,0,4)
+		d.BackgroundColor3 = C.DIM
+		d.BorderSizePixel = 0; corner(d, 2)
+		dotObjs[i] = d
+	end
+
+	local function refresh()
+		cardLbl.Text = labels[idx]
+		for i, d in ipairs(dotObjs) do
+			d.BackgroundColor3 = (i == idx) and C.MOON or C.DIM
+		end
+	end
+	refresh()
+
+	local function goTo(newIdx)
+		idx = ((newIdx - 1) % #options) + 1
+		refresh()
+		if onChange then onChange(options[idx]) end
+	end
+	prevBtn.MouseButton1Click:Connect(function() goTo(idx - 1) end)
+	nextBtn.MouseButton1Click:Connect(function() goTo(idx + 1) end)
+
+	-- Real drag-swipe on the card itself.
+	local dragging, startX, baseX = false, 0, 0
+	card.InputBegan:Connect(function(inp)
+		if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then
+			dragging = true; startX = inp.Position.X; baseX = card.Position.X.Offset
+		end
+	end)
+	UIS.InputChanged:Connect(function(inp)
+		if not dragging then return end
+		if inp.UserInputType ~= Enum.UserInputType.MouseMovement and inp.UserInputType ~= Enum.UserInputType.Touch then return end
+		local delta = inp.Position.X - startX
+		card.Position = UDim2.new(0, baseX + math.clamp(delta, -30, 30), 0, 0)
+	end)
+	UIS.InputEnded:Connect(function(inp)
+		if not dragging then return end
+		if inp.UserInputType ~= Enum.UserInputType.MouseButton1 and inp.UserInputType ~= Enum.UserInputType.Touch then return end
+		dragging = false
+		local delta = inp.Position.X - startX
+		card.Position = UDim2.new(0, baseX, 0, 0)
+		if delta > 28 then goTo(idx - 1)
+		elseif delta < -28 then goTo(idx + 1) end
+	end)
+
+	return wrap
 end
 
 -- ============================================================
@@ -986,85 +1082,83 @@ gui.IgnoreGuiInset = true
 pcall(function() gui.Parent = game:GetService("CoreGui") end)
 if not gui.Parent then gui.Parent = LP.PlayerGui end
 
--- Fenêtre principale — proportions Moon Hub exactes : 300x340, coins 24,
--- header 48px.
+-- Main window — compact size (reduced from the original 300x340).
 local main = Instance.new("Frame", gui)
 main.Name = "Main"
-main.Size = UDim2.new(0,300,0,340)
-main.Position = UDim2.new(0,14,0.5,-170)
+main.Size = UDim2.new(0,264,0,296)
+main.Position = UDim2.new(0,14,0.5,-148)
 main.BackgroundColor3 = C.BG
 main.BorderSizePixel = 0
 main.ClipsDescendants = true
-corner(main, 24)
+corner(main, 20)
 stroke(main, C.BORDER, 1.5)
 local mainShadow = Instance.new("UIStroke", main)
 mainShadow.Color = C.ACCENT; mainShadow.Thickness = 1; mainShadow.Transparency = 0.85
 
 -- Header
 local header = Instance.new("Frame", main)
-header.Size = UDim2.new(1,0,0,48)
+header.Size = UDim2.new(1,0,0,42)
 header.BackgroundColor3 = C.BG
 header.BorderSizePixel = 0
-corner(header, 24)
+corner(header, 20)
 
 local titleLbl = Instance.new("TextLabel", header)
 titleLbl.BackgroundTransparency = 1
-titleLbl.Size = UDim2.new(1,-56,1,0)
-titleLbl.Position = UDim2.new(0,14,0,0)
+titleLbl.Size = UDim2.new(1,-50,1,0)
+titleLbl.Position = UDim2.new(0,12,0,0)
 titleLbl.Text = "yslemEgg"
-titleLbl.TextSize = 16
+titleLbl.TextSize = 14
 titleLbl.Font = Enum.Font.GothamBold
 titleLbl.TextXAlignment = Enum.TextXAlignment.Left
 titleLbl.TextYAlignment = Enum.TextYAlignment.Center
 liveGrad(titleLbl)
 
 local closeBtn = Instance.new("TextButton", header)
-closeBtn.Size = UDim2.new(0,24,0,24)
-closeBtn.Position = UDim2.new(1,-32,0.5,-12)
+closeBtn.Size = UDim2.new(0,20,0,20)
+closeBtn.Position = UDim2.new(1,-28,0.5,-10)
 closeBtn.BackgroundColor3 = Color3.fromRGB(58,20,20)
-closeBtn.Text = "✕"; closeBtn.TextSize = 12
+closeBtn.Text = "✕"; closeBtn.TextSize = 11
 closeBtn.TextColor3 = C.RED; closeBtn.Font = Enum.Font.GothamBold
-closeBtn.BorderSizePixel = 0; corner(closeBtn, 7)
+closeBtn.BorderSizePixel = 0; corner(closeBtn, 6)
 
 local minBtn = Instance.new("TextButton", header)
-minBtn.Size = UDim2.new(0,24,0,24)
-minBtn.Position = UDim2.new(1,-60,0.5,-12)
+minBtn.Size = UDim2.new(0,20,0,20)
+minBtn.Position = UDim2.new(1,-52,0.5,-10)
 minBtn.BackgroundColor3 = Color3.fromRGB(24,26,35)
-minBtn.Text = "–"; minBtn.TextSize = 14
+minBtn.Text = "–"; minBtn.TextSize = 13
 minBtn.TextColor3 = C.ACCENT2; minBtn.Font = Enum.Font.GothamBold
-minBtn.BorderSizePixel = 0; corner(minBtn, 7)
+minBtn.BorderSizePixel = 0; corner(minBtn, 6)
 
 local sep = Instance.new("Frame", main)
 sep.Size = UDim2.new(1,-24,0,1)
-sep.Position = UDim2.new(0,12,0,48)
+sep.Position = UDim2.new(0,12,0,42)
 sep.BackgroundColor3 = C.BORDER; sep.BorderSizePixel = 0
 
--- Tab bar — style Moon Hub exact : boutons 44px fixes (pas de division
--- proportionnelle), pilule pleine active (C.MOON / texte C.MOONTEXT),
--- inactive semi-transparente (18,22,30 @ 0.5 / texte C.TABIDLE), liseré
--- vivant, flash de transition au clic.
-local TAB_Y = 54
+-- Tab bar — full pill for the active tab (C.MOON / C.MOONTEXT text),
+-- semi-transparent for inactive ones (18,22,30 @ 0.5 / C.TABIDLE text),
+-- living stroke, click flash transition.
+local TAB_Y = 48
 local tabBar = Instance.new("Frame", main)
-tabBar.Size = UDim2.new(1,0,0,32)
+tabBar.Size = UDim2.new(1,0,0,28)
 tabBar.Position = UDim2.new(0,0,0,TAB_Y)
 tabBar.BackgroundTransparency = 1
 local tabList = Instance.new("UIListLayout", tabBar)
 tabList.FillDirection = Enum.FillDirection.Horizontal
 tabList.HorizontalAlignment = Enum.HorizontalAlignment.Center
 tabList.VerticalAlignment = Enum.VerticalAlignment.Center
-tabList.Padding = UDim.new(0,8)
+tabList.Padding = UDim.new(0,6)
 
 local TABS = {"Farm","Speed","Visual","Misc"}
 local tabBtns, tabFlashes = {}, {}
 for _, name in ipairs(TABS) do
 	local btn = Instance.new("TextButton", tabBar)
-	btn.Size = UDim2.new(0,44,0,28)
+	btn.Size = UDim2.new(0,40,0,24)
 	btn.BackgroundColor3 = Color3.fromRGB(18,22,30)
 	btn.BackgroundTransparency = 0.5
-	btn.Text = name; btn.TextSize = 11
+	btn.Text = name; btn.TextSize = 10
 	btn.TextColor3 = C.TABIDLE; btn.Font = Enum.Font.GothamBold
 	btn.BorderSizePixel = 0
-	corner(btn, 10)
+	corner(btn, 9)
 	addLivingStroke(btn, 1)
 	local flash = Instance.new("Frame", btn)
 	flash.Size = UDim2.new(1,0,1,0)
@@ -1072,14 +1166,14 @@ for _, name in ipairs(TABS) do
 	flash.BackgroundTransparency = 1
 	flash.BorderSizePixel = 0
 	flash.ZIndex = btn.ZIndex + 1
-	corner(flash, 10)
+	corner(flash, 9)
 	tabBtns[name] = btn
 	tabFlashes[name] = flash
 end
 
-local CONTENT_Y = TAB_Y + 32 + 6
+local CONTENT_Y = TAB_Y + 28 + 6
 local contentArea = Instance.new("Frame", main)
-contentArea.Size = UDim2.new(1,0,1,-CONTENT_Y-24)
+contentArea.Size = UDim2.new(1,0,1,-CONTENT_Y-22)
 contentArea.Position = UDim2.new(0,0,0,CONTENT_Y)
 contentArea.BackgroundTransparency = 1
 contentArea.ClipsDescendants = true
@@ -1104,8 +1198,8 @@ for _, name in ipairs(TABS) do
 	pages[name] = pg
 end
 
--- Transition d'onglet Moon Hub : pilule pleine + flash qui s'efface +
--- léger glissement d'entrée du contenu.
+-- Tab switch transition: full pill + fading flash + a slight slide-in
+-- of the content.
 local activeTab = nil
 local function switchTab(name)
 	if activeTab == name then return end
@@ -1133,8 +1227,8 @@ end
 
 -- Status bar
 local statusBar = Instance.new("Frame", main)
-statusBar.Size = UDim2.new(1,0,0,24)
-statusBar.Position = UDim2.new(0,0,1,-24)
+statusBar.Size = UDim2.new(1,0,0,22)
+statusBar.Position = UDim2.new(0,0,1,-22)
 statusBar.BackgroundColor3 = Color3.fromRGB(5,6,9)
 statusBar.BorderSizePixel = 0
 
@@ -1161,11 +1255,11 @@ local function setStatus(txt, col)
 end
 
 -- ============================================================
--- ONGLET FARM
+-- FARM TAB
 -- ============================================================
 local farmPage = pages["Farm"]
 
--- Diagnostic modules
+-- Module diagnostics
 do
 	local okCount, total = 0, 0
 	for _, ok in pairs(_ModuleStatus) do total = total+1; if ok then okCount = okCount+1 end end
@@ -1175,7 +1269,7 @@ do
 	row.BackgroundColor3 = C.ROW; row.BorderSizePixel = 0; corner(row, 7)
 	local pad = Instance.new("UIPadding", row)
 	pad.PaddingLeft = UDim.new(0,10); pad.PaddingRight = UDim.new(0,10)
-	local lbl = label(row, "Modules: "..okCount.."/"..total.." charges", UDim2.new(1,0,1,0),
+	local lbl = label(row, "Modules: "..okCount.."/"..total.." loaded", UDim2.new(1,0,1,0),
 		allOk and C.GREEN or C.YELLOW, Enum.Font.GothamMedium)
 	lbl.TextSize = 11
 	if not allOk then
@@ -1185,15 +1279,15 @@ do
 			local lines = {}
 			for name, ok in pairs(_ModuleStatus) do
 				local path = _ModuleFound[name]
-				if ok then table.insert(lines, "OK          "..name.."  ("..tostring(path)..")")
-				elseif path then table.insert(lines, "ECHEC       "..name.."  (trouve a "..path..", require() plante)")
-				else table.insert(lines, "INTROUVABLE "..name) end
+				if ok then table.insert(lines, "OK        "..name.."  ("..tostring(path)..")")
+				elseif path then table.insert(lines, "FAILED    "..name.."  (found at "..path..", require() failed)")
+				else table.insert(lines, "NOT FOUND "..name) end
 			end
 			table.sort(lines)
 			local msg = table.concat(lines, "\n")
-			print("[yslemEgg] Statut modules:\n"..msg)
+			print("[yslemEgg] Module status:\n"..msg)
 			pcall(function() if setclipboard then setclipboard(msg) end end)
-			setStatus("Details copies / voir console (F9)", C.YELLOW)
+			setStatus("Details copied / see console (F9)", C.YELLOW)
 		end)
 	end
 end
@@ -1221,13 +1315,13 @@ local function setInstantGrab(on)
 end
 makeRow(farmPage, "instantGrab", "Instant Grab", function(on) setInstantGrab(on) end)
 
--- Auto Farm — moteur unifié (fini le Tween qui se battait avec Speed
--- Boost/Anti Ragdoll). Timeout de sécurité par trajet : jamais bloqué
--- indéfiniment même si le trajet échoue. Après la prise, court vers la
--- zone sûre (échapper aux gardes) au lieu de rester planté sur l'œuf.
--- TOUT s'arrête immédiatement (mouvement + spam) dès que Auto Farm est
--- désactivé — vérifié en direct dans chaque boucle d'attente ET forcé
--- au clic via _farmFullStopRef (voir makeRow plus bas).
+-- Auto Farm — unified engine (no more Tween fighting Speed
+-- Boost/Anti Ragdoll). Safety timeout per trip: never stuck forever
+-- even if the trip fails. After a grab, runs to the safe zone (escape
+-- the guards) instead of standing idle on the egg. EVERYTHING stops
+-- immediately (movement + spam) as soon as Auto Farm is disabled —
+-- checked live inside every wait loop AND forced on click via
+-- _farmFullStopRef (see makeRow further below).
 task.spawn(function()
 	local isFarmingEgg = false
 	local function _farmFullStop()
@@ -1248,19 +1342,19 @@ task.spawn(function()
 
 		if not isFarmingEgg and rootPart then
 			if #cachedEggs == 0 then
-				setStatus(string.format("Farm: 0 oeuf — slots=%s total=%d actif=%d",
-					_eggScanSlotsFound and "oui" or "non", _eggScanPromptTotal, _eggScanPromptEnabled), C.DIM)
+				setStatus(string.format("Farm: 0 eggs — slots=%s total=%d active=%d",
+					_eggScanSlotsFound and "yes" or "no", _eggScanPromptTotal, _eggScanPromptEnabled), C.DIM)
 			else
-				-- Ne cibler que les oeufs PRÊTS et FARMABLES (jamais tes propres
-				-- oeufs déjà en slot — voir source 2 du scanner), filtres
-				-- zone+rareté actifs.
+				-- Only target READY and FARMABLE eggs (never your own eggs
+				-- already in a slot — see scanner source 2), island+rarity
+				-- filters applied.
 				local myPos = rootPart.Position
 				local best, bestDist = nil, math.huge
 				for _, r in ipairs(cachedEggs) do
 					if r.enabled and r.farmable ~= false then
-						-- Filtre zone/île
+						-- Island filter
 						local zoneOk = St.farmZone == "" or r.area == St.farmZone
-						-- Filtre rareté
+						-- Rarity filter
 						local rarityOk = St.farmRarity == ""
 						if not rarityOk then
 							local low3 = St.farmRarity:lower()
@@ -1278,9 +1372,9 @@ task.spawn(function()
 					end
 				end
 				if not best then
-					local zTxt = St.farmZone ~= "" and (" île:"..St.farmZone) or ""
-					local rTxt = St.farmRarity ~= "" and (" rareté:"..St.farmRarity) or ""
-					setStatus(string.format("Farm: %d vu, 0 cible farmable%s%s", #cachedEggs, zTxt, rTxt), C.DIM)
+					local zTxt = St.farmZone ~= "" and (" island:"..St.farmZone) or ""
+					local rTxt = St.farmRarity ~= "" and (" rarity:"..St.farmRarity) or ""
+					setStatus(string.format("Farm: %d seen, 0 farmable target%s%s", #cachedEggs, zTxt, rTxt), C.DIM)
 				end
 
 				if best then
@@ -1289,9 +1383,9 @@ task.spawn(function()
 					_farmTargetPos = best.pos
 					_farmSpeed = math.max(St.speed, 40)
 
-					-- Retire tout de suite la cible du cache réseau : évite de
-					-- re-sélectionner le même œuf en boucle si le monde met du
-					-- temps à confirmer la prise.
+					-- Remove the target from the network cache right away:
+					-- avoids re-selecting the same egg in a loop if the world
+					-- takes time to confirm the grab.
 					if best.uid then _fieldEggNet[best.uid] = nil end
 
 					local spamming = true
@@ -1320,16 +1414,16 @@ task.spawn(function()
 					_farmMoving = false
 
 					if St.autoFarm then
-						setStatus("Farm: pris → "..tostring(best.cat or "?"), C.GREEN)
+						setStatus("Farm: grabbed → "..tostring(best.cat or "?"), C.GREEN)
 
-						-- Course vers la zone sûre pour sécuriser l'œuf (échapper
-						-- aux gardes) — si aucune zone sûre n'est trouvée, on
-						-- repart simplement farmer au lieu de rester bloqué.
+						-- Run to the safe zone to secure the egg (escape the
+						-- guards) — if no safe zone is found, just resume
+						-- farming instead of getting stuck.
 						local safePos = _findSafeZonePos()
 						if safePos then
 							_farmMoving = true
 							_farmTargetPos = safePos
-							setStatus("Farm: retour zone sûre...", C.ACCENT2)
+							setStatus("Farm: heading to safe zone...", C.ACCENT2)
 
 							local t1 = os.clock()
 							while St.autoFarm and _farmMoving and (os.clock()-t1) < 10 do
@@ -1338,7 +1432,7 @@ task.spawn(function()
 								if (hrp4.Position - safePos).Magnitude < 6 then break end
 								task.wait(0.1)
 							end
-							if St.autoFarm then setStatus("Farm: zone sûre atteinte", C.GREEN) end
+							if St.autoFarm then setStatus("Farm: safe zone reached", C.GREEN) end
 						end
 					end
 
@@ -1354,7 +1448,7 @@ makeRow(farmPage, "autoFarm", "Auto Farm Eggs", function(on)
 end)
 
 -- ============================================================
--- SÉLECTEUR ÎLE + RARETÉ (visible en permanence sous Auto Farm)
+-- ISLAND + RARITY PICKER (swipeable, always visible under Auto Farm)
 -- ============================================================
 do
 	local FARM_ZONES = {
@@ -1362,15 +1456,14 @@ do
 		"Cosmic","Lake","Volcano","Cherry Blossom","Jungle","Titan Temple",
 	}
 	local FARM_ZONE_LABELS = {
-		"Toutes","Forest","Desert","Prehist.","Abyss","Snow",
-		"Cosmic","Lake","Volcano","Cherry","Jungle","Titan",
+		"All Islands","Forest","Desert","Prehistoric","Abyss Ocean","Snow",
+		"Cosmic","Lake","Volcano","Cherry Blossom","Jungle","Titan Temple",
 	}
 	local FARM_RARITIES = {"","secret","legendary","mythic","divine","celestial"}
-	local FARM_RARITY_LABELS = {"Toutes","Secret","Leg.","Mythic","Divine","Céleste"}
+	local FARM_RARITY_LABELS = {"All Rarities","Secret","Legendary","Mythic","Divine","Celestial"}
 
-	-- Conteneur principal
 	local selOuter = Instance.new("Frame", farmPage)
-	selOuter.Size = UDim2.new(1,-12,0,118)
+	selOuter.Size = UDim2.new(1,-12,0,100)
 	selOuter.BackgroundColor3 = C.ROW
 	selOuter.BackgroundTransparency = 0.25
 	selOuter.BorderSizePixel = 0
@@ -1380,90 +1473,31 @@ do
 	selPad.PaddingLeft = UDim.new(0,8); selPad.PaddingRight = UDim.new(0,8)
 	selPad.PaddingTop = UDim.new(0,6); selPad.PaddingBottom = UDim.new(0,6)
 
-	-- Titre île
-	local _zoneTitleLbl = label(selOuter, "ÎLE CIBLE", UDim2.new(1,0,0,13), C.DIM, Enum.Font.GothamBold)
-	_zoneTitleLbl.TextSize = 9; _zoneTitleLbl.Position = UDim2.new(0,0,0,0)
+	local zoneCarousel = Instance.new("Frame", selOuter)
+	zoneCarousel.Size = UDim2.new(1,0,0,51)
+	zoneCarousel.BackgroundTransparency = 1
+	makeCarousel(zoneCarousel, "Target Island", FARM_ZONES, FARM_ZONE_LABELS, St.farmZone, function(zv)
+		St.farmZone = zv
+		setStatus("Farm island: "..(zv == "" and "All Islands" or zv), C.ACCENT2)
+		saveConfig()
+	end)
 
-	-- Grille de zones (3 colonnes)
-	local zoneGrid = Instance.new("Frame", selOuter)
-	zoneGrid.Size = UDim2.new(1,0,0,56)
-	zoneGrid.Position = UDim2.new(0,0,0,14)
-	zoneGrid.BackgroundTransparency = 1
-	local zGrid = Instance.new("UIGridLayout", zoneGrid)
-	zGrid.CellSize = UDim2.new(0,82,0,17)
-	zGrid.CellPadding = UDim2.new(0,3,0,3)
-	zGrid.FillDirectionMaxCells = 3
-	zGrid.SortOrder = Enum.SortOrder.LayoutOrder
-
-	local _zoneBtns = {}
-	local function _refreshZoneBtns()
-		for _, info in ipairs(_zoneBtns) do
-			local on = (info.zone == St.farmZone)
-			info.btn.BackgroundColor3 = on and C.MOON or Color3.fromRGB(12,18,32)
-			info.btn.TextColor3 = on and C.MOONTEXT or C.SILVER2
-		end
-	end
-	for i, zv in ipairs(FARM_ZONES) do
-		local zl = FARM_ZONE_LABELS[i]
-		local zBtn = Instance.new("TextButton", zoneGrid)
-		zBtn.LayoutOrder = i
-		zBtn.Size = UDim2.new(0,1,0,1)
-		zBtn.BackgroundColor3 = (St.farmZone == zv) and C.MOON or Color3.fromRGB(12,18,32)
-		zBtn.TextColor3 = (St.farmZone == zv) and C.MOONTEXT or C.SILVER2
-		zBtn.Text = zl; zBtn.TextSize = 8; zBtn.Font = Enum.Font.GothamMedium
-		zBtn.BorderSizePixel = 0; corner(zBtn, 4)
-		table.insert(_zoneBtns, {btn=zBtn, zone=zv})
-		zBtn.MouseButton1Click:Connect(function()
-			St.farmZone = zv; _refreshZoneBtns()
-			setStatus("Farm île: "..(zv == "" and "Toutes" or zv), C.ACCENT2)
-			saveConfig()
-		end)
-	end
-
-	-- Titre rareté
-	local _rareTitleLbl = label(selOuter, "RARETÉ", UDim2.new(1,0,0,13), C.DIM, Enum.Font.GothamBold)
-	_rareTitleLbl.TextSize = 9; _rareTitleLbl.Position = UDim2.new(0,0,0,74)
-
-	-- Boutons rareté (ligne horizontale)
-	local rareRow = Instance.new("Frame", selOuter)
-	rareRow.Size = UDim2.new(1,0,0,20)
-	rareRow.Position = UDim2.new(0,0,0,88)
-	rareRow.BackgroundTransparency = 1
-	local rList = Instance.new("UIListLayout", rareRow)
-	rList.FillDirection = Enum.FillDirection.Horizontal
-	rList.Padding = UDim.new(0,3)
-	rList.VerticalAlignment = Enum.VerticalAlignment.Center
-
-	local _rareBtns = {}
-	local function _refreshRareBtns()
-		for _, info in ipairs(_rareBtns) do
-			local on = (info.rarity == St.farmRarity)
-			info.btn.BackgroundColor3 = on and C.MOON or Color3.fromRGB(12,18,32)
-			info.btn.TextColor3 = on and C.MOONTEXT or C.SILVER2
-		end
-	end
-	for i, rv in ipairs(FARM_RARITIES) do
-		local rl = FARM_RARITY_LABELS[i]
-		local rBtn = Instance.new("TextButton", rareRow)
-		rBtn.Size = UDim2.new(0,42,1,0)
-		rBtn.BackgroundColor3 = (St.farmRarity == rv) and C.MOON or Color3.fromRGB(12,18,32)
-		rBtn.TextColor3 = (St.farmRarity == rv) and C.MOONTEXT or C.SILVER2
-		rBtn.Text = rl; rBtn.TextSize = 8; rBtn.Font = Enum.Font.GothamMedium
-		rBtn.BorderSizePixel = 0; corner(rBtn, 4)
-		table.insert(_rareBtns, {btn=rBtn, rarity=rv})
-		rBtn.MouseButton1Click:Connect(function()
-			St.farmRarity = rv; _refreshRareBtns()
-			setStatus("Farm rareté: "..(rv == "" and "Toutes" or rl), C.ACCENT2)
-			saveConfig()
-		end)
-	end
+	local rareCarousel = Instance.new("Frame", selOuter)
+	rareCarousel.Size = UDim2.new(1,0,0,51)
+	rareCarousel.Position = UDim2.new(0,0,0,55)
+	rareCarousel.BackgroundTransparency = 1
+	makeCarousel(rareCarousel, "Rarity", FARM_RARITIES, FARM_RARITY_LABELS, St.farmRarity, function(rv)
+		St.farmRarity = rv
+		setStatus("Farm rarity: "..(rv == "" and "All Rarities" or rv), C.ACCENT2)
+		saveConfig()
+	end)
 
 	makeDivider(farmPage)
 end
 
--- Auto Hatch / Auto Equip — clic direct des vrais boutons UI du jeu
--- ("Grow All", "Equip Best", confirmés par capture d'écran) via
--- firesignal — indépendant de tout module cassé.
+-- Auto Hatch / Auto Equip — directly clicks the game's real UI buttons
+-- ("Grow All", "Equip Best", confirmed by screenshot) via firesignal —
+-- independent of any broken module.
 local _guiClickWarned = false
 local function _clickGuiButtonByText(matchFn)
 	local pg = LP:FindFirstChild("PlayerGui")
@@ -1486,7 +1520,7 @@ local function _clickGuiButtonByText(matchFn)
 	end
 	if not _guiClickWarned then
 		_guiClickWarned = true
-		setStatus("Clic UI indispo (firesignal manquant)", C.RED)
+		setStatus("UI click unavailable (missing firesignal)", C.RED)
 	end
 	return false
 end
@@ -1498,7 +1532,7 @@ task.spawn(function()
 		if St.autoHatch and (os.clock()-lastHatch) >= 3 then
 			lastHatch = os.clock()
 			if _clickGuiButtonByText(function(t) return t:lower():find("grow all", 1, true) ~= nil end) then
-				setStatus("Hatch: 'Grow All' clique", C.GREEN)
+				setStatus("Hatch: 'Grow All' clicked", C.GREEN)
 			end
 		end
 	end
@@ -1512,14 +1546,14 @@ task.spawn(function()
 		if St.autoEquip and (os.clock()-lastEquip) >= 4 then
 			lastEquip = os.clock()
 			if _clickGuiButtonByText(function(t) return t:lower():find("equip best", 1, true) ~= nil end) then
-				setStatus("'Equip Best' clique", C.GREEN)
+				setStatus("'Equip Best' clicked", C.GREEN)
 			end
 		end
 	end
 end)
 makeRow(farmPage, "autoEquip", "Auto Equip Best", function(on) end)
 
--- Auto Claim — remotes confirmés, aucun coût (récupère des gains déjà acquis)
+-- Auto Claim — confirmed remotes, no cost (collects earnings already owed)
 task.spawn(function()
 	local lastClaim = 0
 	while true do
@@ -1529,17 +1563,17 @@ task.spawn(function()
 			local a = _invokeRF("RF/AwayEarnings/AskCollect")
 			local b = _invokeRF("RF/Codex/AskRedeemAll")
 			local c = _invokeRF("RF/GroupPerk/RedeemPerk")
-			if a or b or c then setStatus("Claim: away/codex/group tentes", C.GREEN) end
+			if a or b or c then setStatus("Claim: away/codex/group attempted", C.GREEN) end
 		end
 	end
 end)
 makeRow(farmPage, "autoClaim", "Auto Claim", function(on) end)
 
-sectionHeader(farmPage, "Améliorations")
+sectionHeader(farmPage, "Upgrades")
 
--- Auto Upgrade Pen/Treadmill — vraie condition d'argent (Save.Get
--- confirmé correct) + vrais remotes confirmés (AskBaseTierRaise,
--- pas AskWearLimit deviné à tort au tour précédent).
+-- Auto Upgrade Pen/Treadmill — real money check (Save.Get confirmed
+-- correct) + confirmed real remotes (AskBaseTierRaise, not the
+-- wrongly guessed AskWearLimit from an earlier pass).
 task.spawn(function()
 	local lastPen = 0
 	while true do
@@ -1551,7 +1585,7 @@ task.spawn(function()
 				local nextLevel = (data.BaseUpgradeLevel or 0) + 1
 				local nextConfig = Bases and Bases.BASES and Bases.BASES[nextLevel]
 				if nextConfig and data.Money and data.Money >= (nextConfig.Cost or math.huge) then
-					if _invokeRF("AskBaseTierRaise") then setStatus("Pen: tier "..nextLevel.." tente", C.GREEN) end
+					if _invokeRF("AskBaseTierRaise") then setStatus("Pen: tier "..nextLevel.." attempted", C.GREEN) end
 				end
 			end
 		end
@@ -1570,7 +1604,7 @@ task.spawn(function()
 				local nextLevel = (data.TreadmillUpgradeLevel or 0) + 1
 				local nextConfig = Treadmills and Treadmills.GetByUpgradeLevel and Treadmills.GetByUpgradeLevel(nextLevel)
 				if nextConfig and data.Money and data.Money >= (nextConfig.Price or math.huge) then
-					if _invokeRF("AskTierRaise", nextConfig._id) then setStatus("Treadmill: tier "..nextLevel.." tente", C.GREEN) end
+					if _invokeRF("AskTierRaise", nextConfig._id) then setStatus("Treadmill: tier "..nextLevel.." attempted", C.GREEN) end
 				end
 			end
 		end
@@ -1578,19 +1612,19 @@ task.spawn(function()
 end)
 makeRow(farmPage, "autoUpgradeTM", "Auto Upgrade Treadmill", function(on) end)
 
--- Auto Buy Trails — volontairement désactivé (prix mixtes $/Robux
--- vus dans le Trail Shop, risque de débiter de vrais Robux)
+-- Auto Buy Trails — deliberately disabled (mixed $/Robux prices seen
+-- in the Trail Shop, risk of spending real Robux)
 local buyTrailsRefresh
 local _, _, _btr = makeRow(farmPage, "autoBuyTrails", "Auto Buy Trails", function(on)
 	if on then
-		setStatus("Buy Trails: desactive par securite (prix Robux)", C.YELLOW)
+		setStatus("Buy Trails: disabled for safety (Robux price)", C.YELLOW)
 		St.autoBuyTrails = false
 		if buyTrailsRefresh then buyTrailsRefresh() end
 	end
 end)
 buyTrailsRefresh = _btr
 
--- Auto Run Treadmill — désactive "Slow Mode" (confirmé par capture d'écran)
+-- Auto Run Treadmill — disables "Slow Mode" (confirmed by screenshot)
 task.spawn(function()
 	while true do
 		if St.autoRunTreadmill then _invokeRF("RF/Treadmill/AskSlowToggleSet", false) end
@@ -1600,7 +1634,7 @@ end)
 makeRow(farmPage, "autoRunTreadmill", "Auto Run Treadmill", function(on) end)
 
 -- ============================================================
--- ONGLET SPEED
+-- SPEED TAB
 -- ============================================================
 local speedPage = pages["Speed"]
 
@@ -1609,7 +1643,7 @@ local speedRow, speedBtn, speedRefresh = makeRow(speedPage, "speedOn", "Speed Bo
 end)
 makeSlider(speedPage, "speed", "Walk Speed", 4, 500, "%d")
 
--- Anti Ragdoll — override module + filet réactif
+-- Anti Ragdoll — module override + reactive safety net
 local _ragdollOriginal = {}
 local function _applyRagdollModuleOverride(on)
 	if not Ragdoll then return end
@@ -1738,7 +1772,7 @@ makeRow(speedPage, "antiTrap", "Anti Trap", function(on)
 end)
 
 -- ============================================================
--- ONGLET VISUAL
+-- VISUAL TAB
 -- ============================================================
 local visualPage = pages["Visual"]
 
@@ -1762,7 +1796,7 @@ end
 local function stopESP()
 	if _espConn then _espConn:Disconnect(); _espConn = nil end
 	clearESP()
-	if _espStatsLbl then _espStatsLbl.Text = "ESP inactif" end
+	if _espStatsLbl then _espStatsLbl.Text = "ESP inactive" end
 end
 local function startESP()
 	stopESP()
@@ -1786,11 +1820,11 @@ local function startESP()
 			if not areaUnlocked(r.area) then lockedCount = lockedCount + 1 end
 		end
 
-		-- N'affiche que les plus proches : au-delà d'un certain nombre de
-		-- billboards à l'écran en même temps, le texte se chevauche et
-		-- devient illisible (c'est ce qui rendait l'ESP "moche, on voit
-		-- rien"). On trie par distance et on plafonne le rendu — les
-		-- compteurs ci-dessus, eux, restent calculés sur TOUS les œufs.
+		-- Only show the closest ones: past a certain number of billboards
+		-- on screen at once, the text overlaps and becomes unreadable
+		-- (this is what made the ESP "ugly, can't see anything"). Sort by
+		-- distance and cap the render — the counters above still count
+		-- ALL eggs regardless.
 		local ESP_MAX_SHOWN, ESP_MAX_DIST = 20, 220
 		local shown = {}
 		if myPos then
@@ -1824,9 +1858,9 @@ local function startESP()
 				box.SurfaceTransparency = 0.7; box.SurfaceColor3 = col
 				box.Parent = p
 
-				-- Panneau de fond semi-transparent : sans ça le texte se
-				-- perd sur un sol/décor clair ou chargé, même avec le
-				-- contour (TextStroke) déjà en place.
+				-- Semi-transparent background panel: without it the text
+				-- gets lost against a light/busy ground or scenery, even
+				-- with the outline (TextStroke) already in place.
 				local bb = Instance.new("BillboardGui")
 				bb.Size = UDim2.fromOffset(220,54); bb.AlwaysOnTop = true; bb.MaxDistance = ESP_MAX_DIST
 				bb.Parent = p
@@ -1837,12 +1871,12 @@ local function startESP()
 				bg.BorderSizePixel = 0
 				corner(bg, 6)
 
-				-- 3 lignes : nom (rareté si connue), statut, poids+distance+zone
+				-- 3 lines: name (rarity if known), status, weight+distance+zone
 				local nameLbl = Instance.new("TextLabel", bb)
 				nameLbl.Size = UDim2.new(1,0,0,18)
 				nameLbl.BackgroundTransparency = 1; nameLbl.Font = Enum.Font.GothamBold
 				nameLbl.TextSize = 12; nameLbl.TextStrokeTransparency = 0
-				nameLbl.TextColor3 = col; nameLbl.Text = tostring(r.cat or "Oeuf")
+				nameLbl.TextColor3 = col; nameLbl.Text = tostring(r.cat or "Egg")
 				nameLbl.TextTruncate = Enum.TextTruncate.AtEnd
 
 				local detailLbl = Instance.new("TextLabel", bb)
@@ -1857,19 +1891,19 @@ local function startESP()
 				metaLbl.TextSize = 9; metaLbl.TextStrokeTransparency = 0.1
 				metaLbl.TextColor3 = C.SILVER
 
-				-- Ligne 2 : statut seul (plus de doublon avec le nom, qui
-				-- porte déjà la rareté via r.cat).
+				-- Line 2: status only (no more duplicating the name, which
+				-- already carries the rarity via r.cat).
 				if notReady then
-					detailLbl.Text = "CROISSANCE"
+					detailLbl.Text = "GROWING"
 				elseif not unlocked then
 					local A = AREA[r.area]
-					detailLbl.Text = "VERROUILLE ".._shortNum(A and A.reqSP)
+					detailLbl.Text = "LOCKED ".._shortNum(A and A.reqSP)
 				else
-					detailLbl.Text = "PRET"
+					detailLbl.Text = "READY"
 				end
 
-				-- Ligne 3 : poids (uniquement si une vraie valeur en kg a été
-				-- lue en jeu — jamais une estimation) + distance + zone.
+				-- Line 3: weight (only if a real kg value was read in-game
+				-- — never an estimate) + distance + zone.
 				local metaParts = {}
 				if r.weight then table.insert(metaParts, r.weight.."kg") end
 				local distTxt = "?m"
@@ -1884,15 +1918,15 @@ local function startESP()
 
 		if _espStatsLbl then
 			_espStatsLbl.Text = string.format(
-				"Total %d  ·  Prets %d  ·  Rares %d  ·  Verrouilles %d",
+				"Total %d  ·  Ready %d  ·  Rare %d  ·  Locked %d",
 				total, readyCount, rareCount, lockedCount)
 		end
 	end)
 end
 makeRow(visualPage, "esp", "Egg ESP", function(on) if on then startESP() else stopESP() end end)
 
--- Petit récap live sous le toggle ESP — totaux mis à jour à chaque
--- rafraîchissement (même cadence que les billboards, 1x/s).
+-- Small live recap under the ESP toggle — totals refreshed at the same
+-- cadence as the billboards (1x/s).
 do
 	local row = Instance.new("Frame", visualPage)
 	row.Size = UDim2.new(1,-12,0,24)
@@ -1900,7 +1934,7 @@ do
 	row.BorderSizePixel = 0; corner(row, 10); addLivingStroke(row, 1)
 	local pad = Instance.new("UIPadding", row)
 	pad.PaddingLeft = UDim.new(0,10); pad.PaddingRight = UDim.new(0,10)
-	_espStatsLbl = label(row, "ESP inactif", UDim2.new(1,0,1,0), C.DIM, Enum.Font.Gotham)
+	_espStatsLbl = label(row, "ESP inactive", UDim2.new(1,0,1,0), C.DIM, Enum.Font.Gotham)
 	_espStatsLbl.TextSize = 10.5
 	makeDivider(visualPage)
 end
@@ -1936,9 +1970,9 @@ makeRow(visualPage, "fpsBoost", "FPS Boost", function(on) if on then applyFpsBoo
 
 do
 	makeSlider(visualPage, "fov", "FOV", 30, 130, "%d°")
-	-- makeSlider est générique (ne connaît pas la caméra) — applique le
-	-- FOV séparément, une fois immédiatement puis via une petite boucle
-	-- qui observe St.fov (couvre le drag ET la restauration au chargement).
+	-- makeSlider is generic (doesn't know about the camera) — applies FOV
+	-- separately, once immediately then via a small loop watching St.fov
+	-- (covers both dragging AND restoring it on load).
 	pcall(function() workspace.CurrentCamera.FieldOfView = St.fov end)
 	task.spawn(function()
 		local last = St.fov
@@ -1979,11 +2013,11 @@ end
 makeRow(visualPage, "antiAFK", "Anti AFK", function(on) if on then startAntiAFK() else stopAntiAFK() end end)
 
 -- ============================================================
--- ONGLET MISC
+-- MISC TAB
 -- ============================================================
 local miscPage = pages["Misc"]
 
--- Bypass Anti-Cheat — vrai toggle ON/OFF
+-- Bypass Anti-Cheat — a real ON/OFF toggle
 local _bypassActive, _bypassCooldown, _bypassOn = false, 0, false
 local _bypassPillRefresh, _bypassFloatRefresh = nil, nil
 local BYPASS_COOLDOWN_S = 5
@@ -1992,12 +2026,12 @@ local function applyBypass()
 	if _bypassActive then return false end
 	local now = tick()
 	if now - _bypassCooldown < BYPASS_COOLDOWN_S then
-		setStatus("Bypass: attendre "..math.ceil(BYPASS_COOLDOWN_S-(now-_bypassCooldown)).."s", C.DIM)
+		setStatus("Bypass: wait "..math.ceil(BYPASS_COOLDOWN_S-(now-_bypassCooldown)).."s", C.DIM)
 		return false
 	end
 	local char = LP.Character
 	local oldHum = char and char:FindFirstChildOfClass("Humanoid")
-	if not char or not oldHum then setStatus("Bypass: pas de character", C.RED); return false end
+	if not char or not oldHum then setStatus("Bypass: no character", C.RED); return false end
 	_bypassActive = true
 	local ok = pcall(function()
 		local cam = workspace.CurrentCamera
@@ -2014,21 +2048,20 @@ local function applyBypass()
 	end)
 	_bypassActive = false
 	_bypassCooldown = tick()
-	setStatus(ok and "Bypass applique" or "Bypass echec — voir console", ok and C.GREEN or C.RED)
+	setStatus(ok and "Bypass applied" or "Bypass failed — see console", ok and C.GREEN or C.RED)
 	task.delay(3, function() if not _bypassActive then setStatus("Idle", C.DIM) end end)
 	return ok
 end
 
--- Retrait du Bypass : il n'y a rien à "annuler" à proprement parler — le
--- clone posé par applyBypass() est un Humanoid parfaitement normal une
--- fois en place (mêmes stats, même comportement). Le forcer à mourir
--- (hum.Health = 0) pour "revenir en arrière" ne faisait que provoquer un
--- respawn brutal et non désiré (signalé : "sa me reset sa marche pas").
--- OFF = simple drapeau d'état, honnête : le swap déjà fait reste en place
--- jusqu'au prochain respawn naturel (mort, téléport, Rejoin...), rien
--- n'est détruit ni recréé ici.
+-- Removing the Bypass: there's nothing to properly "undo" — the clone
+-- applyBypass() drops in is a perfectly normal Humanoid once in place
+-- (same stats, same behavior). Forcing it to die (hum.Health = 0) to
+-- "go back" only caused an unwanted, jarring respawn (reported: "it
+-- resets me, doesn't work"). OFF = a simple, honest state flag: the
+-- swap already done stays in place until the next natural respawn
+-- (death, teleport, Rejoin...) — nothing is destroyed or recreated here.
 local function removeBypass()
-	setStatus("Bypass desactive (deja applique jusqu'au prochain respawn)", C.DIM)
+	setStatus("Bypass disabled (already applied until next respawn)", C.DIM)
 	task.delay(3, function() if not _bypassActive then setStatus("Idle", C.DIM) end end)
 	return true
 end
@@ -2084,21 +2117,21 @@ do
 			if hum then pcall(function() hum:ChangeState(Enum.HumanoidStateType.Landed); hum.PlatformStand = false end) end
 		end)
 		_mainStandTween:Play()
-		setStatus("Retour au spawn...", C.ACCENT2)
+		setStatus("Heading to spawn...", C.ACCENT2)
 	end)
 	makeButton(miscPage, "Stop Movement", "Stop", function()
 		if _mainStandTween then
 			_mainStandTween:Cancel(); _mainStandTween = nil
 			local hum = LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
 			if hum then hum.PlatformStand = false end
-			setStatus("Mouvement arrete", C.DIM)
+			setStatus("Movement stopped", C.DIM)
 		end
 	end, true)
 end
 
--- Infinite Jump — via makeRow (persisté correctement dans St.infJump +
--- saveConfig() + réactivé au chargement, contrairement à l'ancienne
--- version qui utilisait un local `_on` jamais sauvegardé)
+-- Infinite Jump — via makeRow (correctly persisted in St.infJump +
+-- saveConfig() + re-enabled on load, unlike the old version which used
+-- a local `_on` that was never saved)
 local _ijConn = nil
 makeRow(miscPage, "infJump", "Infinite Jump", function(on)
 	if on then
@@ -2151,7 +2184,7 @@ do
 			local target = mouse.Hit
 			if not target then return end
 			pcall(function() hrp.CFrame = CFrame.new(target.Position + Vector3.new(0,3,0)) * hrp.CFrame.Rotation end)
-			setStatus("Click TP →", C.GREEN)
+			setStatus("Click TP -> teleported", C.GREEN)
 		end)
 	end
 	_toggleRegistry["clickTp"] = function(on) if on then startClickTp() else stopClickTp() end end
@@ -2165,21 +2198,21 @@ do
 end
 
 -- ============================================================
--- FLING — auto-lancement (uniquement le joueur local)
+-- FLING — self-launch only (the local player only)
 -- ============================================================
--- Note : une version qui prendrait le contrôle physique (NetworkOwner)
--- des AUTRES joueurs pour les projeter de force n'est pas implémentée
--- ici — ça revient à manipuler le personnage d'autres vraies personnes
--- sans leur consentement, ce qui sort du cadre d'un outil pour ton
--- propre compte. Ce bouton lance UNIQUEMENT ton propre personnage
--- (traversal/fun), sans effet sur les autres joueurs.
+-- Note: a version that would take physical control (NetworkOwner) of
+-- OTHER players to forcibly launch them is NOT implemented here — that
+-- amounts to manipulating other real people's characters without their
+-- consent, which is outside the scope of a tool for your own account.
+-- This button ONLY launches your own character (traversal/fun), with
+-- no effect on other players.
 local _flingActive = false
 local _flingConn = nil
 local function startFling()
 	if _flingConn then _flingConn:Disconnect(); _flingConn = nil end
 	local myChar = LP.Character
 	local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
-	if not myRoot then setStatus("Fling: personnage introuvable", C.RED); return end
+	if not myRoot then setStatus("Fling: character not found", C.RED); return end
 	pcall(function()
 		myRoot.AssemblyLinearVelocity = Vector3.new(myRoot.AssemblyLinearVelocity.X, 90, myRoot.AssemblyLinearVelocity.Z)
 	end)
@@ -2193,14 +2226,14 @@ local function stopFling()
 end
 
 -- ============================================================
--- ANTI-DETECT — Portage complet Moon Hub
--- • Anti-Kick         : avale :Kick() sur LP
--- • Anti-Shutdown     : avale game:Shutdown()
--- • Spoof télémétrie  : remplace valeurs FPS<30 sur remotes keywords
--- • OnClientInvoke    : retourne FPS spoofé si le serveur demande
--- • Anti-Teleport     : logue les téléports non initiés (pas bloquant,
---                       pour diagnostiquer les éjectes de zone)
--- Tout est passif — s'installe au chargement, sans toggle ni bouton.
+-- ANTI-DETECT — Full Moon Hub port
+-- • Anti-Kick         : swallows :Kick() on LP
+-- • Anti-Shutdown     : swallows game:Shutdown()
+-- • Telemetry spoof   : replaces FPS<30 values on keyword-matching remotes
+-- • OnClientInvoke    : returns a spoofed FPS if the server asks
+-- • Anti-Teleport     : logs unrequested teleports (non-blocking, for
+--                       diagnosing zone ejections)
+-- Everything is passive — installs on load, no toggle, no button.
 -- ============================================================
 local _adSupported = (type(getrawmetatable) == "function")
 	and (type(setreadonly) == "function")
@@ -2232,8 +2265,8 @@ local function _adSpoofArgs(args)
 end
 
 local function _adHookOnClientInvokes()
-	-- Hook OnClientInvoke sur toutes les RF de télémétrie connues
-	-- (le serveur interroge le client → on renvoie un FPS spoofé)
+	-- Hooks OnClientInvoke on every known telemetry RF (the server asks
+	-- the client → we return a spoofed FPS)
 	local sources = {_NetworkingFolder, ReplicatedStorage}
 	for _, src in ipairs(sources) do
 		if src then
@@ -2270,22 +2303,22 @@ local function _adStart()
 	local _hook = function(self, ...)
 		local method = getnamecallmethod()
 
-		-- Anti-Kick : avale :Kick() dirigé vers le LocalPlayer
+		-- Anti-Kick: swallows :Kick() aimed at the LocalPlayer
 		if method == "Kick" and typeof(self)=="Instance" and self:IsA("Player") and self==LP then
 			_adIntercepts = _adIntercepts + 1
-			setStatus("Anti-Kick ×".._adIntercepts, C.GREEN)
+			setStatus("Anti-Kick x".._adIntercepts, C.GREEN)
 			return
 		end
 
-		-- Anti-Shutdown : avale game:Shutdown() (anti-cheat qui kill le jeu)
+		-- Anti-Shutdown: swallows game:Shutdown() (anti-cheat that kills the game)
 		if method == "Shutdown" and typeof(self)=="Instance"
 			and (self==game or (pcall(function() return self:IsA("DataModel") end) and true)) then
 			_adIntercepts = _adIntercepts + 1
-			setStatus("Anti-Shutdown ×".._adIntercepts, C.GREEN)
+			setStatus("Anti-Shutdown x".._adIntercepts, C.GREEN)
 			return
 		end
 
-		-- Spoof télémétrie : remplace FPS<30 sur les remotes sensibles
+		-- Telemetry spoof: replaces FPS<30 on sensitive remotes
 		if (method=="FireServer" or method=="InvokeServer") and typeof(self)=="Instance" then
 			local rname = (self.Name or ""):lower()
 			for _, k in ipairs(_AD_KW) do
@@ -2297,13 +2330,13 @@ local function _adStart()
 			end
 		end
 
-		-- Anti-Teleport inattendu (log only — sans bloquer les téléports légitimes)
+		-- Unexpected teleport (log only — doesn't block legitimate teleports)
 		if (method=="Teleport" or method=="TeleportToPlaceInstance") and typeof(self)=="Instance" then
 			local sclass = ""
 			pcall(function() sclass = self.ClassName end)
 			if sclass == "TeleportService" then
-				-- On laisse passer : notre propre hopServer() utilise ce chemin
-				-- setStatus("Teleport detecte ("..method..")", C.YELLOW)
+				-- Let it through: our own hopServer() uses this same path
+				-- setStatus("Teleport detected ("..method..")", C.YELLOW)
 			end
 		end
 
@@ -2315,14 +2348,14 @@ local function _adStart()
 	pcall(setreadonly, mt, true)
 	_adActive = true
 
-	-- Hook OnClientInvoke après installation du __namecall
+	-- Hook OnClientInvoke after installing __namecall
 	task.delay(1, _adHookOnClientInvokes)
-	-- Re-hook périodique (le jeu peut recréer des RF dynamiquement)
+	-- Periodic re-hook (the game may recreate RFs dynamically)
 	task.spawn(function()
 		while _adActive do task.wait(30); pcall(_adHookOnClientInvokes) end
 	end)
 
-	setStatus("Anti-Detect actif", C.GREEN)
+	setStatus("Anti-Detect active", C.GREEN)
 end
 
 local function _adStop()
@@ -2337,11 +2370,11 @@ local function _adStop()
 	setStatus("Anti-Detect OFF", C.DIM)
 end
 
--- Passif — pas de bouton, pas de toggle. Protection immédiate au chargement.
+-- Passive — no button, no toggle. Immediate protection on load.
 _adStart()
 
 -- ============================================================
--- AIM BAT — portage Moon Hub (AB / Bat Aimbot V1), vitesse liée à St.speed
+-- AIM BAT — Moon Hub port (AB / Bat Aimbot V1), speed tied to St.speed
 -- ============================================================
 local AB_HEIGHT, AB_HIT_DIST, AB_HIT_CD = 3.7, 5, false
 local BAT_NAMES = {
@@ -2462,14 +2495,14 @@ local function stopAimBat()
 end
 
 -- ============================================================
--- HOPPER — changer de serveur (Server Hop)
+-- HOPPER — switch servers (Server Hop)
 -- ============================================================
--- Passe par l'API publique Roblox (liste des serveurs du même PlaceId)
--- via une fonction HTTP fournie par l'executor (request/http_request/
--- syn.request) pour choisir un serveur DIFFÉRENT du JobId actuel, puis
--- TeleportToPlaceInstance dessus. Si aucune fonction HTTP n'est
--- disponible, repli sur un simple Teleport (rejoin — pas de garantie
--- de changer de serveur, mais ne plante jamais).
+-- Goes through the public Roblox API (list of servers for the same
+-- PlaceId) via an HTTP function provided by the executor
+-- (request/http_request/syn.request) to pick a server DIFFERENT from
+-- the current JobId, then TeleportToPlaceInstance onto it. If no HTTP
+-- function is available, falls back to a plain Teleport (rejoin — no
+-- guarantee of a different server, but never crashes).
 local function _getHttpFn()
 	if type(request) == "function" then return request end
 	if type(http_request) == "function" then return http_request end
@@ -2481,11 +2514,11 @@ local function hopServer()
 	local placeId = game.PlaceId
 	local httpFn = _getHttpFn()
 	if not httpFn then
-		setStatus("Hopper: rejoin simple (HTTP indispo)", C.YELLOW)
+		setStatus("Hopper: plain rejoin (no HTTP available)", C.YELLOW)
 		pcall(function() game:GetService("TeleportService"):Teleport(placeId, LP) end)
 		return
 	end
-	setStatus("Hopper: recherche...", C.ACCENT2)
+	setStatus("Hopper: searching...", C.ACCENT2)
 	task.spawn(function()
 		local candidates = {}
 		pcall(function()
@@ -2504,19 +2537,19 @@ local function hopServer()
 		end)
 		if #candidates > 0 then
 			local pick = candidates[math.random(1, #candidates)]
-			setStatus("Hopper → nouveau serveur", C.GREEN)
+			setStatus("Hopper -> new server", C.GREEN)
 			pcall(function() game:GetService("TeleportService"):TeleportToPlaceInstance(placeId, pick, LP) end)
 		else
-			setStatus("Hopper: aucun serveur libre, rejoin", C.YELLOW)
+			setStatus("Hopper: no free server, rejoining", C.YELLOW)
 			pcall(function() game:GetService("TeleportService"):Teleport(placeId, LP) end)
 		end
 	end)
 end
 
 -- ============================================================
--- DOCK FLOTTANT — Speed / AimBat / Bypass / Fling / Hopper / Lock
+-- FLOATING DOCK — Speed / AimBat / Bypass / Fling / Hopper / Lock
 -- ============================================================
-local FLOAT_SZ, FLOAT_GAP, FLOAT_TOP, FLOAT_RIGHT_OFF = 44, 7, 74, 12
+local FLOAT_SZ, FLOAT_GAP, FLOAT_TOP, FLOAT_RIGHT_OFF = 38, 6, 66, 10
 local _floatDefs = {
 	{ id="speed",  label="Speed" }, { id="aimbat", label="Aim\nBat" },
 	{ id="bypass", label="Bypass" }, { id="fling",  label="Fling" },
@@ -2537,7 +2570,7 @@ local function makeFloatBtn(defIdx, def)
 	btn.BackgroundColor3 = C.ROW; btn.BorderSizePixel = 0
 	btn.Text = ""; btn.AutoButtonColor = false
 	btn.ZIndex = 500; btn.Active = true
-	corner(btn, 13)
+	corner(btn, 11)
 	local st2 = stroke(btn, C.BORDER, 1.5)
 	local stGrad = Instance.new("UIGradient", st2)
 	stGrad.Color = ColorSequence.new({
@@ -2548,12 +2581,12 @@ local function makeFloatBtn(defIdx, def)
 	local lbl2 = Instance.new("TextLabel", btn)
 	lbl2.Size = UDim2.new(1,0,1,0); lbl2.BackgroundTransparency = 1
 	lbl2.Text = def.label; lbl2.TextColor3 = C.WHITE; lbl2.Font = Enum.Font.GothamBold
-	lbl2.TextSize = 9; lbl2.TextWrapped = true; lbl2.ZIndex = btn.ZIndex+1
+	lbl2.TextSize = 8; lbl2.TextWrapped = true; lbl2.ZIndex = btn.ZIndex+1
 	local lPad = Instance.new("UIPadding", lbl2)
-	lPad.PaddingLeft = UDim.new(0,4); lPad.PaddingRight = UDim.new(0,4)
+	lPad.PaddingLeft = UDim.new(0,3); lPad.PaddingRight = UDim.new(0,3)
 
 	local dot = Instance.new("Frame", btn)
-	dot.Size = UDim2.new(0,8,0,8); dot.Position = UDim2.new(1,-12,0,4)
+	dot.Size = UDim2.new(0,7,0,7); dot.Position = UDim2.new(1,-10,0,3)
 	dot.BackgroundColor3 = C.GREEN; dot.BorderSizePixel = 0; dot.Visible = false
 	dot.ZIndex = lbl2.ZIndex+1
 	corner(dot, 4)
@@ -2617,15 +2650,15 @@ for i, def in ipairs(_floatDefs) do
 			setAct(_bypassOn)
 		end)
 	elseif def.id == "fling" then
-		-- Action ponctuelle (auto-lancement) : flash le point vert, comme Hopper.
+		-- One-off action (self-launch): flash the green dot, like Hopper.
 		_floatBtns["fling"].btn.MouseButton1Click:Connect(function()
 			setAct(true)
 			startFling()
 			task.delay(0.4, function() setAct(false) end)
 		end)
 	elseif def.id == "hopper" then
-		-- Action ponctuelle (pas un on/off persistant) : flash le point
-		-- vert le temps de la recherche/téléportation.
+		-- One-off action (not a persistent on/off): flash the green dot
+		-- for the duration of the search/teleport.
 		_floatBtns["hopper"].btn.MouseButton1Click:Connect(function()
 			setAct(true)
 			hopServer()
@@ -2636,7 +2669,7 @@ for i, def in ipairs(_floatDefs) do
 		_floatBtns["lock"].btn.MouseButton1Click:Connect(function()
 			St.floatLocked = not St.floatLocked
 			setAct(St.floatLocked)
-			setStatus(St.floatLocked and "Boutons verrouilles" or "Boutons deverrouilles", C.ACCENT2)
+			setStatus(St.floatLocked and "Buttons locked" or "Buttons unlocked", C.ACCENT2)
 			saveConfig()
 		end)
 	end
@@ -2666,15 +2699,15 @@ do
 	end)
 end
 
-local minimized, fullHeight = false, 340
+local minimized, fullHeight = false, 296
 minBtn.MouseButton1Click:Connect(function()
 	minimized = not minimized
 	if minimized then
-		TweenService:Create(main, TweenInfo.new(0.2), {Size=UDim2.new(0,300,0,48)}):Play()
+		TweenService:Create(main, TweenInfo.new(0.2), {Size=UDim2.new(0,264,0,42)}):Play()
 		contentArea.Visible = false; sep.Visible = false; tabBar.Visible = false; statusBar.Visible = false
 		minBtn.Text = "+"
 	else
-		TweenService:Create(main, TweenInfo.new(0.2), {Size=UDim2.new(0,300,0,fullHeight)}):Play()
+		TweenService:Create(main, TweenInfo.new(0.2), {Size=UDim2.new(0,264,0,fullHeight)}):Play()
 		contentArea.Visible = true; sep.Visible = true; tabBar.Visible = true; statusBar.Visible = true
 		minBtn.Text = "–"
 	end
@@ -2692,10 +2725,10 @@ end)
 switchTab("Farm")
 
 -- ============================================================
--- ACTIVATION DES TOGGLES RESTAURÉS
+-- RESTORED TOGGLE ACTIVATION
 -- ============================================================
--- Volontairement exclus : Bypass Anti-Cheat et AimBat (jamais
--- ré-appliqués seuls au chargement).
+-- Deliberately excluded: Bypass Anti-Cheat and AimBat (never
+-- re-applied alone on load).
 if _savedConfig then
 	for key, onToggle in pairs(_toggleRegistry) do
 		if St[key] == true and onToggle then pcall(onToggle, true) end
@@ -2703,4 +2736,4 @@ if _savedConfig then
 	if St.speedOn then startSpeed(); if speedRefresh then speedRefresh() end end
 end
 
-print("[yslemEgg] Loaded — refonte complete — RightShift hide/show | Dock: Speed, AimBat, Bypass, Lock")
+print("[yslemEgg] Loaded — full rebuild — RightShift hide/show | Dock: Speed, AimBat, Bypass, Lock")
