@@ -371,6 +371,8 @@ local St = {
 	fpsBoost         = false,
 	clickTp          = false,
 	infJump          = false,
+	fling            = false,
+	antiDetect       = false,
 	speedOn          = false,
 	floatLocked      = false,
 	speed            = 16,
@@ -1712,6 +1714,120 @@ do
 		saveConfig()
 	end)
 end
+
+-- ============================================================
+-- FLING — lance tous les joueurs proches radialement
+-- ============================================================
+local _flingConn = nil
+makeRow(miscPage, "fling", "Fling Nearby", function(on)
+	if _flingConn then _flingConn:Disconnect(); _flingConn = nil end
+	if on then
+		_flingConn = RunService.Heartbeat:Connect(function()
+			if not St.fling then return end
+			local myChar = LP.Character
+			local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+			if not myRoot then return end
+			local myPos = myRoot.Position
+			for _, plr in ipairs(Players:GetPlayers()) do
+				if plr ~= LP and plr.Character then
+					local hrp = plr.Character:FindFirstChild("HumanoidRootPart")
+					if hrp then
+						local diff = hrp.Position - myPos
+						local dist = diff.Magnitude
+						if dist < 80 then
+							local dir
+							if dist > 0.5 then
+								dir = diff.Unit
+							else
+								dir = Vector3.new(math.random()-0.5, 0.2, math.random()-0.5).Unit
+							end
+							pcall(function()
+								hrp.AssemblyLinearVelocity = dir * 280 + Vector3.new(0, 110, 0)
+							end)
+						end
+					end
+				end
+			end
+		end)
+	else
+		setStatus("Fling OFF", C.DIM)
+	end
+end)
+
+-- ============================================================
+-- ANTI-DETECT — Anti-Kick + Spoof Télémétrie (portage Moon Hub)
+-- ============================================================
+local _adSupported = (type(getrawmetatable) == "function")
+	and (type(setreadonly) == "function")
+	and (type(getnamecallmethod) == "function")
+
+local _adActive   = false
+local _adOrigNC   = nil
+local _adIntercepts = 0
+
+local function _adStart()
+	if _adActive or not _adSupported then return end
+	local ok, mt = pcall(getrawmetatable, game)
+	if not ok then return end
+	pcall(setreadonly, mt, false)
+	local _origNC = mt.__namecall
+	_adOrigNC = _origNC
+	local _kw = {"fps","perf","stat","telemetry","framerate","clientinfo","diagnostic","speed","velocity","ping"}
+	local function _spoofArgs(args)
+		for i, v in ipairs(args) do
+			if type(v) == "number" and v < 30 then
+				args[i] = 55 + math.random()*5
+			elseif type(v) == "table" then
+				for k2, v2 in pairs(v) do
+					if type(v2) == "number" and v2 < 30 then v[k2] = 55 + math.random()*5 end
+				end
+			end
+		end
+		return args
+	end
+	local _hook = function(self, ...)
+		local method = getnamecallmethod()
+		-- Anti-Kick: swallow Kick() directed at LocalPlayer
+		if method == "Kick" and typeof(self) == "Instance" and self:IsA("Player") and self == LP then
+			_adIntercepts = _adIntercepts + 1
+			setStatus("Anti-Kick ×" .. _adIntercepts, C.GREEN)
+			return
+		end
+		-- Telemetry spoof: rewrite low FPS values before they leave the client
+		if (method == "FireServer" or method == "InvokeServer") and typeof(self) == "Instance" then
+			local rname = (self.Name or ""):lower()
+			for _, k in ipairs(_kw) do
+				if rname:find(k, 1, true) then
+					_adIntercepts = _adIntercepts + 1
+					local args = _spoofArgs({...})
+					return _origNC(self, table.unpack(args))
+				end
+			end
+		end
+		return _origNC(self, ...)
+	end
+	local wrapped = type(newcclosure) == "function" and newcclosure(_hook) or _hook
+	mt.__namecall = wrapped
+	pcall(setreadonly, mt, true)
+	_adActive = true
+	setStatus("Anti-Detect actif", C.GREEN)
+end
+
+local function _adStop()
+	if not _adActive or not _adOrigNC then return end
+	local ok, mt = pcall(getrawmetatable, game)
+	if ok then
+		pcall(setreadonly, mt, false)
+		mt.__namecall = _adOrigNC
+		pcall(setreadonly, mt, true)
+	end
+	_adActive = false; _adOrigNC = nil
+	setStatus("Anti-Detect OFF", C.DIM)
+end
+
+makeRow(miscPage, "antiDetect", "Anti-Detect", function(on)
+	if on then _adStart() else _adStop() end
+end)
 
 -- ============================================================
 -- AIM BAT — portage Moon Hub (AB / Bat Aimbot V1), vitesse liée à St.speed
