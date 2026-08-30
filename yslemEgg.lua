@@ -374,10 +374,65 @@ local St = {
 	fullbright       = false,
 	fpsBoost         = false,
 	clickTp          = false,
+	speedOn          = false,  -- Speed Boost (pill custom, hors makeRow)
+	floatLocked      = false,  -- Lock des boutons flottants
 	speed            = 16,
 	flySpeed         = 50,
+	fov              = 70,
 	guiVisible       = true,
 }
+
+-- ============================================================
+-- SAUVEGARDE / CHARGEMENT (writefile/readfile)
+-- ============================================================
+-- Persiste St entière (que des valeurs simples : bool/nombre/texte,
+-- rien d'Instance) dans un seul fichier JSON. Chargé UNE FOIS ici,
+-- fusionné dans St avant toute construction d'UI — chaque pill/slider
+-- lit donc directement la bonne valeur dès sa création, sans étape de
+-- resynchronisation visuelle après coup.
+-- Exclus volontairement de la persistance : Bypass Anti-Cheat (jamais
+-- ré-appliqué tout seul au chargement — action à risque sur le
+-- character) et AimBat (comportement agressif de poursuite/frappe, ne
+-- doit démarrer que sur un clic explicite et frais, jamais au load).
+local CONFIG_FILE = "yslemEgg_Config.json"
+
+local function loadConfig()
+	local ok, raw = pcall(function()
+		if isfile and isfile(CONFIG_FILE) then return readfile(CONFIG_FILE) end
+		return nil
+	end)
+	if not ok or not raw then return nil end
+	local ok2, data = pcall(function() return HttpService:JSONDecode(raw) end)
+	if ok2 and type(data) == "table" then return data end
+	return nil
+end
+
+local _savedConfig = loadConfig()
+if _savedConfig then
+	for k, v in pairs(_savedConfig) do
+		if St[k] ~= nil and type(v) == type(St[k]) then
+			St[k] = v
+		end
+	end
+end
+
+-- Table remplie automatiquement par makeRow (key -> onToggle) pour la
+-- passe d'activation en fin de script — voir plus bas.
+local _toggleRegistry = {}
+
+local _saveDebounce = false
+local function saveConfig()
+	if _saveDebounce then return end
+	_saveDebounce = true
+	task.delay(0.5, function()
+		pcall(function()
+			if writefile then
+				writefile(CONFIG_FILE, HttpService:JSONEncode(St))
+			end
+		end)
+		_saveDebounce = false
+	end)
+end
 
 -- ============================================================
 -- UI HELPERS
@@ -573,10 +628,17 @@ local function makeRow(page, key, displayName, onToggle)
 	end
 	refresh()
 
+	-- Enregistrement pour la passe d'activation post-restauration (voir
+	-- fin de fichier) — St[key] a déjà la bonne valeur restaurée à ce
+	-- point (fusionnée dans St avant toute construction d'UI), il ne
+	-- reste qu'à déclencher le VRAI effet de bord une fois tout construit.
+	if key then _toggleRegistry[key] = onToggle end
+
 	pill.MouseButton1Click:Connect(function()
 		St[key] = not St[key]
 		refresh()
 		if onToggle then pcall(onToggle, St[key]) end
+		saveConfig()
 	end)
 	return row, pill, refresh
 end
@@ -608,14 +670,15 @@ local function makeSlider(page, key, displayName, minV, maxV, fmt)
 	fill.BackgroundColor3 = C_MOON
 	fill.BorderSizePixel = 0; corner(fill, 3)
 
-	local function setVal(v)
+	local function setVal(v, skipSave)
 		v = math.clamp(math.floor(v), minV, maxV)
 		St[key] = v
 		local t = (v - minV) / (maxV - minV)
 		fill.Size = UDim2.new(t, 0, 1, 0)
 		valLbl.Text = fmt and string.format(fmt, v) or tostring(v)
+		if not skipSave then saveConfig() end
 	end
-	setVal(St[key] or minV)
+	setVal(St[key] or minV, true)  -- valeur initiale (déjà restaurée dans St) : pas besoin de re-sauver
 
 	local dragging = false
 	track.InputBegan:Connect(function(inp)
@@ -639,7 +702,7 @@ local function makeSlider(page, key, displayName, minV, maxV, fmt)
 		local rel = math.clamp((inp.Position.X - abs.X) / sz.X, 0, 1)
 		setVal(minV + (maxV - minV) * rel)
 	end)
-	return row
+	return row, setVal
 end
 
 -- Status bar at bottom
@@ -1141,8 +1204,7 @@ LP.CharacterAdded:Connect(function()
 	if _speedActive then _cleanProxy() end
 end)
 
--- "Speed Boost" toggle (not a key in St, managed manually)
-local speedOn = false
+-- "Speed Boost" toggle — état dans St.speedOn (persisté par saveConfig)
 local _, speedPill, speedRefresh
 do
 	local row = Instance.new("Frame", speedPage)
@@ -1157,15 +1219,16 @@ do
 	speedPill.BorderSizePixel = 0; speedPill.TextSize = 10; speedPill.Font = Enum.Font.GothamBold
 	corner(speedPill, 9)
 	speedRefresh = function()
-		speedPill.BackgroundColor3 = speedOn and C_ON_BG or C_OFF_BG
-		speedPill.TextColor3 = speedOn and C_MOON or C_DIM
-		speedPill.Text = speedOn and "ON" or "OFF"
-		row.BackgroundColor3 = speedOn and Color3.fromRGB(10,18,32) or C_ROW
+		speedPill.BackgroundColor3 = St.speedOn and C_ON_BG or C_OFF_BG
+		speedPill.TextColor3 = St.speedOn and C_MOON or C_DIM
+		speedPill.Text = St.speedOn and "ON" or "OFF"
+		row.BackgroundColor3 = St.speedOn and Color3.fromRGB(10,18,32) or C_ROW
 	end
 	speedRefresh()
 	speedPill.MouseButton1Click:Connect(function()
-		speedOn = not speedOn; speedRefresh()
-		if speedOn then startSpeed() else stopSpeed() end
+		St.speedOn = not St.speedOn; speedRefresh()
+		if St.speedOn then startSpeed() else stopSpeed() end
+		saveConfig()
 	end)
 end
 
@@ -1484,8 +1547,7 @@ makeRow(visualPage, "fpsBoost", "FPS Boost", function(on)
 	if on then applyFpsBoost() end
 end)
 
--- Simple FOV row
-local _fovVal = 70
+-- Simple FOV row — état dans St.fov (persisté par saveConfig)
 do
 	local row = Instance.new("Frame", visualPage)
 	row.Size = UDim2.new(1,-12,0,44)
@@ -1504,14 +1566,16 @@ do
 	fill.Size = UDim2.new(0.4,0,1,0); fill.BackgroundColor3 = C_MOON
 	fill.BorderSizePixel = 0; corner(fill, 3)
 
-	local function setFOV(v)
+	local function setFOV(v, skipSave)
 		v = math.clamp(math.floor(v), 30, 130)
-		_fovVal = v
+		St.fov = v
 		local t = (v - 30) / (130 - 30)
 		fill.Size = UDim2.new(t, 0, 1, 0)
 		vl.Text = v.."°"
 		pcall(function() workspace.CurrentCamera.FieldOfView = v end)
+		if not skipSave then saveConfig() end
 	end
+	setFOV(St.fov, true)  -- synchronise visuel + caméra sur la valeur restaurée
 	local drag = false
 	track.InputBegan:Connect(function(i)
 		if i.UserInputType==Enum.UserInputType.MouseButton1 or i.UserInputType==Enum.UserInputType.Touch then drag=true end
@@ -2187,8 +2251,8 @@ local _floatDefs = {
 }
 
 -- Gèle le drag de TOUS les boutons flottants (y compris lui-même une fois
--- verrouillé) — même mécanique que le "Lock" de Moon Hub.
-local _floatLocked = false
+-- verrouillé) — même mécanique que le "Lock" de Moon Hub. État dans
+-- St.floatLocked (persisté par saveConfig, déjà restauré à ce point).
 
 local _floatBtns = {}  -- id -> { btn, setActive, getActive }
 
@@ -2268,10 +2332,10 @@ local function makeFloatBtn(defIdx, def)
 		end
 	end
 
-	-- drag (désactivé quand _floatLocked est actif)
+	-- drag (désactivé quand St.floatLocked est actif)
 	local drag2, dStart, dPos2 = false, nil, nil
 	btn.InputBegan:Connect(function(inp)
-		if _floatLocked then return end
+		if St.floatLocked then return end
 		if inp.UserInputType == Enum.UserInputType.MouseButton1
 			or inp.UserInputType == Enum.UserInputType.Touch then
 			drag2 = true; dStart = inp.Position; dPos2 = btn.Position
@@ -2302,11 +2366,13 @@ for i, def in ipairs(_floatDefs) do
 	local _, setAct = makeFloatBtn(i, def)
 
 	if def.id == "speed" then
+		setAct(St.speedOn)  -- synchronise le dot sur l'état restauré au chargement
 		_floatBtns["speed"].btn.MouseButton1Click:Connect(function()
-			speedOn = not speedOn
-			if speedOn then startSpeed() else stopSpeed() end
-			setAct(speedOn)
+			St.speedOn = not St.speedOn
+			if St.speedOn then startSpeed() else stopSpeed() end
+			setAct(St.speedOn)
 			speedRefresh()  -- sync the in-panel pill too
+			saveConfig()
 		end)
 
 	elseif def.id == "aimbat" then
@@ -2338,14 +2404,44 @@ for i, def in ipairs(_floatDefs) do
 		end)
 
 	elseif def.id == "lock" then
+		setAct(St.floatLocked)  -- synchronise le dot sur l'état restauré au chargement
 		-- Le clic reste toujours actif (MouseButton1Click est indépendant du
 		-- drag InputBegan) — on peut donc toujours re-cliquer Lock pour se
 		-- déverrouiller, même quand tous les boutons sont gelés.
 		_floatBtns["lock"].btn.MouseButton1Click:Connect(function()
-			_floatLocked = not _floatLocked
-			setAct(_floatLocked)
-			setStatus(_floatLocked and "Boutons verrouilles" or "Boutons deverrouilles", C_MOON2)
+			St.floatLocked = not St.floatLocked
+			setAct(St.floatLocked)
+			setStatus(St.floatLocked and "Boutons verrouilles" or "Boutons deverrouilles", C_MOON2)
+			saveConfig()
 		end)
+	end
+end
+
+-- ============================================================
+-- ACTIVATION DES TOGGLES RESTAURÉS
+-- ============================================================
+-- St[key] porte déjà la bonne valeur depuis le chargement (fusionnée
+-- avant toute construction d'UI, tout pill/slider l'affiche donc
+-- correctement dès sa création). Il reste à déclencher le VRAI effet
+-- de bord pour les features qui ne s'activent pas par la seule
+-- lecture du flag (connexions type Anti Ragdoll/Fly/ESP/Anti AFK/
+-- Anti Trap/Click TP/Instant Grab — leur onToggle doit être appelé
+-- une fois). Les features à boucle persistante unique (Auto Farm/
+-- Hatch/Equip/Claim/Upgrade...) n'en ont pas besoin (onToggle est
+-- vide chez elles) mais l'appel reste inoffensif.
+-- Volontairement exclus : Bypass Anti-Cheat (jamais ré-appliqué tout
+-- seul — action à risque sur le character) et AimBat (comportement
+-- agressif de poursuite/frappe, ne doit démarrer que sur un clic
+-- explicite et frais, jamais silencieusement au chargement).
+if _savedConfig then
+	for key, onToggle in pairs(_toggleRegistry) do
+		if St[key] == true and onToggle then
+			pcall(onToggle, true)
+		end
+	end
+	if St.speedOn then
+		startSpeed()
+		if speedRefresh then speedRefresh() end
 	end
 end
 
