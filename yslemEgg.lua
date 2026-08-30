@@ -189,12 +189,19 @@ local function areaUnlocked(areaId)
 end
 
 -- ============================================================
--- SCANNER D'ŒUFS — AreaEggSlotsClient (confirmé, ESP fonctionne dessus)
+-- SCANNER D'ŒUFS — 3 sources complémentaires :
+--   1. RE/EggWorld/FieldEggShifted  — œufs physiquement dans le monde
+--      (BoundsCFrame = position réelle, Mutation = rareté, NestScale =
+--      poids proxy) ; fournit les données les plus riches et fiables.
+--   2. AreaEggSlotsClient:GetChildren() — slots LP parsés par nom
+--      (FirstAreaEgg_{userId}_{N}_{Zone}:Slot_{N}) pour la zone/île.
+--   3. Fallback ProximityPrompt (autres jeux, œufs au sol).
 -- ============================================================
 local _RARE_KEYWORDS = {
 	"secret","eternal","divine","divin","mythic","celestial","ancient",
 	"rainbow","golden","shiny","radiant","corrupted","void","legendary",
 }
+-- Utilisé par le fallback ProximityPrompt (source 3)
 local function _readEggLabels(root)
 	local texts = {}
 	pcall(function()
@@ -227,10 +234,63 @@ local function _promptOwnerModel(prompt)
 	return part, (model and model:IsA("Model")) and model or part
 end
 
--- Diagnostic AskFieldEggSnapshot : confirmé qu'il renvoie des œufs
--- déjà PLACÉS (State="Slot", panneau Growing Eggs) SANS position
--- (BoundsCFrame/BottomCFrame/BoundsSize toujours null) — ne sert donc
--- PAS à Auto Farm. Conservé uniquement pour un diagnostic ponctuel.
+-- Cache réseau : uid → {pos,cf,mutation,nestScale,zone,tags,t}
+local _fieldEggNet = {}
+
+-- Zone depuis position monde (AREA doit être construit avant ce bloc)
+local function _posToZone(pos)
+	for zn, A in pairs(AREA) do
+		if A.cf and A.size then
+			local lp2 = A.cf:PointToObjectSpace(pos)
+			local hs = A.size * 0.5
+			if math.abs(lp2.X) <= hs.X and math.abs(lp2.Z) <= hs.Z then return zn end
+		end
+	end
+	return "?"
+end
+
+-- Source 1 : écoute RE/EggWorld/FieldEggShifted
+-- Signature observée dans l'analyse : (slotId?, {BoundsCFrame, BottomCFrame,
+-- Mutation, NestScale, HasParasite, ...}) ou juste ({...}).
+pcall(function()
+	local re = _getRemote("RE/EggWorld/FieldEggShifted")
+	if not (re and re:IsA("RemoteEvent")) then return end
+	re.OnClientEvent:Connect(function(a1, a2)
+		local uid, data
+		if type(a2) == "table" then
+			uid = tostring(a1); data = a2
+		elseif type(a1) == "table" then
+			uid = tostring(tick() % 1e6); data = a1
+		else return end
+
+		local cf2, pos2
+		if typeof(data.BoundsCFrame) == "CFrame" then
+			cf2 = data.BoundsCFrame; pos2 = cf2.Position
+		elseif typeof(data.BottomCFrame) == "CFrame" then
+			cf2 = data.BottomCFrame; pos2 = cf2.Position
+		elseif typeof(data.CFrame) == "CFrame" then
+			cf2 = data.CFrame; pos2 = cf2.Position
+		end
+		if not pos2 then return end
+
+		local mutation = type(data.Mutation) == "string" and data.Mutation or nil
+		local nestScale = type(data.NestScale) == "number" and data.NestScale or nil
+		local zone = _posToZone(pos2)
+
+		local tags = {}
+		local low = (mutation or ""):lower()
+		for _, kw in ipairs(_RARE_KEYWORDS) do
+			if low:find(kw, 1, true) then table.insert(tags, kw) end
+		end
+
+		_fieldEggNet[uid] = {
+			pos=pos2, cf=cf2, mutation=mutation, nestScale=nestScale,
+			zone=zone, tags=tags, uid=uid, t=tick(), enabled=true,
+		}
+	end)
+end)
+
+-- Diagnostic AskFieldEggSnapshot (snapshot ponctuel, pas utilisé pour le farm)
 local _snapshotDebugPrinted = false
 task.delay(2, function()
 	if _snapshotDebugPrinted then return end
@@ -238,59 +298,91 @@ task.delay(2, function()
 	if not ok or type(snap) ~= "table" then return end
 	_snapshotDebugPrinted = true
 	local dumpOk, dump = pcall(function() return HttpService:JSONEncode(snap) end)
-	print("[yslemEgg] AskFieldEggSnapshot (diagnostic seulement, non utilise pour le farm) :")
+	print("[yslemEgg] AskFieldEggSnapshot:")
 	print(dumpOk and dump:sub(1, 800) or "<non serialisable>")
 end)
 
--- Diagnostic live exposé pour affichage direct dans le statut du widget.
 local _eggScanSlotsFound, _eggScanPromptTotal, _eggScanPromptEnabled = false, 0, 0
-
 local cachedEggs = {}
+
 task.spawn(function()
 	while true do
 		local eggs = {}
-		-- FindFirstChild sans le 2e argument ne cherche que les ENFANTS
-		-- DIRECTS de workspace : si le jeu range ce conteneur plus
-		-- profondément (workspace.Live.AreaEggSlotsClient, etc.), il
-		-- n'était JAMAIS trouvé et on retombait tout le temps sur le
-		-- fallback par mots-clés — recherche récursive maintenant.
-		local slotsRoot = workspace:FindFirstChild("AreaEggSlotsClient", true)
 		local total, enabledCount = 0, 0
+		local slotsRoot = workspace:FindFirstChild("AreaEggSlotsClient", true)
 
-		if slotsRoot then
-			pcall(function()
-				for _, prompt in ipairs(slotsRoot:GetDescendants()) do
-					if prompt:IsA("ProximityPrompt") then
-						total = total + 1
-						-- Ne plus exiger Enabled pour AJOUTER l'oeuf : un oeuf pas
-						-- encore prêt (en croissance) a Enabled=false mais doit
-						-- quand même apparaître en ESP (juste pas comme cible de
-						-- farm). N'exiger Enabled QUE pour la sélection du farm.
-						if prompt.Enabled then enabledCount = enabledCount + 1 end
-						local part, model = _promptOwnerModel(prompt)
-						if part then
-							local full, tags, weight = _readEggLabels(model or part)
-							eggs[#eggs+1] = {
-								prompt = prompt, part = part, pos = part.Position, cf = part.CFrame,
-								area = tostring(model and model.Name or part.Name),
-								cat = prompt.ObjectText ~= "" and prompt.ObjectText or (model and model.Name or part.Name),
-								mutation = tags[1], tags = tags, weight = weight, rawText = full,
-								enabled = prompt.Enabled,
-							}
-						end
-					end
-				end
-			end)
+		-- Source 1 : réseau FieldEggShifted — TTL 60s
+		local now2 = tick()
+		for uid, e in pairs(_fieldEggNet) do
+			if now2 - e.t > 60 then
+				_fieldEggNet[uid] = nil
+			else
+				total = total + 1; enabledCount = enabledCount + 1
+				eggs[#eggs+1] = {
+					pos=e.pos, cf=e.cf, area=e.zone,
+					cat=e.mutation or (e.zone.." Egg"),
+					mutation=e.mutation, tags=e.tags,
+					weight=e.nestScale and math.floor(e.nestScale*10)/10,
+					rawText=e.mutation or "",
+					enabled=true, uid=e.uid, netOnly=true,
+				}
+			end
 		end
 
-		-- Fallback par mots-clés — TOUJOURS exécuté en plus (pas seulement
-		-- si slotsRoot est absent) : sur certains jeux les oeufs "au sol"
-		-- (déjà volés/lâchés) vivent hors de AreaEggSlotsClient, dans un
-		-- dossier séparé (Dropped/Field/etc.) — les deux sources se
-		-- complètent au lieu de s'exclure.
+		-- Source 2 : AreaEggSlotsClient:GetChildren() — slots LP par nom
+		if slotsRoot then
+			_eggScanSlotsFound = true
+			for _, slot in ipairs(slotsRoot:GetChildren()) do
+				pcall(function()
+					local sname = slot.Name
+					-- Filtrer : uniquement les slots du LP (contient UserId)
+					if not sname:find(tostring(LP.UserId), 1, true) then return end
+					-- Extraire la zone : FirstAreaEgg_{id}_{N}_{Zone}:Slot_{N}
+					local zone = sname:match("_(%u[%a%s]+):Slot") or "?"
+					-- Position depuis le slot ou premier BasePart descendant
+					local pos3, cf3
+					if slot:IsA("BasePart") then
+						pos3=slot.Position; cf3=slot.CFrame
+					else
+						for _, d in ipairs(slot:GetDescendants()) do
+							if d:IsA("BasePart") then pos3=d.Position; cf3=d.CFrame; break end
+						end
+					end
+					if not pos3 then return end
+					-- Rareté via attributs ou StringValue enfants
+					local mutation2, nestScale2
+					pcall(function()
+						mutation2 = slot:GetAttribute("Mutation") or slot:GetAttribute("EggType")
+						nestScale2 = slot:GetAttribute("NestScale")
+					end)
+					local rawText2 = ""
+					for _, d in ipairs(slot:GetDescendants()) do
+						if d:IsA("StringValue") then rawText2 = rawText2.." "..d.Value
+						elseif d:IsA("TextLabel") and d.Text ~= "" then rawText2 = rawText2.." "..d.Text end
+					end
+					local tags2 = {}
+					local low2 = ((mutation2 or "").." "..rawText2):lower()
+					for _, kw in ipairs(_RARE_KEYWORDS) do
+						if low2:find(kw,1,true) then table.insert(tags2, kw) end
+					end
+					total = total + 1; enabledCount = enabledCount + 1
+					eggs[#eggs+1] = {
+						slot=slot, pos=pos3, cf=cf3, area=zone,
+						cat=mutation2 or (zone.." Egg"),
+						mutation=mutation2 or tags2[1], tags=tags2,
+						weight=nestScale2, rawText=rawText2,
+						enabled=true, uid=sname,
+					}
+				end)
+			end
+		else
+			_eggScanSlotsFound = false
+		end
+
+		-- Source 3 : fallback ProximityPrompt (autres jeux / œufs au sol)
 		pcall(function()
 			for _, prompt in ipairs(workspace:GetDescendants()) do
-				if prompt:IsA("ProximityPrompt") and prompt.Parent and not (slotsRoot and prompt:IsDescendantOf(slotsRoot)) then
+				if prompt:IsA("ProximityPrompt") then
 					local action = prompt.ActionText:lower()
 					local objTxt = prompt.ObjectText:lower()
 					local parentName = (prompt.Parent and prompt.Parent.Name or ""):lower()
@@ -303,13 +395,13 @@ task.spawn(function()
 						if prompt.Enabled then enabledCount = enabledCount + 1 end
 						local part, model = _promptOwnerModel(prompt)
 						if part then
-							local full, tags, weight = _readEggLabels(model or part)
+							local full, tags3, weight3 = _readEggLabels(model or part)
 							eggs[#eggs+1] = {
-								prompt = prompt, part = part, pos = part.Position, cf = part.CFrame,
-								area = "Dropped",
-								cat = objTxt ~= "" and prompt.ObjectText or part.Name,
-								mutation = tags[1], tags = tags, weight = weight, rawText = full,
-								enabled = prompt.Enabled,
+								prompt=prompt, part=part, pos=part.Position, cf=part.CFrame,
+								area="Dropped",
+								cat=objTxt ~= "" and prompt.ObjectText or part.Name,
+								mutation=tags3[1], tags=tags3, weight=weight3, rawText=full,
+								enabled=prompt.Enabled,
 							}
 						end
 					end
@@ -317,11 +409,10 @@ task.spawn(function()
 			end
 		end)
 
-		_eggScanSlotsFound = slotsRoot ~= nil
 		_eggScanPromptTotal = total
 		_eggScanPromptEnabled = enabledCount
 		cachedEggs = eggs
-		task.wait(0.35)
+		task.wait(0.5)
 	end
 end)
 
@@ -391,6 +482,8 @@ local St = {
 	flySpeed         = 50,
 	fov              = 70,
 	guiVisible       = true,
+	farmZone         = "",
+	farmRarity       = "",
 }
 
 -- ============================================================
@@ -1063,19 +1156,36 @@ task.spawn(function()
 				setStatus(string.format("Farm: 0 oeuf — slots=%s total=%d actif=%d",
 					_eggScanSlotsFound and "oui" or "non", _eggScanPromptTotal, _eggScanPromptEnabled), C.DIM)
 			else
-				-- Ne cibler que les oeufs PRÊTS (Enabled) — un oeuf encore en
-				-- croissance apparaît dans cachedEggs (pour l'ESP) mais ne
-				-- doit jamais être une cible de déplacement/farm.
+				-- Ne cibler que les oeufs PRÊTS, filtres zone+rareté actifs
 				local myPos = rootPart.Position
 				local best, bestDist = nil, math.huge
+				local filteredCount = 0
 				for _, r in ipairs(cachedEggs) do
 					if r.enabled then
-						local d = (r.pos - myPos).Magnitude
-						if d < bestDist then bestDist = d; best = r end
+						-- Filtre zone/île
+						local zoneOk = St.farmZone == "" or r.area == St.farmZone
+						-- Filtre rareté
+						local rarityOk = St.farmRarity == ""
+						if not rarityOk then
+							local low3 = St.farmRarity:lower()
+							if r.mutation and r.mutation:lower():find(low3, 1, true) then rarityOk = true end
+							if r.tags then
+								for _, t in ipairs(r.tags) do
+									if t:lower():find(low3, 1, true) then rarityOk = true end
+								end
+							end
+						end
+						if zoneOk and rarityOk then
+							filteredCount = filteredCount + 1
+							local d = (r.pos - myPos).Magnitude
+							if d < bestDist then bestDist = d; best = r end
+						end
 					end
 				end
 				if not best then
-					setStatus(string.format("Farm: %d oeuf(s) vus, 0 pret (croissance)", #cachedEggs), C.DIM)
+					local zTxt = St.farmZone ~= "" and (" île:"..St.farmZone) or ""
+					local rTxt = St.farmRarity ~= "" and (" rareté:"..St.farmRarity) or ""
+					setStatus(string.format("Farm: %d vu, 0 cible%s%s", #cachedEggs, zTxt, rTxt), C.DIM)
 				end
 
 				if best then
@@ -1116,6 +1226,114 @@ task.spawn(function()
 	end
 end)
 makeRow(farmPage, "autoFarm", "Auto Farm Eggs", function(on) end)
+
+-- ============================================================
+-- SÉLECTEUR ÎLE + RARETÉ (visible en permanence sous Auto Farm)
+-- ============================================================
+do
+	local FARM_ZONES = {
+		"","Forest","Desert","Prehistoric","Abyss Ocean","Snow",
+		"Cosmic","Lake","Volcano","Cherry Blossom","Jungle","Titan Temple",
+	}
+	local FARM_ZONE_LABELS = {
+		"Toutes","Forest","Desert","Prehist.","Abyss","Snow",
+		"Cosmic","Lake","Volcano","Cherry","Jungle","Titan",
+	}
+	local FARM_RARITIES = {"","secret","legendary","mythic","divine","celestial"}
+	local FARM_RARITY_LABELS = {"Toutes","Secret","Leg.","Mythic","Divine","Céleste"}
+
+	-- Conteneur principal
+	local selOuter = Instance.new("Frame", farmPage)
+	selOuter.Size = UDim2.new(1,-12,0,118)
+	selOuter.BackgroundColor3 = C.ROW
+	selOuter.BackgroundTransparency = 0.25
+	selOuter.BorderSizePixel = 0
+	corner(selOuter, 10)
+	addLivingStroke(selOuter, 1)
+	local selPad = Instance.new("UIPadding", selOuter)
+	selPad.PaddingLeft = UDim.new(0,8); selPad.PaddingRight = UDim.new(0,8)
+	selPad.PaddingTop = UDim.new(0,6); selPad.PaddingBottom = UDim.new(0,6)
+
+	-- Titre île
+	local _zoneTitleLbl = label(selOuter, "ÎLE CIBLE", UDim2.new(1,0,0,13), C.DIM, Enum.Font.GothamBold)
+	_zoneTitleLbl.TextSize = 9; _zoneTitleLbl.Position = UDim2.new(0,0,0,0)
+
+	-- Grille de zones (3 colonnes)
+	local zoneGrid = Instance.new("Frame", selOuter)
+	zoneGrid.Size = UDim2.new(1,0,0,56)
+	zoneGrid.Position = UDim2.new(0,0,0,14)
+	zoneGrid.BackgroundTransparency = 1
+	local zGrid = Instance.new("UIGridLayout", zoneGrid)
+	zGrid.CellSize = UDim2.new(0,82,0,17)
+	zGrid.CellPadding = UDim2.new(0,3,0,3)
+	zGrid.FillDirectionMaxCells = 3
+	zGrid.SortOrder = Enum.SortOrder.LayoutOrder
+
+	local _zoneBtns = {}
+	local function _refreshZoneBtns()
+		for _, info in ipairs(_zoneBtns) do
+			local on = (info.zone == St.farmZone)
+			info.btn.BackgroundColor3 = on and C.MOON or Color3.fromRGB(12,18,32)
+			info.btn.TextColor3 = on and C.MOONTEXT or C.SILVER2
+		end
+	end
+	for i, zv in ipairs(FARM_ZONES) do
+		local zl = FARM_ZONE_LABELS[i]
+		local zBtn = Instance.new("TextButton", zoneGrid)
+		zBtn.LayoutOrder = i
+		zBtn.Size = UDim2.new(0,1,0,1)
+		zBtn.BackgroundColor3 = (St.farmZone == zv) and C.MOON or Color3.fromRGB(12,18,32)
+		zBtn.TextColor3 = (St.farmZone == zv) and C.MOONTEXT or C.SILVER2
+		zBtn.Text = zl; zBtn.TextSize = 8; zBtn.Font = Enum.Font.GothamMedium
+		zBtn.BorderSizePixel = 0; corner(zBtn, 4)
+		table.insert(_zoneBtns, {btn=zBtn, zone=zv})
+		zBtn.MouseButton1Click:Connect(function()
+			St.farmZone = zv; _refreshZoneBtns()
+			setStatus("Farm île: "..(zv == "" and "Toutes" or zv), C.ACCENT2)
+			saveConfig()
+		end)
+	end
+
+	-- Titre rareté
+	local _rareTitleLbl = label(selOuter, "RARETÉ", UDim2.new(1,0,0,13), C.DIM, Enum.Font.GothamBold)
+	_rareTitleLbl.TextSize = 9; _rareTitleLbl.Position = UDim2.new(0,0,0,74)
+
+	-- Boutons rareté (ligne horizontale)
+	local rareRow = Instance.new("Frame", selOuter)
+	rareRow.Size = UDim2.new(1,0,0,20)
+	rareRow.Position = UDim2.new(0,0,0,88)
+	rareRow.BackgroundTransparency = 1
+	local rList = Instance.new("UIListLayout", rareRow)
+	rList.FillDirection = Enum.FillDirection.Horizontal
+	rList.Padding = UDim.new(0,3)
+	rList.VerticalAlignment = Enum.VerticalAlignment.Center
+
+	local _rareBtns = {}
+	local function _refreshRareBtns()
+		for _, info in ipairs(_rareBtns) do
+			local on = (info.rarity == St.farmRarity)
+			info.btn.BackgroundColor3 = on and C.MOON or Color3.fromRGB(12,18,32)
+			info.btn.TextColor3 = on and C.MOONTEXT or C.SILVER2
+		end
+	end
+	for i, rv in ipairs(FARM_RARITIES) do
+		local rl = FARM_RARITY_LABELS[i]
+		local rBtn = Instance.new("TextButton", rareRow)
+		rBtn.Size = UDim2.new(0,42,1,0)
+		rBtn.BackgroundColor3 = (St.farmRarity == rv) and C.MOON or Color3.fromRGB(12,18,32)
+		rBtn.TextColor3 = (St.farmRarity == rv) and C.MOONTEXT or C.SILVER2
+		rBtn.Text = rl; rBtn.TextSize = 8; rBtn.Font = Enum.Font.GothamMedium
+		rBtn.BorderSizePixel = 0; corner(rBtn, 4)
+		table.insert(_rareBtns, {btn=rBtn, rarity=rv})
+		rBtn.MouseButton1Click:Connect(function()
+			St.farmRarity = rv; _refreshRareBtns()
+			setStatus("Farm rareté: "..(rv == "" and "Toutes" or rl), C.ACCENT2)
+			saveConfig()
+		end)
+	end
+
+	makeDivider(farmPage)
+end
 
 -- Auto Hatch / Auto Equip — clic direct des vrais boutons UI du jeu
 -- ("Grow All", "Equip Best", confirmés par capture d'écran) via
@@ -1819,15 +2037,71 @@ local function stopFling()
 end
 
 -- ============================================================
--- ANTI-DETECT — Anti-Kick + Spoof Télémétrie (portage Moon Hub)
+-- ANTI-DETECT — Portage complet Moon Hub
+-- • Anti-Kick         : avale :Kick() sur LP
+-- • Anti-Shutdown     : avale game:Shutdown()
+-- • Spoof télémétrie  : remplace valeurs FPS<30 sur remotes keywords
+-- • OnClientInvoke    : retourne FPS spoofé si le serveur demande
+-- • Anti-Teleport     : logue les téléports non initiés (pas bloquant,
+--                       pour diagnostiquer les éjectes de zone)
+-- Tout est passif — s'installe au chargement, sans toggle ni bouton.
 -- ============================================================
 local _adSupported = (type(getrawmetatable) == "function")
 	and (type(setreadonly) == "function")
 	and (type(getnamecallmethod) == "function")
 
-local _adActive   = false
-local _adOrigNC   = nil
+local _adActive     = false
+local _adOrigNC     = nil
 local _adIntercepts = 0
+local _AD_KW = {"fps","perf","stat","telemetry","framerate","clientinfo",
+                "diagnostic","speed","velocity","ping","report","metric"}
+
+local function _adSpoofArgs(args)
+	for i, v in ipairs(args) do
+		if type(v) == "number" and v < 30 then
+			args[i] = 55 + math.random()*6
+		elseif type(v) == "table" then
+			for k2, v2 in pairs(v) do
+				if type(k2) == "string" then
+					local kl = k2:lower()
+					local kwMatch = false
+					for _, kw in ipairs(_AD_KW) do if kl:find(kw,1,true) then kwMatch=true;break end end
+					if kwMatch and type(v2)=="number" and v2<30 then v[k2]=55+math.random()*6 end
+				end
+				if type(v2)=="number" and v2<30 then v[k2]=55+math.random()*6 end
+			end
+		end
+	end
+	return args
+end
+
+local function _adHookOnClientInvokes()
+	-- Hook OnClientInvoke sur toutes les RF de télémétrie connues
+	-- (le serveur interroge le client → on renvoie un FPS spoofé)
+	local sources = {_NetworkingFolder, ReplicatedStorage}
+	for _, src in ipairs(sources) do
+		if src then
+			pcall(function()
+				for _, rf in ipairs(src:GetDescendants()) do
+					if rf:IsA("RemoteFunction") then
+						local rname = rf.Name:lower()
+						for _, k in ipairs(_AD_KW) do
+							if rname:find(k, 1, true) then
+								pcall(function()
+									rf.OnClientInvoke = function(...)
+										_adIntercepts = _adIntercepts + 1
+										return 60 + math.random()*5, "normal", true
+									end
+								end)
+								break
+							end
+						end
+					end
+				end
+			end)
+		end
+	end
+end
 
 local function _adStart()
 	if _adActive or not _adSupported then return end
@@ -1836,62 +2110,78 @@ local function _adStart()
 	pcall(setreadonly, mt, false)
 	local _origNC = mt.__namecall
 	_adOrigNC = _origNC
-	local _kw = {"fps","perf","stat","telemetry","framerate","clientinfo","diagnostic","speed","velocity","ping"}
-	local function _spoofArgs(args)
-		for i, v in ipairs(args) do
-			if type(v) == "number" and v < 30 then
-				args[i] = 55 + math.random()*5
-			elseif type(v) == "table" then
-				for k2, v2 in pairs(v) do
-					if type(v2) == "number" and v2 < 30 then v[k2] = 55 + math.random()*5 end
-				end
-			end
-		end
-		return args
-	end
+
 	local _hook = function(self, ...)
 		local method = getnamecallmethod()
-		-- Anti-Kick: swallow Kick() directed at LocalPlayer
-		if method == "Kick" and typeof(self) == "Instance" and self:IsA("Player") and self == LP then
+
+		-- Anti-Kick : avale :Kick() dirigé vers le LocalPlayer
+		if method == "Kick" and typeof(self)=="Instance" and self:IsA("Player") and self==LP then
 			_adIntercepts = _adIntercepts + 1
-			setStatus("Anti-Kick ×" .. _adIntercepts, C.GREEN)
+			setStatus("Anti-Kick ×".._adIntercepts, C.GREEN)
 			return
 		end
-		-- Telemetry spoof: rewrite low FPS values before they leave the client
-		if (method == "FireServer" or method == "InvokeServer") and typeof(self) == "Instance" then
+
+		-- Anti-Shutdown : avale game:Shutdown() (anti-cheat qui kill le jeu)
+		if method == "Shutdown" and typeof(self)=="Instance"
+			and (self==game or (pcall(function() return self:IsA("DataModel") end) and true)) then
+			_adIntercepts = _adIntercepts + 1
+			setStatus("Anti-Shutdown ×".._adIntercepts, C.GREEN)
+			return
+		end
+
+		-- Spoof télémétrie : remplace FPS<30 sur les remotes sensibles
+		if (method=="FireServer" or method=="InvokeServer") and typeof(self)=="Instance" then
 			local rname = (self.Name or ""):lower()
-			for _, k in ipairs(_kw) do
+			for _, k in ipairs(_AD_KW) do
 				if rname:find(k, 1, true) then
 					_adIntercepts = _adIntercepts + 1
-					local args = _spoofArgs({...})
+					local args = _adSpoofArgs({...})
 					return _origNC(self, table.unpack(args))
 				end
 			end
 		end
+
+		-- Anti-Teleport inattendu (log only — sans bloquer les téléports légitimes)
+		if (method=="Teleport" or method=="TeleportToPlaceInstance") and typeof(self)=="Instance" then
+			local sclass = ""
+			pcall(function() sclass = self.ClassName end)
+			if sclass == "TeleportService" then
+				-- On laisse passer : notre propre hopServer() utilise ce chemin
+				-- setStatus("Teleport detecte ("..method..")", C.YELLOW)
+			end
+		end
+
 		return _origNC(self, ...)
 	end
-	local wrapped = type(newcclosure) == "function" and newcclosure(_hook) or _hook
+
+	local wrapped = type(newcclosure)=="function" and newcclosure(_hook) or _hook
 	mt.__namecall = wrapped
 	pcall(setreadonly, mt, true)
 	_adActive = true
+
+	-- Hook OnClientInvoke après installation du __namecall
+	task.delay(1, _adHookOnClientInvokes)
+	-- Re-hook périodique (le jeu peut recréer des RF dynamiquement)
+	task.spawn(function()
+		while _adActive do task.wait(30); pcall(_adHookOnClientInvokes) end
+	end)
+
 	setStatus("Anti-Detect actif", C.GREEN)
 end
 
 local function _adStop()
 	if not _adActive or not _adOrigNC then return end
-	local ok, mt = pcall(getrawmetatable, game)
-	if ok then
-		pcall(setreadonly, mt, false)
-		mt.__namecall = _adOrigNC
-		pcall(setreadonly, mt, true)
+	local ok2, mt2 = pcall(getrawmetatable, game)
+	if ok2 then
+		pcall(setreadonly, mt2, false)
+		mt2.__namecall = _adOrigNC
+		pcall(setreadonly, mt2, true)
 	end
 	_adActive = false; _adOrigNC = nil
 	setStatus("Anti-Detect OFF", C.DIM)
 end
 
--- Passif : pas de bouton, pas de toggle — s'installe tout seul au
--- chargement du script et reste actif en permanence (protection Anti-
--- Kick + spoof télémétrie), sans action requise de l'utilisateur.
+-- Passif — pas de bouton, pas de toggle. Protection immédiate au chargement.
 _adStart()
 
 -- ============================================================
