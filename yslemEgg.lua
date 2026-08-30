@@ -107,6 +107,25 @@ do
 	print(table.concat(lines, "\n"))
 end
 
+-- AreaEggSlotIdentity chargé avec succès (voir diagnostic ci-dessus) —
+-- son API exacte est inconnue. AskFieldEggSnapshot renvoie des œufs
+-- déjà PLACÉS (State="Slot", NestId/AreaId) mais SANS AUCUNE position
+-- (BoundsCFrame/BottomCFrame/BoundsSize toujours null, confirmé par
+-- capture d'écran) — ce module est le candidat le plus probable pour
+-- résoudre NestId+AreaId vers une vraie position dans le monde.
+-- Introspection en lecture seule (aucun appel, juste la liste des
+-- clés) pour découvrir ses fonctions réelles sans deviner leur nom.
+if SlotId then
+	pcall(function()
+		local keys = {}
+		for k, v in pairs(SlotId) do
+			table.insert(keys, tostring(k).." ("..typeof(v)..")")
+		end
+		table.sort(keys)
+		print("[yslemEgg] AreaEggSlotIdentity — cles disponibles :\n  "..table.concat(keys, "\n  "))
+	end)
+end
+
 -- ── REMOTES CONFIRMÉS (Packages.Networking) ─────────────────
 -- Le rapport d'analyse yslemEgg a listé EN DIRECT (pas deviné) les
 -- vrais RemoteEvent/RemoteFunction du jeu sous
@@ -267,75 +286,63 @@ local function _promptOwnerModel(prompt)
 	return part, (model and model:IsA("Model")) and model or part
 end
 
--- [FIX] Auto Claim (remotes Packages.Networking en direct) marche —
--- preuve que _invokeRF/le namespace Networking fonctionnent bien.
--- Auto Farm échouait donc à cause de la DÉTECTION (ce bloc), pas de
--- l'appel réseau. Le scan AreaEggSlotsClient ne trouvait rien
--- d'exploitable en jeu. Ajout d'un diagnostic (une seule fois, en
--- console) qui dit EXACTEMENT ce qui se passe — dossier absent,
--- présent mais vide, ou prompts trouvés — au lieu de deviner une
--- 3e fois à l'aveugle. En parallèle, tentative d'un vrai snapshot
--- réseau confirmé (RF/EggWorld/AskFieldEggSnapshot, même famille de
--- remotes que Claim) : sa structure exacte est inconnue, donc son
--- contenu brut est imprimé une fois pour calibrer, et exploité au
--- mieux (uid/position détectés génériquement) s'il répond.
-local _eggDebugPrinted = false
+-- [CONFIRMÉ par capture d'écran] AskFieldEggSnapshot renvoie bien des
+-- données (Records avec Uid/NestId/AreaId/AssetCategory/Mutations...)
+-- mais State="Slot" — ce sont TES œufs déjà PLACÉS en train de
+-- pousser (panneau "Growing Eggs"), pas des œufs sur le terrain à
+-- voler. BoundsCFrame/BottomCFrame/BoundsSize sont TOUJOURS null —
+-- aucune position exploitable pour marcher jusqu'à un œuf. Ce endpoint
+-- ne sert donc PAS à Auto Farm (conservé uniquement pour un diagnostic
+-- ponctuel, plus appelé en boucle — inutile de spammer le serveur
+-- pour une donnée qu'on sait déjà sans position).
 local _snapshotDebugPrinted = false
-
-local function _tryNetworkEggSnapshot()
+local function _debugNetworkEggSnapshotOnce()
+	if _snapshotDebugPrinted then return end
 	local ok, snap = _invokeRF("RF/EggWorld/AskFieldEggSnapshot")
-	if not ok or type(snap) ~= "table" then return nil end
-	if not _snapshotDebugPrinted then
-		_snapshotDebugPrinted = true
-		local dumpOk, dump = pcall(function() return HttpService:JSONEncode(snap) end)
-		print("[yslemEgg] AskFieldEggSnapshot a repondu — structure brute (calibrage) :")
-		print(dumpOk and dump:sub(1, 1500) or "<non serialisable>")
-	end
-	local records = snap.Records or snap.Eggs or snap.Data or snap
-	if type(records) ~= "table" then return nil end
-	local out = {}
-	for k, r in pairs(records) do
-		if type(r) == "table" then
-			local uid = r.Uid or r.UID or r.Id or r.ID or r.uid or (type(k) == "string" and k) or nil
-			local posSrc = r.Position or r.Pos or r.CFrame or r.BoundsCFrame
-			local pos = nil
-			if typeof(posSrc) == "Vector3" then pos = posSrc
-			elseif typeof(posSrc) == "CFrame" then pos = posSrc.Position end
-			if uid and pos then
-				out[#out+1] = {
-					uid = uid, pos = pos, cf = CFrame.new(pos),
-					area = tostring(r.AreaId or r.Area or "Field"),
-					cat = tostring(r.AssetCategory or r.Category or r.Name or "Egg"),
-					netOnly = true,  -- pas de prompt physique associé, grab via remote uniquement
-				}
-			end
-		end
-	end
-	return #out > 0 and out or nil
+	if not ok or type(snap) ~= "table" then return end
+	_snapshotDebugPrinted = true
+	local dumpOk, dump = pcall(function() return HttpService:JSONEncode(snap) end)
+	print("[yslemEgg] AskFieldEggSnapshot (diagnostic, non utilise pour le farm — voir commentaire) :")
+	print(dumpOk and dump:sub(1, 800) or "<non serialisable>")
 end
+task.delay(2, _debugNetworkEggSnapshotOnce)
+
+-- Diagnostic live du scan AreaEggSlotsClient — exposé via ces locals
+-- pour que le statut du widget (Auto Farm, construit plus bas) puisse
+-- l'afficher DIRECTEMENT sur l'UI sans avoir besoin d'ouvrir F9.
+-- Compte séparément le total de ProximityPrompt trouvés et ceux
+-- actuellement "Enabled" (un prompt peut être présent mais désactivé
+-- tant qu'on n'est pas assez proche — les deux chiffres ensemble
+-- distinguent "dossier vide" de "prompts existent mais hors de portée").
+local _eggScanSlotsFound = false
+local _eggScanPromptTotal = 0
+local _eggScanPromptEnabled = 0
 
 local cachedEggs = {}
 task.spawn(function()
 	while true do
 		local eggs = {}
 		local slotsRoot = workspace:FindFirstChild("AreaEggSlotsClient")
-		local promptCount = 0
+		local total, enabledCount = 0, 0
 
 		if slotsRoot then
 			pcall(function()
 				for _, prompt in ipairs(slotsRoot:GetDescendants()) do
-					if prompt:IsA("ProximityPrompt") and prompt.Enabled then
-						promptCount = promptCount + 1
-						local part, model = _promptOwnerModel(prompt)
-						if part then
-							local full, tags, weight = _readEggLabels(model or part)
-							eggs[#eggs+1] = {
-								prompt = prompt, part = part,
-								pos = part.Position, cf = part.CFrame,
-								area = tostring(model and model.Name or part.Name),
-								cat = prompt.ObjectText ~= "" and prompt.ObjectText or (model and model.Name or part.Name),
-								mutation = tags[1], tags = tags, weight = weight, rawText = full,
-							}
+					if prompt:IsA("ProximityPrompt") then
+						total = total + 1
+						if prompt.Enabled then
+							enabledCount = enabledCount + 1
+							local part, model = _promptOwnerModel(prompt)
+							if part then
+								local full, tags, weight = _readEggLabels(model or part)
+								eggs[#eggs+1] = {
+									prompt = prompt, part = part,
+									pos = part.Position, cf = part.CFrame,
+									area = tostring(model and model.Name or part.Name),
+									cat = prompt.ObjectText ~= "" and prompt.ObjectText or (model and model.Name or part.Name),
+									mutation = tags[1], tags = tags, weight = weight, rawText = full,
+								}
+							end
 						end
 					end
 				end
@@ -346,24 +353,27 @@ task.spawn(function()
 			-- totalement aveugle).
 			pcall(function()
 				for _, prompt in ipairs(workspace:GetDescendants()) do
-					if prompt:IsA("ProximityPrompt") and prompt.Enabled then
+					if prompt:IsA("ProximityPrompt") then
 						local action = prompt.ActionText:lower()
 						local objTxt = prompt.ObjectText:lower()
 						local parentName = (prompt.Parent and prompt.Parent.Name or ""):lower()
 						if action:find("grab") or action:find("steal") or action:find("take")
 							or action:find("pick") or action:find("collect")
 							or objTxt:find("egg") or parentName:find("egg") or parentName:find("drop") then
-							promptCount = promptCount + 1
-							local part, model = _promptOwnerModel(prompt)
-							if part then
-								local full, tags, weight = _readEggLabels(model or part)
-								eggs[#eggs+1] = {
-									prompt = prompt, part = part,
-									pos = part.Position, cf = part.CFrame,
-									area = "Dropped",
-									cat = objTxt ~= "" and prompt.ObjectText or part.Name,
-									mutation = tags[1], tags = tags, weight = weight, rawText = full,
-								}
+							total = total + 1
+							if prompt.Enabled then
+								enabledCount = enabledCount + 1
+								local part, model = _promptOwnerModel(prompt)
+								if part then
+									local full, tags, weight = _readEggLabels(model or part)
+									eggs[#eggs+1] = {
+										prompt = prompt, part = part,
+										pos = part.Position, cf = part.CFrame,
+										area = "Dropped",
+										cat = objTxt ~= "" and prompt.ObjectText or part.Name,
+										mutation = tags[1], tags = tags, weight = weight, rawText = full,
+									}
+								end
 							end
 						end
 					end
@@ -371,29 +381,9 @@ task.spawn(function()
 			end)
 		end
 
-		-- Diagnostic une seule fois : dit EXACTEMENT où ça bloque.
-		if not _eggDebugPrinted then
-			_eggDebugPrinted = true
-			if not slotsRoot then
-				print("[yslemEgg] AreaEggSlotsClient INTROUVABLE dans workspace — repli mot-cle utilise, "..#eggs.." oeuf(s) trouve(s)")
-			else
-				print("[yslemEgg] AreaEggSlotsClient trouve — "..promptCount.." ProximityPrompt(s) dedans, "..#eggs.." exploitable(s)")
-			end
-		end
-
-		-- Complète avec le snapshot réseau (uid+position génériques) —
-		-- ajouté seulement pour les zones pas déjà couvertes par un
-		-- prompt physique (évite les doublons proches).
-		local netEggs = _tryNetworkEggSnapshot()
-		if netEggs then
-			for _, ne in ipairs(netEggs) do
-				local isDupe = false
-				for _, e in ipairs(eggs) do
-					if (e.pos - ne.pos).Magnitude < 5 then isDupe = true; break end
-				end
-				if not isDupe then eggs[#eggs+1] = ne end
-			end
-		end
+		_eggScanSlotsFound = slotsRoot ~= nil
+		_eggScanPromptTotal = total
+		_eggScanPromptEnabled = enabledCount
 
 		cachedEggs = eggs
 		task.wait(0.35)
@@ -950,7 +940,8 @@ task.spawn(function()
 			end
 
 			if #validEggs == 0 then
-				setStatus("Farm: aucun oeuf (voir console F9)", C_DIM)
+				setStatus(string.format("Farm: 0 oeuf — slots=%s total=%d actif=%d",
+					_eggScanSlotsFound and "oui" or "non", _eggScanPromptTotal, _eggScanPromptEnabled), C_DIM)
 			else
 				local myPos = rootPart.Position
 				table.sort(validEggs, function(a, b)
