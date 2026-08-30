@@ -312,25 +312,42 @@ task.spawn(function()
 end)
 
 -- ============================================================
--- PALETTE — refonte visuelle complète
+-- PALETTE — IDENTIQUE à Moon Hub (mêmes valeurs RGB exactes, relues
+-- directement dans moon_hub_patched.lua) : fond noir pur, accent bleu
+-- 90-160-255, mêmes gris/argents, même dégradé "living" 4 tons.
 -- ============================================================
-local C_BG      = Color3.fromRGB(9,10,15)
-local C_PAGE    = Color3.fromRGB(6,7,10)
-local C_ROW     = Color3.fromRGB(17,19,27)
-local C_ROW_ON  = Color3.fromRGB(17,28,46)
-local C_BORDER  = Color3.fromRGB(30,33,44)
-local C_ACCENT  = Color3.fromRGB(94,168,255)
-local C_ACCENT2 = Color3.fromRGB(160,205,255)
-local C_TRACKOFF= Color3.fromRGB(40,43,54)
-local C_WHITE   = Color3.fromRGB(240,242,247)
-local C_DIM     = Color3.fromRGB(124,130,145)
-local C_GREEN   = Color3.fromRGB(72,224,140)
-local C_RED     = Color3.fromRGB(235,82,82)
-local C_YELLOW  = Color3.fromRGB(240,196,84)
-local C_GOLD    = Color3.fromRGB(255,197,64)
-local C_DEEP1   = Color3.fromRGB(20,36,70)
-local C_DEEP2   = Color3.fromRGB(60,110,200)
-local C_DEEP3   = Color3.fromRGB(120,175,255)
+-- NOTE : regroupées dans UNE table (au lieu de ~25 locals séparées) —
+-- Lua 5.1 limite une fonction (donc tout le chunk racine) à 200 locals
+-- actives ; avec ~200 features/handlers dans ce hub, chaque local évitée
+-- compte. Toutes les couleurs restent accessibles via C.NOM partout dans
+-- le fichier (remplacement mécanique de C_NOM -> C.NOM).
+local C = {
+	BG       = Color3.fromRGB(0,0,0),
+	HEADER   = Color3.fromRGB(0,0,0),
+	ROW      = Color3.fromRGB(0,0,0),     -- rows Moon Hub : noir + BackgroundTransparency 0.35 (pas une couleur pleine)
+	BORDER   = Color3.fromRGB(40,46,58),
+	WHITE    = Color3.fromRGB(255,255,255),
+	MOON     = Color3.fromRGB(90,160,255),   -- accent principal (= mon ancien C.ACCENT)
+	MOON2    = Color3.fromRGB(160,200,255),  -- accent clair (= mon ancien C.ACCENT2)
+	MOONTEXT = Color3.fromRGB(0,10,20),
+	DIM      = Color3.fromRGB(110,120,140),
+	TABIDLE  = Color3.fromRGB(160,200,255),
+	ON_BG    = Color3.fromRGB(20,45,80),
+	OFF_BG   = Color3.fromRGB(0,0,0),
+	SILVER   = Color3.fromRGB(210,222,240),
+	SILVER2  = Color3.fromRGB(140,165,210),
+	RED      = Color3.fromRGB(220,60,60),
+	GREEN    = Color3.fromRGB(60,220,120),
+	YELLOW   = Color3.fromRGB(230,200,90),   -- pas dans Moon Hub par défaut, ajouté pour les diagnostics
+	GOLD     = Color3.fromRGB(255,200,60),   -- idem, pour les mutations rares de l'ESP
+	DEEP1    = Color3.fromRGB(4,7,16),
+	DEEP2    = Color3.fromRGB(14,28,58),
+	DEEP3    = Color3.fromRGB(40,80,165),
+	DEEP4    = Color3.fromRGB(90,150,255),
+}
+-- Alias pour compat avec le reste du fichier (noms déjà utilisés partout)
+C.ACCENT, C.ACCENT2 = C.MOON, C.MOON2
+C.TRACKOFF = C.OFF_BG
 
 -- ============================================================
 -- ÉTAT — St entière est persistée (que des valeurs simples)
@@ -353,6 +370,7 @@ local St = {
 	fullbright       = false,
 	fpsBoost         = false,
 	clickTp          = false,
+	infJump          = false,
 	speedOn          = false,
 	floatLocked      = false,
 	speed            = 16,
@@ -415,80 +433,86 @@ local _farmMoving = false
 local _farmTargetPos = nil
 local _farmSpeed = 40
 
-local _proxy, _ownConn = nil, nil
-local _ownTimer, _ownInterval = 0, 0.8 + math.random()*0.4
+-- (bloc do..end : ces variables ne servent qu'au moteur de mouvement,
+-- on les libère du compte de locals du chunk racine après "end" — même
+-- limite 200 locals que pour la palette, cf. commentaire plus haut)
+local startSpeed, stopSpeed
+do
+	local _proxy, _ownConn = nil, nil
+	local _ownTimer, _ownInterval = 0, 0.8 + math.random()*0.4
 
-local function _claimOwn(hrp) pcall(function() hrp:SetNetworkOwner(LP) end) end
-local function _cleanProxy()
-	if _ownConn then pcall(function() _ownConn:Disconnect() end); _ownConn = nil end
-	if _proxy then pcall(function() _proxy:Destroy() end); _proxy = nil end
-end
-local function _ensureProxy(hrp)
-	local char = hrp.Parent
-	if _proxy and _proxy.Parent == char then return _proxy end
-	_cleanProxy()
-	local p = Instance.new("Part")
-	p.Name = "YE_Proxy"; p.Size = Vector3.new(1,1,1)
-	p.Transparency = 1; p.CanCollide = false; p.Massless = true
-	p.Parent = char
-	local w = Instance.new("Weld", p)
-	w.Part0 = hrp; w.Part1 = p; w.C0 = CFrame.new()
-	_proxy = p
-	_claimOwn(hrp)
-	_ownConn = hrp:GetPropertyChangedSignal("ReceiveAge"):Connect(function()
-		if St.speedOn or _farmMoving then task.defer(function() _claimOwn(hrp) end) end
+	local function _claimOwn(hrp) pcall(function() hrp:SetNetworkOwner(LP) end) end
+	local function _cleanProxy()
+		if _ownConn then pcall(function() _ownConn:Disconnect() end); _ownConn = nil end
+		if _proxy then pcall(function() _proxy:Destroy() end); _proxy = nil end
+	end
+	local function _ensureProxy(hrp)
+		local char = hrp.Parent
+		if _proxy and _proxy.Parent == char then return _proxy end
+		_cleanProxy()
+		local p = Instance.new("Part")
+		p.Name = "YE_Proxy"; p.Size = Vector3.new(1,1,1)
+		p.Transparency = 1; p.CanCollide = false; p.Massless = true
+		p.Parent = char
+		local w = Instance.new("Weld", p)
+		w.Part0 = hrp; w.Part1 = p; w.C0 = CFrame.new()
+		_proxy = p
+		_claimOwn(hrp)
+		_ownConn = hrp:GetPropertyChangedSignal("ReceiveAge"):Connect(function()
+			if St.speedOn or _farmMoving then task.defer(function() _claimOwn(hrp) end) end
+		end)
+		return p
+	end
+
+	RunService.RenderStepped:Connect(function(dt)
+		local char = LP.Character
+		if not char then _cleanProxy(); return end
+		if _aimBatActive then return end  -- AimBat pilote hrp directement, ne pas interférer
+
+		local hum = char:FindFirstChildOfClass("Humanoid")
+		local hrp = char:FindFirstChild("HumanoidRootPart")
+		if not hum or not hrp then _cleanProxy(); return end
+
+		local wantsMove = _farmMoving or St.speedOn
+		if not wantsMove then _cleanProxy(); return end
+
+		local st = hum:GetState()
+		if hum.PlatformStand or st == Enum.HumanoidStateType.Physics
+			or st == Enum.HumanoidStateType.Ragdoll or st == Enum.HumanoidStateType.FallingDown then
+			_cleanProxy(); return
+		end
+
+		_ownTimer = _ownTimer + dt
+		if _ownTimer >= _ownInterval then
+			_claimOwn(hrp); _ownTimer = 0; _ownInterval = 0.8 + math.random()*0.4
+		end
+
+		local px = _ensureProxy(hrp)
+
+		if _farmMoving and _farmTargetPos then
+			local delta = _farmTargetPos - hrp.Position
+			local flat = Vector3.new(delta.X, 0, delta.Z)
+			if flat.Magnitude > 1 then
+				local dir = flat.Unit
+				px.AssemblyLinearVelocity = Vector3.new(dir.X*_farmSpeed, hrp.AssemblyLinearVelocity.Y, dir.Z*_farmSpeed)
+			else
+				px.AssemblyLinearVelocity = Vector3.new(0, hrp.AssemblyLinearVelocity.Y, 0)
+			end
+		else -- St.speedOn
+			local md = hum.MoveDirection
+			if md.Magnitude > 0 then
+				local jit = 1 + (math.random()-0.5)*0.08
+				px.AssemblyLinearVelocity = Vector3.new(md.X*St.speed*jit, hrp.AssemblyLinearVelocity.Y, md.Z*St.speed*jit)
+			else
+				px.AssemblyLinearVelocity = Vector3.new(0, hrp.AssemblyLinearVelocity.Y, 0)
+			end
+		end
 	end)
-	return p
+	LP.CharacterAdded:Connect(function() _cleanProxy() end)
+
+	startSpeed = function() St.speedOn = true end
+	stopSpeed = function() St.speedOn = false; if not _farmMoving then _cleanProxy() end end
 end
-
-RunService.RenderStepped:Connect(function(dt)
-	local char = LP.Character
-	if not char then _cleanProxy(); return end
-	if _aimBatActive then return end  -- AimBat pilote hrp directement, ne pas interférer
-
-	local hum = char:FindFirstChildOfClass("Humanoid")
-	local hrp = char:FindFirstChild("HumanoidRootPart")
-	if not hum or not hrp then _cleanProxy(); return end
-
-	local wantsMove = _farmMoving or St.speedOn
-	if not wantsMove then _cleanProxy(); return end
-
-	local st = hum:GetState()
-	if hum.PlatformStand or st == Enum.HumanoidStateType.Physics
-		or st == Enum.HumanoidStateType.Ragdoll or st == Enum.HumanoidStateType.FallingDown then
-		_cleanProxy(); return
-	end
-
-	_ownTimer = _ownTimer + dt
-	if _ownTimer >= _ownInterval then
-		_claimOwn(hrp); _ownTimer = 0; _ownInterval = 0.8 + math.random()*0.4
-	end
-
-	local px = _ensureProxy(hrp)
-
-	if _farmMoving and _farmTargetPos then
-		local delta = _farmTargetPos - hrp.Position
-		local flat = Vector3.new(delta.X, 0, delta.Z)
-		if flat.Magnitude > 1 then
-			local dir = flat.Unit
-			px.AssemblyLinearVelocity = Vector3.new(dir.X*_farmSpeed, hrp.AssemblyLinearVelocity.Y, dir.Z*_farmSpeed)
-		else
-			px.AssemblyLinearVelocity = Vector3.new(0, hrp.AssemblyLinearVelocity.Y, 0)
-		end
-	else -- St.speedOn
-		local md = hum.MoveDirection
-		if md.Magnitude > 0 then
-			local jit = 1 + (math.random()-0.5)*0.08
-			px.AssemblyLinearVelocity = Vector3.new(md.X*St.speed*jit, hrp.AssemblyLinearVelocity.Y, md.Z*St.speed*jit)
-		else
-			px.AssemblyLinearVelocity = Vector3.new(0, hrp.AssemblyLinearVelocity.Y, 0)
-		end
-	end
-end)
-LP.CharacterAdded:Connect(function() _cleanProxy() end)
-
-local function startSpeed() St.speedOn = true end
-local function stopSpeed() St.speedOn = false; if not _farmMoving then _cleanProxy() end end
 
 -- ============================================================
 -- UI — SYSTÈME DE DESIGN
@@ -496,7 +520,7 @@ local function stopSpeed() St.speedOn = false; if not _farmMoving then _cleanPro
 local function corner(inst, r) local c = Instance.new("UICorner", inst); c.CornerRadius = UDim.new(0, r or 8); return c end
 local function stroke(inst, col, th, tr)
 	local s = Instance.new("UIStroke", inst)
-	s.Color = col or C_BORDER; s.Thickness = th or 1; s.Transparency = tr or 0
+	s.Color = col or C.BORDER; s.Thickness = th or 1; s.Transparency = tr or 0
 	return s
 end
 local function label(parent, text, size, color, font, ax, ay)
@@ -504,26 +528,60 @@ local function label(parent, text, size, color, font, ax, ay)
 	l.BackgroundTransparency = 1
 	l.Size = size or UDim2.new(1,0,1,0)
 	l.Text = text or ""; l.TextSize = 13
-	l.TextColor3 = color or C_WHITE
+	l.TextColor3 = color or C.WHITE
 	l.Font = font or Enum.Font.GothamMedium
 	l.TextXAlignment = ax or Enum.TextXAlignment.Left
 	l.TextYAlignment = ay or Enum.TextYAlignment.Center
 	return l
 end
 
-local _liveGrads = {}
+-- Dégradés/liserés "vivants" — identique à Moon Hub : rotation continue,
+-- UN FRAME SUR DEUX (perf), incrément doublé (1.2) pour compenser le
+-- demi-taux et garder la même vitesse perçue (~0.6/frame en moyenne).
+local _liveGrads, _liveStrokes = {}, {}
+local _livingFrameToggle = false
 RunService.RenderStepped:Connect(function()
+	_livingFrameToggle = not _livingFrameToggle
+	if not _livingFrameToggle then return end
 	for _, g in ipairs(_liveGrads) do
-		if g and g.Parent then g.Rotation = (g.Rotation + 1.1) % 360 end
+		if g and g.Parent then g.Rotation = (g.Rotation + 1.2) % 360 end
+	end
+	for _, g in ipairs(_liveStrokes) do
+		if g and g.Parent then g.Rotation = (g.Rotation + 1.2) % 360 end
 	end
 end)
+-- addLivingTextGradient Moon Hub : DEEP4 -> DEEP3 -> DEEP4 -> DEEP3 -> DEEP4
 local function liveGrad(inst)
 	local g = Instance.new("UIGradient", inst)
 	g.Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, C_DEEP1), ColorSequenceKeypoint.new(0.33, C_DEEP2),
-		ColorSequenceKeypoint.new(0.66, C_DEEP3), ColorSequenceKeypoint.new(1, C_DEEP1),
+		ColorSequenceKeypoint.new(0,    C.DEEP4), ColorSequenceKeypoint.new(0.25, C.DEEP3),
+		ColorSequenceKeypoint.new(0.5,  C.DEEP4), ColorSequenceKeypoint.new(0.75, C.DEEP3),
+		ColorSequenceKeypoint.new(1,    C.DEEP4),
 	})
 	table.insert(_liveGrads, g); return g
+end
+-- addLivingStroke Moon Hub : liseré base DEEP3 + dégradé interne
+-- DEEP1 -> DEEP2 -> DEEP1 -> DEEP2 -> DEEP1
+local function addLivingStroke(parent, thickness)
+	local s = Instance.new("UIStroke", parent)
+	s.Color = C.DEEP3; s.Thickness = thickness or 1.5
+	s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	local g = Instance.new("UIGradient", s)
+	g.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0,    C.DEEP1), ColorSequenceKeypoint.new(0.25, C.DEEP2),
+		ColorSequenceKeypoint.new(0.5,  C.DEEP1), ColorSequenceKeypoint.new(0.75, C.DEEP2),
+		ColorSequenceKeypoint.new(1,    C.DEEP1),
+	})
+	table.insert(_liveStrokes, g); return s
+end
+-- makeDivider Moon Hub : ligne 1px DEEP3 + dégradé vivant, entre chaque row
+local function makeDivider(page)
+	local d = Instance.new("Frame", page)
+	d.Size = UDim2.new(1,-12,0,1)
+	d.BackgroundColor3 = C.DEEP3
+	d.BorderSizePixel = 0
+	liveGrad(d)
+	return d
 end
 
 -- Section header — hiérarchie visuelle (regroupe des rows par thème)
@@ -531,58 +589,97 @@ local function sectionHeader(page, text)
 	local wrap = Instance.new("Frame", page)
 	wrap.Size = UDim2.new(1,-12,0,20)
 	wrap.BackgroundTransparency = 1
-	local lbl = label(wrap, text:upper(), UDim2.new(1,-8,1,0), C_DIM, Enum.Font.GothamBold)
+	local lbl = label(wrap, text:upper(), UDim2.new(1,-8,1,0), C.DIM, Enum.Font.GothamBold)
 	lbl.TextSize = 10
 	lbl.Position = UDim2.new(0,4,0,0)
 	return wrap
 end
 
--- Switch réel (track + knob animé) — remplace le pill texte ON/OFF
+-- Switch "pill" Moon Hub exact : pill 40x20 (ON = C.ON_BG, OFF = C.OFF_BG,
+-- transparence 0.1) + liseré vivant + bille 14x14 (ON = C.WHITE à droite,
+-- OFF = C.SILVER2 à gauche) + halo respirant (UIStroke épaisseur 2.5,
+-- couleur C.MOON, Transparency oscillant 0.35<->0.85 toutes les 0.9s,
+-- actif seulement quand ON).
 local function makeSwitch(parent, initial)
-	local track = Instance.new("Frame", parent)
-	track.Size = UDim2.new(0,38,0,20)
-	track.BackgroundColor3 = initial and C_ACCENT or C_TRACKOFF
-	track.BorderSizePixel = 0
-	corner(track, 10)
-	local knob = Instance.new("Frame", track)
+	local pill = Instance.new("Frame", parent)
+	pill.Size = UDim2.new(0,40,0,20)
+	pill.BackgroundColor3 = initial and C.ON_BG or C.OFF_BG
+	pill.BackgroundTransparency = 0.1
+	pill.BorderSizePixel = 0
+	corner(pill, 10)
+	addLivingStroke(pill, 1)
+
+	local glow = Instance.new("UIStroke", pill)
+	glow.Thickness = 2.5; glow.Color = C.MOON; glow.Transparency = 1
+	glow.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	local _glowTween = nil
+	local function stopGlow()
+		if _glowTween then _glowTween:Cancel(); _glowTween = nil end
+		glow.Transparency = 1
+	end
+	local function startGlow()
+		if _glowTween then return end
+		glow.Transparency = 0.35
+		_glowTween = TweenService:Create(glow,
+			TweenInfo.new(0.9, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
+			{Transparency = 0.85})
+		_glowTween:Play()
+	end
+
+	local knob = Instance.new("Frame", pill)
 	knob.Size = UDim2.new(0,14,0,14)
 	knob.Position = initial and UDim2.new(1,-17,0.5,-7) or UDim2.new(0,3,0.5,-7)
-	knob.BackgroundColor3 = C_WHITE
+	knob.BackgroundColor3 = initial and C.WHITE or C.SILVER2
 	knob.BorderSizePixel = 0
 	corner(knob, 7)
-	local btn = Instance.new("TextButton", track)
+
+	local btn = Instance.new("TextButton", pill)
 	btn.Size = UDim2.new(1,0,1,0); btn.BackgroundTransparency = 1; btn.Text = ""
+
 	local function setState(on)
-		TweenService:Create(track, TweenInfo.new(0.15), {BackgroundColor3 = on and C_ACCENT or C_TRACKOFF}):Play()
-		TweenService:Create(knob, TweenInfo.new(0.15, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
-			{Position = on and UDim2.new(1,-17,0.5,-7) or UDim2.new(0,3,0.5,-7)}):Play()
+		TweenService:Create(pill, TweenInfo.new(0.22, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+			{BackgroundColor3 = on and C.ON_BG or C.OFF_BG}):Play()
+		TweenService:Create(knob, TweenInfo.new(0.22, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+			{Position = on and UDim2.new(1,-17,0.5,-7) or UDim2.new(0,3,0.5,-7),
+			 BackgroundColor3 = on and C.WHITE or C.SILVER2}):Play()
+		if on then startGlow() else stopGlow() end
 	end
-	return track, btn, setState
+	if initial then startGlow() end
+	return pill, btn, setState
 end
 
--- Row à toggle — s'enregistre automatiquement pour la restauration/
--- activation post-sauvegarde (_toggleRegistry) et sauvegarde à chaque clic.
+-- Row à toggle — style Moon Hub exact (fond noir + transparence 0.35,
+-- 0.15 au survol ; liseré vivant ; libellé en dégradé vivant ; pastille
+-- + halo respirant ; divider après chaque row). S'enregistre
+-- automatiquement pour la restauration/activation post-sauvegarde
+-- (_toggleRegistry) et sauvegarde à chaque clic.
 local function makeRow(page, key, displayName, onToggle)
 	local row = Instance.new("Frame", page)
 	row.Size = UDim2.new(1,-12,0,32)
-	row.BackgroundColor3 = C_ROW
+	row.BackgroundColor3 = C.ROW
+	row.BackgroundTransparency = 0.35
 	row.BorderSizePixel = 0
-	corner(row, 8)
+	corner(row, 12)
+	addLivingStroke(row, 1)
 	local pad = Instance.new("UIPadding", row)
 	pad.PaddingLeft = UDim.new(0,10); pad.PaddingRight = UDim.new(0,10)
 
-	local nameLbl = label(row, displayName, UDim2.new(1,-46,1,0), C_WHITE, Enum.Font.GothamMedium)
-	nameLbl.TextSize = 12
+	row.MouseEnter:Connect(function()
+		TweenService:Create(row, TweenInfo.new(0.1), {BackgroundTransparency = 0.15}):Play()
+	end)
+	row.MouseLeave:Connect(function()
+		TweenService:Create(row, TweenInfo.new(0.1), {BackgroundTransparency = 0.35}):Play()
+	end)
 
-	local track, btn, setSwitch = makeSwitch(row, key and St[key] or false)
-	track.Position = UDim2.new(1,-38,0.5,-10)
-	track.AnchorPoint = Vector2.new(0,0)
+	local nameLbl = label(row, displayName, UDim2.new(1,-62,1,0), C.WHITE, Enum.Font.GothamBold)
+	nameLbl.TextSize = 11
+	liveGrad(nameLbl)
 
-	local function refresh()
-		local on = St[key]
-		setSwitch(on)
-		TweenService:Create(row, TweenInfo.new(0.15), {BackgroundColor3 = on and C_ROW_ON or C_ROW}):Play()
-	end
+	local pill, btn, setSwitch = makeSwitch(row, key and St[key] or false)
+	pill.Position = UDim2.new(1,-54,0.5,-10)
+	pill.AnchorPoint = Vector2.new(0,0)
+
+	local function refresh() setSwitch(St[key]) end
 	refresh()
 
 	if key then _toggleRegistry[key] = onToggle end
@@ -593,6 +690,7 @@ local function makeRow(page, key, displayName, onToggle)
 		if onToggle then pcall(onToggle, St[key]) end
 		saveConfig()
 	end)
+	makeDivider(page)
 	return row, btn, refresh
 end
 
@@ -600,36 +698,38 @@ end
 local function makeSlider(page, key, displayName, minV, maxV, fmt)
 	local row = Instance.new("Frame", page)
 	row.Size = UDim2.new(1,-12,0,46)
-	row.BackgroundColor3 = C_ROW
-	row.BorderSizePixel = 0; corner(row, 8)
+	row.BackgroundColor3 = C.ROW
+	row.BackgroundTransparency = 0.35
+	row.BorderSizePixel = 0; corner(row, 12)
+	addLivingStroke(row, 1)
 	local pad = Instance.new("UIPadding", row)
 	pad.PaddingLeft = UDim.new(0,10); pad.PaddingRight = UDim.new(0,10)
 
-	local nameLbl = label(row, displayName, UDim2.new(0.6,0,0,20), C_WHITE, Enum.Font.GothamMedium)
+	local nameLbl = label(row, displayName, UDim2.new(0.6,0,0,20), C.WHITE, Enum.Font.GothamMedium)
 	nameLbl.TextSize = 12; nameLbl.Position = UDim2.new(0,0,0,4)
 
-	local valLbl = label(row, "", UDim2.new(0.4,0,0,20), C_ACCENT2, Enum.Font.GothamBold, Enum.TextXAlignment.Right)
+	local valLbl = label(row, "", UDim2.new(0.4,0,0,20), C.ACCENT2, Enum.Font.GothamBold, Enum.TextXAlignment.Right)
 	valLbl.TextSize = 12; valLbl.Position = UDim2.new(0.6,0,0,4)
 
 	local track = Instance.new("Frame", row)
 	track.Size = UDim2.new(1,0,0,5)
 	track.Position = UDim2.new(0,0,1,-13)
-	track.BackgroundColor3 = C_TRACKOFF
+	track.BackgroundColor3 = C.TRACKOFF
 	track.BorderSizePixel = 0; corner(track, 3)
 
 	local fill = Instance.new("Frame", track)
 	fill.Size = UDim2.new(0,0,1,0)
-	fill.BackgroundColor3 = C_ACCENT
+	fill.BackgroundColor3 = C.ACCENT
 	fill.BorderSizePixel = 0; corner(fill, 3)
 	local fillGrad = Instance.new("UIGradient", fill)
-	fillGrad.Color = ColorSequence.new({ColorSequenceKeypoint.new(0, C_DEEP2), ColorSequenceKeypoint.new(1, C_ACCENT2)})
+	fillGrad.Color = ColorSequence.new({ColorSequenceKeypoint.new(0, C.DEEP2), ColorSequenceKeypoint.new(1, C.ACCENT2)})
 
 	local thumb = Instance.new("Frame", track)
 	thumb.Size = UDim2.new(0,12,0,12)
 	thumb.AnchorPoint = Vector2.new(0.5,0.5)
-	thumb.BackgroundColor3 = C_WHITE
+	thumb.BackgroundColor3 = C.WHITE
 	thumb.BorderSizePixel = 0; corner(thumb, 6)
-	stroke(thumb, C_ACCENT, 1.5)
+	stroke(thumb, C.ACCENT, 1.5)
 
 	local function setVal(v, skipSave)
 		v = math.clamp(math.floor(v), minV, maxV)
@@ -660,25 +760,31 @@ local function makeSlider(page, key, displayName, minV, maxV, fmt)
 		local rel = math.clamp((inp.Position.X - abs.X) / sz.X, 0, 1)
 		setVal(minV + (maxV-minV)*rel)
 	end)
+	makeDivider(page)
 	return row, setVal
 end
 
--- Bouton d'action simple (pas de toggle, juste un clic) — style cohérent
+-- Bouton d'action simple (pas de toggle, juste un clic) — même habillage
+-- de row que makeRow (transparence 0.35, coins 12, liseré vivant) pour
+-- une interface cohérente de bout en bout.
 local function makeButton(page, displayName, btnText, onClick, danger)
 	local row = Instance.new("Frame", page)
 	row.Size = UDim2.new(1,-12,0,32)
-	row.BackgroundColor3 = C_ROW; row.BorderSizePixel = 0; corner(row, 8)
+	row.BackgroundColor3 = C.ROW; row.BackgroundTransparency = 0.35
+	row.BorderSizePixel = 0; corner(row, 12)
+	addLivingStroke(row, 1)
 	local pad = Instance.new("UIPadding", row)
 	pad.PaddingLeft = UDim.new(0,10); pad.PaddingRight = UDim.new(0,10)
-	label(row, displayName, UDim2.new(1,-64,1,0), C_WHITE, Enum.Font.GothamMedium).TextSize = 12
+	label(row, displayName, UDim2.new(1,-64,1,0), C.WHITE, Enum.Font.GothamMedium).TextSize = 12
 	local btn = Instance.new("TextButton", row)
 	btn.Size = UDim2.new(0,56,0,20)
 	btn.Position = UDim2.new(1,-56,0.5,-10)
 	btn.BackgroundColor3 = danger and Color3.fromRGB(58,20,20) or Color3.fromRGB(20,32,54)
-	btn.TextColor3 = danger and C_RED or C_ACCENT2
+	btn.TextColor3 = danger and C.RED or C.ACCENT2
 	btn.Text = btnText; btn.TextSize = 10; btn.Font = Enum.Font.GothamBold
 	btn.BorderSizePixel = 0; corner(btn, 7)
 	if onClick then btn.MouseButton1Click:Connect(onClick) end
+	makeDivider(page)
 	return row, btn
 end
 
@@ -693,24 +799,26 @@ gui.IgnoreGuiInset = true
 pcall(function() gui.Parent = game:GetService("CoreGui") end)
 if not gui.Parent then gui.Parent = LP.PlayerGui end
 
+-- Fenêtre principale — proportions Moon Hub exactes : 300x340, coins 24,
+-- header 48px.
 local main = Instance.new("Frame", gui)
 main.Name = "Main"
-main.Size = UDim2.new(0,254,0,360)
-main.Position = UDim2.new(0,14,0.5,-180)
-main.BackgroundColor3 = C_BG
+main.Size = UDim2.new(0,300,0,340)
+main.Position = UDim2.new(0,14,0.5,-170)
+main.BackgroundColor3 = C.BG
 main.BorderSizePixel = 0
 main.ClipsDescendants = true
-corner(main, 12)
-stroke(main, C_BORDER, 1.5)
+corner(main, 24)
+stroke(main, C.BORDER, 1.5)
 local mainShadow = Instance.new("UIStroke", main)
-mainShadow.Color = C_ACCENT; mainShadow.Thickness = 1; mainShadow.Transparency = 0.85
+mainShadow.Color = C.ACCENT; mainShadow.Thickness = 1; mainShadow.Transparency = 0.85
 
 -- Header
 local header = Instance.new("Frame", main)
-header.Size = UDim2.new(1,0,0,40)
-header.BackgroundColor3 = C_BG
+header.Size = UDim2.new(1,0,0,48)
+header.BackgroundColor3 = C.BG
 header.BorderSizePixel = 0
-corner(header, 12)
+corner(header, 24)
 
 local titleLbl = Instance.new("TextLabel", header)
 titleLbl.BackgroundTransparency = 1
@@ -728,7 +836,7 @@ closeBtn.Size = UDim2.new(0,24,0,24)
 closeBtn.Position = UDim2.new(1,-32,0.5,-12)
 closeBtn.BackgroundColor3 = Color3.fromRGB(58,20,20)
 closeBtn.Text = "✕"; closeBtn.TextSize = 12
-closeBtn.TextColor3 = C_RED; closeBtn.Font = Enum.Font.GothamBold
+closeBtn.TextColor3 = C.RED; closeBtn.Font = Enum.Font.GothamBold
 closeBtn.BorderSizePixel = 0; corner(closeBtn, 7)
 
 local minBtn = Instance.new("TextButton", header)
@@ -736,43 +844,53 @@ minBtn.Size = UDim2.new(0,24,0,24)
 minBtn.Position = UDim2.new(1,-60,0.5,-12)
 minBtn.BackgroundColor3 = Color3.fromRGB(24,26,35)
 minBtn.Text = "–"; minBtn.TextSize = 14
-minBtn.TextColor3 = C_ACCENT2; minBtn.Font = Enum.Font.GothamBold
+minBtn.TextColor3 = C.ACCENT2; minBtn.Font = Enum.Font.GothamBold
 minBtn.BorderSizePixel = 0; corner(minBtn, 7)
 
 local sep = Instance.new("Frame", main)
 sep.Size = UDim2.new(1,-24,0,1)
-sep.Position = UDim2.new(0,12,0,40)
-sep.BackgroundColor3 = C_BORDER; sep.BorderSizePixel = 0
+sep.Position = UDim2.new(0,12,0,48)
+sep.BackgroundColor3 = C.BORDER; sep.BorderSizePixel = 0
 
--- Tab bar (underline actif, plus premium qu'un fond plein)
-local TAB_Y = 46
+-- Tab bar — style Moon Hub exact : boutons 44px fixes (pas de division
+-- proportionnelle), pilule pleine active (C.MOON / texte C.MOONTEXT),
+-- inactive semi-transparente (18,22,30 @ 0.5 / texte C.TABIDLE), liseré
+-- vivant, flash de transition au clic.
+local TAB_Y = 54
 local tabBar = Instance.new("Frame", main)
-tabBar.Size = UDim2.new(1,-8,0,30)
-tabBar.Position = UDim2.new(0,4,0,TAB_Y)
+tabBar.Size = UDim2.new(1,0,0,32)
+tabBar.Position = UDim2.new(0,0,0,TAB_Y)
 tabBar.BackgroundTransparency = 1
+local tabList = Instance.new("UIListLayout", tabBar)
+tabList.FillDirection = Enum.FillDirection.Horizontal
+tabList.HorizontalAlignment = Enum.HorizontalAlignment.Center
+tabList.VerticalAlignment = Enum.VerticalAlignment.Center
+tabList.Padding = UDim.new(0,8)
 
 local TABS = {"Farm","Speed","Visual","Misc"}
-local tabBtns, tabUnderlines = {}, {}
-local tabW = 1/#TABS
-for i, name in ipairs(TABS) do
+local tabBtns, tabFlashes = {}, {}
+for _, name in ipairs(TABS) do
 	local btn = Instance.new("TextButton", tabBar)
-	btn.Size = UDim2.new(tabW,0,1,-6)
-	btn.Position = UDim2.new((i-1)*tabW,0,0,0)
-	btn.BackgroundTransparency = 1
-	btn.Text = name; btn.TextSize = 12
-	btn.TextColor3 = C_DIM; btn.Font = Enum.Font.GothamMedium
-	local under = Instance.new("Frame", btn)
-	under.Size = UDim2.new(0.5,0,0,2)
-	under.Position = UDim2.new(0.25,0,1,2)
-	under.BackgroundColor3 = C_ACCENT
-	under.BorderSizePixel = 0
-	under.Visible = false
-	corner(under, 1)
+	btn.Size = UDim2.new(0,44,0,28)
+	btn.BackgroundColor3 = Color3.fromRGB(18,22,30)
+	btn.BackgroundTransparency = 0.5
+	btn.Text = name; btn.TextSize = 11
+	btn.TextColor3 = C.TABIDLE; btn.Font = Enum.Font.GothamBold
+	btn.BorderSizePixel = 0
+	corner(btn, 10)
+	addLivingStroke(btn, 1)
+	local flash = Instance.new("Frame", btn)
+	flash.Size = UDim2.new(1,0,1,0)
+	flash.BackgroundColor3 = C.WHITE
+	flash.BackgroundTransparency = 1
+	flash.BorderSizePixel = 0
+	flash.ZIndex = btn.ZIndex + 1
+	corner(flash, 10)
 	tabBtns[name] = btn
-	tabUnderlines[name] = under
+	tabFlashes[name] = flash
 end
 
-local CONTENT_Y = TAB_Y + 32
+local CONTENT_Y = TAB_Y + 32 + 6
 local contentArea = Instance.new("Frame", main)
 contentArea.Size = UDim2.new(1,0,1,-CONTENT_Y-24)
 contentArea.Position = UDim2.new(0,0,0,CONTENT_Y)
@@ -787,7 +905,7 @@ for _, name in ipairs(TABS) do
 	pg.BackgroundTransparency = 1
 	pg.BorderSizePixel = 0
 	pg.ScrollBarThickness = 3
-	pg.ScrollBarImageColor3 = C_ACCENT
+	pg.ScrollBarImageColor3 = C.ACCENT
 	pg.CanvasSize = UDim2.new(0,0,0,0)
 	pg.AutomaticCanvasSize = Enum.AutomaticSize.Y
 	pg.Visible = false
@@ -799,15 +917,27 @@ for _, name in ipairs(TABS) do
 	pages[name] = pg
 end
 
+-- Transition d'onglet Moon Hub : pilule pleine + flash qui s'efface +
+-- léger glissement d'entrée du contenu.
 local activeTab = nil
 local function switchTab(name)
 	if activeTab == name then return end
 	activeTab = name
 	for _, n in ipairs(TABS) do
 		local on = n == name
-		pages[n].Visible = on
-		tabUnderlines[n].Visible = on
-		TweenService:Create(tabBtns[n], TweenInfo.new(0.15), {TextColor3 = on and C_ACCENT2 or C_DIM}):Play()
+		local btn, flash = tabBtns[n], tabFlashes[n]
+		if on then
+			pages[n].Visible = true
+			pages[n].Position = UDim2.new(0,8,0,0)
+			TweenService:Create(pages[n], TweenInfo.new(0.18, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+				{Position = UDim2.new(0,0,0,0)}):Play()
+			TweenService:Create(btn, TweenInfo.new(0.15), {BackgroundColor3 = C.MOON, BackgroundTransparency = 0, TextColor3 = C.MOONTEXT}):Play()
+			flash.BackgroundTransparency = 0.5
+			TweenService:Create(flash, TweenInfo.new(0.25), {BackgroundTransparency = 1}):Play()
+		else
+			pages[n].Visible = false
+			TweenService:Create(btn, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(18,22,30), BackgroundTransparency = 0.5, TextColor3 = C.TABIDLE}):Play()
+		end
 	end
 end
 for _, name in ipairs(TABS) do
@@ -824,7 +954,7 @@ statusBar.BorderSizePixel = 0
 local statusDot = Instance.new("Frame", statusBar)
 statusDot.Size = UDim2.new(0,6,0,6)
 statusDot.Position = UDim2.new(0,10,0.5,-3)
-statusDot.BackgroundColor3 = C_DIM
+statusDot.BackgroundColor3 = C.DIM
 statusDot.BorderSizePixel = 0
 corner(statusDot, 3)
 
@@ -834,13 +964,13 @@ statusLbl.Size = UDim2.new(1,-24,1,0)
 statusLbl.Position = UDim2.new(0,22,0,0)
 statusLbl.Text = "Idle"
 statusLbl.TextSize = 10; statusLbl.Font = Enum.Font.Gotham
-statusLbl.TextColor3 = C_DIM
+statusLbl.TextColor3 = C.DIM
 statusLbl.TextXAlignment = Enum.TextXAlignment.Left
 
 local function setStatus(txt, col)
 	statusLbl.Text = txt
-	statusLbl.TextColor3 = col or C_DIM
-	statusDot.BackgroundColor3 = col or C_DIM
+	statusLbl.TextColor3 = col or C.DIM
+	statusDot.BackgroundColor3 = col or C.DIM
 end
 
 -- ============================================================
@@ -855,11 +985,11 @@ do
 	local allOk = okCount == total
 	local row = Instance.new("Frame", farmPage)
 	row.Size = UDim2.new(1,-12,0,26)
-	row.BackgroundColor3 = C_ROW; row.BorderSizePixel = 0; corner(row, 7)
+	row.BackgroundColor3 = C.ROW; row.BorderSizePixel = 0; corner(row, 7)
 	local pad = Instance.new("UIPadding", row)
 	pad.PaddingLeft = UDim.new(0,10); pad.PaddingRight = UDim.new(0,10)
 	local lbl = label(row, "Modules: "..okCount.."/"..total.." charges", UDim2.new(1,0,1,0),
-		allOk and C_GREEN or C_YELLOW, Enum.Font.GothamMedium)
+		allOk and C.GREEN or C.YELLOW, Enum.Font.GothamMedium)
 	lbl.TextSize = 11
 	if not allOk then
 		local btn = Instance.new("TextButton", row)
@@ -876,7 +1006,7 @@ do
 			local msg = table.concat(lines, "\n")
 			print("[yslemEgg] Statut modules:\n"..msg)
 			pcall(function() if setclipboard then setclipboard(msg) end end)
-			setStatus("Details copies / voir console (F9)", C_YELLOW)
+			setStatus("Details copies / voir console (F9)", C.YELLOW)
 		end)
 	end
 end
@@ -917,7 +1047,7 @@ task.spawn(function()
 		if St.autoFarm and not isFarmingEgg and rootPart then
 			if #cachedEggs == 0 then
 				setStatus(string.format("Farm: 0 oeuf — slots=%s total=%d actif=%d",
-					_eggScanSlotsFound and "oui" or "non", _eggScanPromptTotal, _eggScanPromptEnabled), C_DIM)
+					_eggScanSlotsFound and "oui" or "non", _eggScanPromptTotal, _eggScanPromptEnabled), C.DIM)
 			else
 				local myPos = rootPart.Position
 				local best, bestDist = nil, math.huge
@@ -957,7 +1087,7 @@ task.spawn(function()
 					spamming = false
 					_farmMoving = false
 					isFarmingEgg = false
-					setStatus("Farm → "..tostring(best.cat or "?"), C_GREEN)
+					setStatus("Farm → "..tostring(best.cat or "?"), C.GREEN)
 				end
 			end
 		end
@@ -990,7 +1120,7 @@ local function _clickGuiButtonByText(matchFn)
 	end
 	if not _guiClickWarned then
 		_guiClickWarned = true
-		setStatus("Clic UI indispo (firesignal manquant)", C_RED)
+		setStatus("Clic UI indispo (firesignal manquant)", C.RED)
 	end
 	return false
 end
@@ -1002,7 +1132,7 @@ task.spawn(function()
 		if St.autoHatch and (os.clock()-lastHatch) >= 3 then
 			lastHatch = os.clock()
 			if _clickGuiButtonByText(function(t) return t:lower():find("grow all", 1, true) ~= nil end) then
-				setStatus("Hatch: 'Grow All' clique", C_GREEN)
+				setStatus("Hatch: 'Grow All' clique", C.GREEN)
 			end
 		end
 	end
@@ -1016,7 +1146,7 @@ task.spawn(function()
 		if St.autoEquip and (os.clock()-lastEquip) >= 4 then
 			lastEquip = os.clock()
 			if _clickGuiButtonByText(function(t) return t:lower():find("equip best", 1, true) ~= nil end) then
-				setStatus("'Equip Best' clique", C_GREEN)
+				setStatus("'Equip Best' clique", C.GREEN)
 			end
 		end
 	end
@@ -1033,7 +1163,7 @@ task.spawn(function()
 			local a = _invokeRF("RF/AwayEarnings/AskCollect")
 			local b = _invokeRF("RF/Codex/AskRedeemAll")
 			local c = _invokeRF("RF/GroupPerk/RedeemPerk")
-			if a or b or c then setStatus("Claim: away/codex/group tentes", C_GREEN) end
+			if a or b or c then setStatus("Claim: away/codex/group tentes", C.GREEN) end
 		end
 	end
 end)
@@ -1055,7 +1185,7 @@ task.spawn(function()
 				local nextLevel = (data.BaseUpgradeLevel or 0) + 1
 				local nextConfig = Bases and Bases.BASES and Bases.BASES[nextLevel]
 				if nextConfig and data.Money and data.Money >= (nextConfig.Cost or math.huge) then
-					if _invokeRF("AskBaseTierRaise") then setStatus("Pen: tier "..nextLevel.." tente", C_GREEN) end
+					if _invokeRF("AskBaseTierRaise") then setStatus("Pen: tier "..nextLevel.." tente", C.GREEN) end
 				end
 			end
 		end
@@ -1074,7 +1204,7 @@ task.spawn(function()
 				local nextLevel = (data.TreadmillUpgradeLevel or 0) + 1
 				local nextConfig = Treadmills and Treadmills.GetByUpgradeLevel and Treadmills.GetByUpgradeLevel(nextLevel)
 				if nextConfig and data.Money and data.Money >= (nextConfig.Price or math.huge) then
-					if _invokeRF("AskTierRaise", nextConfig._id) then setStatus("Treadmill: tier "..nextLevel.." tente", C_GREEN) end
+					if _invokeRF("AskTierRaise", nextConfig._id) then setStatus("Treadmill: tier "..nextLevel.." tente", C.GREEN) end
 				end
 			end
 		end
@@ -1087,7 +1217,7 @@ makeRow(farmPage, "autoUpgradeTM", "Auto Upgrade Treadmill", function(on) end)
 local buyTrailsRefresh
 local _, _, _btr = makeRow(farmPage, "autoBuyTrails", "Auto Buy Trails", function(on)
 	if on then
-		setStatus("Buy Trails: desactive par securite (prix Robux)", C_YELLOW)
+		setStatus("Buy Trails: desactive par securite (prix Robux)", C.YELLOW)
 		St.autoBuyTrails = false
 		if buyTrailsRefresh then buyTrailsRefresh() end
 	end
@@ -1230,7 +1360,7 @@ local function startAntiTrap()
 				if _stuckSince > 0 and now-_stuckSince > 1.5 then
 					hrp.CFrame = hrp.CFrame * CFrame.new(0,3,0)
 					_stuckSince = 0
-					setStatus("Anti-Trap: unstuck!", C_GREEN)
+					setStatus("Anti-Trap: unstuck!", C.GREEN)
 				end
 			else _stuckSince = 0 end
 		else _stuckSince = 0 end
@@ -1274,7 +1404,7 @@ local function startESP()
 			pcall(function()
 				local unlocked = areaUnlocked(r.area)
 				local hasRareTag = r.tags and #r.tags > 0
-				local col = (not unlocked) and C_RED or (hasRareTag and C_GOLD or C_GREEN)
+				local col = (not unlocked) and C.RED or (hasRareTag and C.GOLD or C.GREEN)
 
 				local part = r.part
 				local p = Instance.new("Part")
@@ -1303,7 +1433,7 @@ local function startESP()
 				detailLbl.Size = UDim2.new(1,0,0.45,0); detailLbl.Position = UDim2.new(0,0,0.55,0)
 				detailLbl.BackgroundTransparency = 1; detailLbl.Font = Enum.Font.Gotham
 				detailLbl.TextSize = 10; detailLbl.TextStrokeTransparency = 0.4
-				detailLbl.TextColor3 = C_WHITE
+				detailLbl.TextColor3 = C.WHITE
 
 				local parts = {}
 				if hasRareTag then
@@ -1411,12 +1541,12 @@ local function applyBypass()
 	if _bypassActive then return false end
 	local now = tick()
 	if now - _bypassCooldown < BYPASS_COOLDOWN_S then
-		setStatus("Bypass: attendre "..math.ceil(BYPASS_COOLDOWN_S-(now-_bypassCooldown)).."s", C_DIM)
+		setStatus("Bypass: attendre "..math.ceil(BYPASS_COOLDOWN_S-(now-_bypassCooldown)).."s", C.DIM)
 		return false
 	end
 	local char = LP.Character
 	local oldHum = char and char:FindFirstChildOfClass("Humanoid")
-	if not char or not oldHum then setStatus("Bypass: pas de character", C_RED); return false end
+	if not char or not oldHum then setStatus("Bypass: pas de character", C.RED); return false end
 	_bypassActive = true
 	local ok = pcall(function()
 		local cam = workspace.CurrentCamera
@@ -1433,35 +1563,32 @@ local function applyBypass()
 	end)
 	_bypassActive = false
 	_bypassCooldown = tick()
-	setStatus(ok and "Bypass applique" or "Bypass echec — voir console", ok and C_GREEN or C_RED)
-	task.delay(3, function() if not _bypassActive then setStatus("Idle", C_DIM) end end)
+	setStatus(ok and "Bypass applique" or "Bypass echec — voir console", ok and C.GREEN or C.RED)
+	task.delay(3, function() if not _bypassActive then setStatus("Idle", C.DIM) end end)
 	return ok
 end
 
+-- Retrait du Bypass : il n'y a rien à "annuler" à proprement parler — le
+-- clone posé par applyBypass() est un Humanoid parfaitement normal une
+-- fois en place (mêmes stats, même comportement). Le forcer à mourir
+-- (hum.Health = 0) pour "revenir en arrière" ne faisait que provoquer un
+-- respawn brutal et non désiré (signalé : "sa me reset sa marche pas").
+-- OFF = simple drapeau d'état, honnête : le swap déjà fait reste en place
+-- jusqu'au prochain respawn naturel (mort, téléport, Rejoin...), rien
+-- n'est détruit ni recréé ici.
 local function removeBypass()
-	if _bypassActive then return false end
-	local now = tick()
-	if now - _bypassCooldown < BYPASS_COOLDOWN_S then
-		setStatus("Bypass: attendre "..math.ceil(BYPASS_COOLDOWN_S-(now-_bypassCooldown)).."s", C_DIM)
-		return false
-	end
-	local char = LP.Character
-	local hum = char and char:FindFirstChildOfClass("Humanoid")
-	if not hum then setStatus("Bypass: pas de character", C_RED); return false end
-	_bypassCooldown = tick()
-	local ok = pcall(function() hum.Health = 0 end)
-	setStatus(ok and "Bypass retire (respawn)" or "Retrait echec — voir console", ok and C_ACCENT2 or C_RED)
-	task.delay(3, function() setStatus("Idle", C_DIM) end)
-	return ok
+	setStatus("Bypass desactive (deja applique jusqu'au prochain respawn)", C.DIM)
+	task.delay(3, function() if not _bypassActive then setStatus("Idle", C.DIM) end end)
+	return true
 end
 
 do
 	local row = Instance.new("Frame", miscPage)
 	row.Size = UDim2.new(1,-12,0,32)
-	row.BackgroundColor3 = C_ROW; row.BorderSizePixel = 0; corner(row, 8)
+	row.BackgroundColor3 = C.ROW; row.BorderSizePixel = 0; corner(row, 8)
 	local pad = Instance.new("UIPadding", row)
 	pad.PaddingLeft = UDim.new(0,10); pad.PaddingRight = UDim.new(0,10)
-	label(row, "Bypass Anti-Cheat", UDim2.new(1,-46,1,0), C_WHITE, Enum.Font.GothamMedium).TextSize = 12
+	label(row, "Bypass Anti-Cheat", UDim2.new(1,-46,1,0), C.WHITE, Enum.Font.GothamMedium).TextSize = 12
 	local track, btn, setSwitch = makeSwitch(row, false)
 	track.Position = UDim2.new(1,-38,0.5,-10)
 	local function refresh() setSwitch(_bypassOn) end
@@ -1506,44 +1633,34 @@ do
 			if hum then pcall(function() hum:ChangeState(Enum.HumanoidStateType.Landed); hum.PlatformStand = false end) end
 		end)
 		_mainStandTween:Play()
-		setStatus("Retour au spawn...", C_ACCENT2)
+		setStatus("Retour au spawn...", C.ACCENT2)
 	end)
 	makeButton(miscPage, "Stop Movement", "Stop", function()
 		if _mainStandTween then
 			_mainStandTween:Cancel(); _mainStandTween = nil
 			local hum = LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
 			if hum then hum.PlatformStand = false end
-			setStatus("Mouvement arrete", C_DIM)
+			setStatus("Mouvement arrete", C.DIM)
 		end
 	end, true)
 end
 
--- Infinite Jump
+-- Infinite Jump — via makeRow (persisté correctement dans St.infJump +
+-- saveConfig() + réactivé au chargement, contrairement à l'ancienne
+-- version qui utilisait un local `_on` jamais sauvegardé)
 local _ijConn = nil
-do
-	local row = Instance.new("Frame", miscPage)
-	row.Size = UDim2.new(1,-12,0,32)
-	row.BackgroundColor3 = C_ROW; row.BorderSizePixel = 0; corner(row, 8)
-	local pad = Instance.new("UIPadding", row)
-	pad.PaddingLeft = UDim.new(0,10); pad.PaddingRight = UDim.new(0,10)
-	label(row, "Infinite Jump", UDim2.new(1,-46,1,0), C_WHITE, Enum.Font.GothamMedium).TextSize = 12
-	local track, btn, setSwitch = makeSwitch(row, false)
-	track.Position = UDim2.new(1,-38,0.5,-10)
-	local _on = false
-	btn.MouseButton1Click:Connect(function()
-		_on = not _on; setSwitch(_on)
-		if _on then
-			if _ijConn then _ijConn:Disconnect() end
-			_ijConn = UIS.JumpRequest:Connect(function()
-				local char = LP.Character
-				local hum = char and char:FindFirstChildOfClass("Humanoid")
-				if hum then hum:ChangeState(Enum.HumanoidStateType.Jumping) end
-			end)
-		else
-			if _ijConn then _ijConn:Disconnect(); _ijConn = nil end
-		end
-	end)
-end
+makeRow(miscPage, "infJump", "Infinite Jump", function(on)
+	if on then
+		if _ijConn then _ijConn:Disconnect() end
+		_ijConn = UIS.JumpRequest:Connect(function()
+			local char = LP.Character
+			local hum = char and char:FindFirstChildOfClass("Humanoid")
+			if hum then hum:ChangeState(Enum.HumanoidStateType.Jumping) end
+		end)
+	else
+		if _ijConn then _ijConn:Disconnect(); _ijConn = nil end
+	end
+end)
 
 makeButton(miscPage, "Rejoin Server", "Rejoin", function()
 	pcall(function() game:GetService("TeleportService"):Teleport(game.PlaceId, LP) end)
@@ -1552,8 +1669,8 @@ end, true)
 makeButton(miscPage, "Copy Player ID", "Copy", function()
 	pcall(function()
 		setclipboard(tostring(LP.UserId))
-		setStatus("ID copied: "..LP.UserId, C_GREEN)
-		task.delay(2, function() setStatus("Idle", C_DIM) end)
+		setStatus("ID copied: "..LP.UserId, C.GREEN)
+		task.delay(2, function() setStatus("Idle", C.DIM) end)
 	end)
 end)
 
@@ -1561,10 +1678,10 @@ end)
 do
 	local row = Instance.new("Frame", miscPage)
 	row.Size = UDim2.new(1,-12,0,32)
-	row.BackgroundColor3 = C_ROW; row.BorderSizePixel = 0; corner(row, 8)
+	row.BackgroundColor3 = C.ROW; row.BorderSizePixel = 0; corner(row, 8)
 	local pad = Instance.new("UIPadding", row)
 	pad.PaddingLeft = UDim.new(0,10); pad.PaddingRight = UDim.new(0,10)
-	label(row, "Click TP", UDim2.new(1,-46,1,0), C_WHITE, Enum.Font.GothamMedium).TextSize = 12
+	label(row, "Click TP", UDim2.new(1,-46,1,0), C.WHITE, Enum.Font.GothamMedium).TextSize = 12
 	local track, btn, setSwitch = makeSwitch(row, St.clickTp)
 	track.Position = UDim2.new(1,-38,0.5,-10)
 	local function refresh() setSwitch(St.clickTp) end
@@ -1583,7 +1700,7 @@ do
 			local target = mouse.Hit
 			if not target then return end
 			pcall(function() hrp.CFrame = CFrame.new(target.Position + Vector3.new(0,3,0)) * hrp.CFrame.Rotation end)
-			setStatus("Click TP →", C_GREEN)
+			setStatus("Click TP →", C.GREEN)
 		end)
 	end
 	_toggleRegistry["clickTp"] = function(on) if on then startClickTp() else stopClickTp() end end
@@ -1591,7 +1708,7 @@ do
 	btn.MouseButton1Click:Connect(function()
 		St.clickTp = not St.clickTp
 		refresh()
-		if St.clickTp then startClickTp() else stopClickTp(); setStatus("Click TP OFF", C_DIM) end
+		if St.clickTp then startClickTp() else stopClickTp(); setStatus("Click TP OFF", C.DIM) end
 		saveConfig()
 	end)
 end
@@ -1737,34 +1854,34 @@ local function makeFloatBtn(defIdx, def)
 	btn.Name = "YE_Float_"..def.id
 	btn.Size = UDim2.new(0,FLOAT_SZ,0,FLOAT_SZ)
 	btn.Position = UDim2.new(1,xOff,0,yOff)
-	btn.BackgroundColor3 = C_ROW; btn.BorderSizePixel = 0
+	btn.BackgroundColor3 = C.ROW; btn.BorderSizePixel = 0
 	btn.Text = ""; btn.AutoButtonColor = false
 	btn.ZIndex = 500; btn.Active = true
 	corner(btn, 13)
-	local st2 = stroke(btn, C_BORDER, 1.5)
+	local st2 = stroke(btn, C.BORDER, 1.5)
 	local stGrad = Instance.new("UIGradient", st2)
 	stGrad.Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0,C_DEEP1), ColorSequenceKeypoint.new(0.5,C_DEEP2), ColorSequenceKeypoint.new(1,C_DEEP1),
+		ColorSequenceKeypoint.new(0,C.DEEP1), ColorSequenceKeypoint.new(0.5,C.DEEP2), ColorSequenceKeypoint.new(1,C.DEEP1),
 	})
 	table.insert(_liveGrads, stGrad)
 
 	local lbl2 = Instance.new("TextLabel", btn)
 	lbl2.Size = UDim2.new(1,0,1,0); lbl2.BackgroundTransparency = 1
-	lbl2.Text = def.label; lbl2.TextColor3 = C_WHITE; lbl2.Font = Enum.Font.GothamBold
+	lbl2.Text = def.label; lbl2.TextColor3 = C.WHITE; lbl2.Font = Enum.Font.GothamBold
 	lbl2.TextSize = 9; lbl2.TextWrapped = true; lbl2.ZIndex = btn.ZIndex+1
 	local lPad = Instance.new("UIPadding", lbl2)
 	lPad.PaddingLeft = UDim.new(0,4); lPad.PaddingRight = UDim.new(0,4)
 
 	local dot = Instance.new("Frame", btn)
 	dot.Size = UDim2.new(0,8,0,8); dot.Position = UDim2.new(1,-12,0,4)
-	dot.BackgroundColor3 = C_GREEN; dot.BorderSizePixel = 0; dot.Visible = false
+	dot.BackgroundColor3 = C.GREEN; dot.BorderSizePixel = 0; dot.Visible = false
 	dot.ZIndex = lbl2.ZIndex+1
 	corner(dot, 4)
 
 	local _active = false
 	local function setActive(on)
 		_active = on
-		TweenService:Create(btn, TweenInfo.new(0.15), {BackgroundColor3 = on and Color3.fromRGB(18,30,50) or C_ROW}):Play()
+		TweenService:Create(btn, TweenInfo.new(0.15), {BackgroundColor3 = on and Color3.fromRGB(18,30,50) or C.ROW}):Play()
 		dot.Visible = on
 	end
 
@@ -1824,7 +1941,7 @@ for i, def in ipairs(_floatDefs) do
 		_floatBtns["lock"].btn.MouseButton1Click:Connect(function()
 			St.floatLocked = not St.floatLocked
 			setAct(St.floatLocked)
-			setStatus(St.floatLocked and "Boutons verrouilles" or "Boutons deverrouilles", C_ACCENT2)
+			setStatus(St.floatLocked and "Boutons verrouilles" or "Boutons deverrouilles", C.ACCENT2)
 			saveConfig()
 		end)
 	end
@@ -1854,15 +1971,15 @@ do
 	end)
 end
 
-local minimized, fullHeight = false, 360
+local minimized, fullHeight = false, 340
 minBtn.MouseButton1Click:Connect(function()
 	minimized = not minimized
 	if minimized then
-		TweenService:Create(main, TweenInfo.new(0.2), {Size=UDim2.new(0,254,0,40)}):Play()
+		TweenService:Create(main, TweenInfo.new(0.2), {Size=UDim2.new(0,300,0,48)}):Play()
 		contentArea.Visible = false; sep.Visible = false; tabBar.Visible = false; statusBar.Visible = false
 		minBtn.Text = "+"
 	else
-		TweenService:Create(main, TweenInfo.new(0.2), {Size=UDim2.new(0,254,0,fullHeight)}):Play()
+		TweenService:Create(main, TweenInfo.new(0.2), {Size=UDim2.new(0,300,0,fullHeight)}):Play()
 		contentArea.Visible = true; sep.Visible = true; tabBar.Visible = true; statusBar.Visible = true
 		minBtn.Text = "–"
 	end
