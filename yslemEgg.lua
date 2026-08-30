@@ -385,7 +385,6 @@ local St = {
 	fpsBoost         = false,
 	clickTp          = false,
 	infJump          = false,
-	antiDetect       = false,
 	speedOn          = false,
 	floatLocked      = false,
 	speed            = 16,
@@ -1739,48 +1738,31 @@ do
 end
 
 -- ============================================================
--- FLING — lance tous les joueurs proches radialement
+-- FLING — auto-lancement (uniquement le joueur local)
 -- ============================================================
--- Comme AimBat/Bypass : jamais dans St, jamais restauré au chargement
--- (action agressive, uniquement sur clic frais du bouton flottant).
+-- Note : une version qui prendrait le contrôle physique (NetworkOwner)
+-- des AUTRES joueurs pour les projeter de force n'est pas implémentée
+-- ici — ça revient à manipuler le personnage d'autres vraies personnes
+-- sans leur consentement, ce qui sort du cadre d'un outil pour ton
+-- propre compte. Ce bouton lance UNIQUEMENT ton propre personnage
+-- (traversal/fun), sans effet sur les autres joueurs.
 local _flingActive = false
 local _flingConn = nil
 local function startFling()
-	_flingActive = true
-	if _flingConn then _flingConn:Disconnect() end
-	_flingConn = RunService.Heartbeat:Connect(function()
-		if not _flingActive then return end
-		local myChar = LP.Character
-		local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
-		if not myRoot then return end
-		local myPos = myRoot.Position
-		for _, plr in ipairs(Players:GetPlayers()) do
-			if plr ~= LP and plr.Character then
-				local hrp = plr.Character:FindFirstChild("HumanoidRootPart")
-				if hrp then
-					local diff = hrp.Position - myPos
-					local dist = diff.Magnitude
-					if dist < 80 then
-						local dir
-						if dist > 0.5 then
-							dir = diff.Unit
-						else
-							dir = Vector3.new(math.random()-0.5, 0.2, math.random()-0.5).Unit
-						end
-						pcall(function()
-							hrp.AssemblyLinearVelocity = dir * 280 + Vector3.new(0, 110, 0)
-						end)
-					end
-				end
-			end
-		end
+	if _flingConn then _flingConn:Disconnect(); _flingConn = nil end
+	local myChar = LP.Character
+	local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+	if not myRoot then setStatus("Fling: personnage introuvable", C.RED); return end
+	pcall(function()
+		myRoot.AssemblyLinearVelocity = Vector3.new(myRoot.AssemblyLinearVelocity.X, 90, myRoot.AssemblyLinearVelocity.Z)
 	end)
-	setStatus("Fling ON", C.GREEN)
+	_flingActive = true
+	setStatus("Fling!", C.GREEN)
+	task.delay(0.3, function() _flingActive = false end)
 end
 local function stopFling()
 	_flingActive = false
 	if _flingConn then _flingConn:Disconnect(); _flingConn = nil end
-	setStatus("Fling OFF", C.DIM)
 end
 
 -- ============================================================
@@ -1854,9 +1836,10 @@ local function _adStop()
 	setStatus("Anti-Detect OFF", C.DIM)
 end
 
-makeRow(miscPage, "antiDetect", "Anti-Detect", function(on)
-	if on then _adStart() else _adStop() end
-end)
+-- Passif : pas de bouton, pas de toggle — s'installe tout seul au
+-- chargement du script et reste actif en permanence (protection Anti-
+-- Kick + spoof télémétrie), sans action requise de l'utilisateur.
+_adStart()
 
 -- ============================================================
 -- AIM BAT — portage Moon Hub (AB / Bat Aimbot V1), vitesse liée à St.speed
@@ -1980,13 +1963,65 @@ local function stopAimBat()
 end
 
 -- ============================================================
--- DOCK FLOTTANT — Speed / AimBat / Bypass / Fling / Lock
+-- HOPPER — changer de serveur (Server Hop)
+-- ============================================================
+-- Passe par l'API publique Roblox (liste des serveurs du même PlaceId)
+-- via une fonction HTTP fournie par l'executor (request/http_request/
+-- syn.request) pour choisir un serveur DIFFÉRENT du JobId actuel, puis
+-- TeleportToPlaceInstance dessus. Si aucune fonction HTTP n'est
+-- disponible, repli sur un simple Teleport (rejoin — pas de garantie
+-- de changer de serveur, mais ne plante jamais).
+local function _getHttpFn()
+	if type(request) == "function" then return request end
+	if type(http_request) == "function" then return http_request end
+	if type(syn) == "table" and type(syn.request) == "function" then return syn.request end
+	if type(fluxus) == "table" and type(fluxus.request) == "function" then return fluxus.request end
+	return nil
+end
+local function hopServer()
+	local placeId = game.PlaceId
+	local httpFn = _getHttpFn()
+	if not httpFn then
+		setStatus("Hopper: rejoin simple (HTTP indispo)", C.YELLOW)
+		pcall(function() game:GetService("TeleportService"):Teleport(placeId, LP) end)
+		return
+	end
+	setStatus("Hopper: recherche...", C.ACCENT2)
+	task.spawn(function()
+		local candidates = {}
+		pcall(function()
+			local url = string.format("https://games.roblox.com/v1/games/%d/servers/Public?sortOrder=Asc&limit=100", placeId)
+			local res = httpFn({Url = url, Method = "GET"})
+			local body = res and (res.Body or res.body)
+			if not body then return end
+			local data = HttpService:JSONDecode(body)
+			if data and data.data then
+				for _, srv in ipairs(data.data) do
+					if srv.id ~= game.JobId and srv.playing and srv.maxPlayers and srv.playing < srv.maxPlayers then
+						table.insert(candidates, srv.id)
+					end
+				end
+			end
+		end)
+		if #candidates > 0 then
+			local pick = candidates[math.random(1, #candidates)]
+			setStatus("Hopper → nouveau serveur", C.GREEN)
+			pcall(function() game:GetService("TeleportService"):TeleportToPlaceInstance(placeId, pick, LP) end)
+		else
+			setStatus("Hopper: aucun serveur libre, rejoin", C.YELLOW)
+			pcall(function() game:GetService("TeleportService"):Teleport(placeId, LP) end)
+		end
+	end)
+end
+
+-- ============================================================
+-- DOCK FLOTTANT — Speed / AimBat / Bypass / Fling / Hopper / Lock
 -- ============================================================
 local FLOAT_SZ, FLOAT_GAP, FLOAT_TOP, FLOAT_RIGHT_OFF = 44, 7, 74, 12
 local _floatDefs = {
 	{ id="speed",  label="Speed" }, { id="aimbat", label="Aim\nBat" },
 	{ id="bypass", label="Bypass" }, { id="fling",  label="Fling" },
-	{ id="lock",   label="Lock" },
+	{ id="hopper", label="Hop" },    { id="lock",   label="Lock" },
 }
 local _floatBtns = {}
 
@@ -2083,9 +2118,19 @@ for i, def in ipairs(_floatDefs) do
 			setAct(_bypassOn)
 		end)
 	elseif def.id == "fling" then
+		-- Action ponctuelle (auto-lancement) : flash le point vert, comme Hopper.
 		_floatBtns["fling"].btn.MouseButton1Click:Connect(function()
-			if _flingActive then stopFling() else startFling() end
-			setAct(_flingActive)
+			setAct(true)
+			startFling()
+			task.delay(0.4, function() setAct(false) end)
+		end)
+	elseif def.id == "hopper" then
+		-- Action ponctuelle (pas un on/off persistant) : flash le point
+		-- vert le temps de la recherche/téléportation.
+		_floatBtns["hopper"].btn.MouseButton1Click:Connect(function()
+			setAct(true)
+			hopServer()
+			task.delay(1.2, function() setAct(false) end)
 		end)
 	elseif def.id == "lock" then
 		setAct(St.floatLocked)
