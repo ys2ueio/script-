@@ -312,6 +312,11 @@ task.spawn(function()
 		local slotsRoot = workspace:FindFirstChild("AreaEggSlotsClient", true)
 
 		-- Source 1 : réseau FieldEggShifted — TTL 60s
+		-- NOTE poids : NestScale est un facteur d'échelle du modèle (~0.5-2),
+		-- PAS un poids en kg — l'afficher avec "kg" serait un mensonge visuel.
+		-- On ne fixe donc PAS .weight ici (l'ESP l'omet proprement) ; seul un
+		-- poids réellement lu en jeu (sources 2/3, via les TextLabels du
+		-- modèle) est affiché avec l'unité kg.
 		local now2 = tick()
 		for uid, e in pairs(_fieldEggNet) do
 			if now2 - e.t > 60 then
@@ -320,10 +325,9 @@ task.spawn(function()
 				total = total + 1; enabledCount = enabledCount + 1
 				eggs[#eggs+1] = {
 					pos=e.pos, cf=e.cf, area=e.zone,
-					cat=e.mutation or (e.zone.." Egg"),
+					cat=e.mutation or (e.zone.." Oeuf"),
 					mutation=e.mutation, tags=e.tags,
-					weight=e.nestScale and math.floor(e.nestScale*10)/10,
-					rawText=e.mutation or "",
+					weight=nil, scale=e.nestScale, rawText=e.mutation or "",
 					enabled=true, uid=e.uid, netOnly=true,
 				}
 			end
@@ -349,28 +353,19 @@ task.spawn(function()
 						end
 					end
 					if not pos3 then return end
-					-- Rareté via attributs ou StringValue enfants
-					local mutation2, nestScale2
-					pcall(function()
-						mutation2 = slot:GetAttribute("Mutation") or slot:GetAttribute("EggType")
-						nestScale2 = slot:GetAttribute("NestScale")
-					end)
-					local rawText2 = ""
-					for _, d in ipairs(slot:GetDescendants()) do
-						if d:IsA("StringValue") then rawText2 = rawText2.." "..d.Value
-						elseif d:IsA("TextLabel") and d.Text ~= "" then rawText2 = rawText2.." "..d.Text end
-					end
-					local tags2 = {}
-					local low2 = ((mutation2 or "").." "..rawText2):lower()
-					for _, kw in ipairs(_RARE_KEYWORDS) do
-						if low2:find(kw,1,true) then table.insert(tags2, kw) end
-					end
+					-- Rareté via attributs, poids réel via les TextLabels du
+					-- modèle (même lecture que la source 3 — fiable et déjà
+					-- affichée en kg par le jeu lui-même, contrairement à un
+					-- attribut de scale qu'on ne connait pas avec certitude).
+					local mutation2 = slot:GetAttribute("Mutation") or slot:GetAttribute("EggType")
+					local rawText2, tags2, weight2 = _readEggLabels(slot)
+					local cat2 = mutation2 or (tags2[1] and tags2[1]:upper()) or (zone.." Oeuf")
 					total = total + 1; enabledCount = enabledCount + 1
 					eggs[#eggs+1] = {
 						slot=slot, pos=pos3, cf=cf3, area=zone,
-						cat=mutation2 or (zone.." Egg"),
+						cat=cat2,
 						mutation=mutation2 or tags2[1], tags=tags2,
-						weight=nestScale2, rawText=rawText2,
+						weight=weight2, rawText=rawText2,
 						enabled=true, uid=sname,
 					}
 				end)
@@ -386,20 +381,29 @@ task.spawn(function()
 					local action = prompt.ActionText:lower()
 					local objTxt = prompt.ObjectText:lower()
 					local parentName = (prompt.Parent and prompt.Parent.Name or ""):lower()
-					if action:find("grab") or action:find("steal") or action:find("take")
+					-- Exclut explicitement les prompts de vente (marchands) —
+					-- sinon un prompt "Sell Egg" pourrait être compté comme un
+					-- oeuf à farmer au lieu d'une cible de livraison.
+					local isSellPrompt = action:find("sell",1,true) or objTxt:find("sell",1,true)
+						or action:find("vend",1,true) or objTxt:find("vend",1,true)
+					if not isSellPrompt and (action:find("grab") or action:find("steal") or action:find("take")
 						or action:find("pick") or action:find("collect") or action:find("hatch")
 						or action:find("claim") or action:find("harvest")
 						or objTxt:find("egg") or parentName:find("egg") or parentName:find("drop")
-						or parentName:find("field") or parentName:find("slot") then
+						or parentName:find("field") or parentName:find("slot")) then
 						total = total + 1
 						if prompt.Enabled then enabledCount = enabledCount + 1 end
 						local part, model = _promptOwnerModel(prompt)
 						if part then
 							local full, tags3, weight3 = _readEggLabels(model or part)
+							-- Priorité à une vraie rareté trouvée dans les labels du
+							-- modèle plutôt qu'au texte générique du prompt ("Egg").
+							local cat3 = (tags3[1] and tags3[1]:upper())
+								or (objTxt ~= "" and prompt.ObjectText) or part.Name
 							eggs[#eggs+1] = {
 								prompt=prompt, part=part, pos=part.Position, cf=part.CFrame,
 								area="Dropped",
-								cat=objTxt ~= "" and prompt.ObjectText or part.Name,
+								cat=cat3,
 								mutation=tags3[1], tags=tags3, weight=weight3, rawText=full,
 								enabled=prompt.Enabled,
 							}
@@ -415,6 +419,58 @@ task.spawn(function()
 		task.wait(0.5)
 	end
 end)
+
+-- ============================================================
+-- MARCHANDS — découverte dynamique (aucun nom figé en dur, même
+-- principe que les zones/remotes plus haut) : scanne tout ProximityPrompt
+-- de vente n'importe où dans workspace. Filtre strict (mentionne
+-- "egg"/"oeuf") en priorité ; repli sur tout prompt de vente si rien de
+-- plus précis n'est trouvé. Corrige le blocage "prend l'oeuf et reste
+-- coincé" — Auto Farm s'en sert pour livrer automatiquement après la
+-- prise plutôt que de rester planté sur place.
+-- ============================================================
+local _merchants = {}
+local function _scanMerchants()
+	local strict, loose = {}, {}
+	pcall(function()
+		for _, prompt in ipairs(workspace:GetDescendants()) do
+			if prompt:IsA("ProximityPrompt") then
+				local a = prompt.ActionText:lower()
+				local o = prompt.ObjectText:lower()
+				local isSell = a:find("sell",1,true) or o:find("sell",1,true)
+					or a:find("vend",1,true) or o:find("vend",1,true)
+				if isSell then
+					local part = prompt.Parent
+					if part and not part:IsA("BasePart") then
+						local anc = part
+						while anc and not anc:IsA("BasePart") do anc = anc.Parent end
+						part = anc
+					end
+					if part then
+						local entry = {pos = part.Position, prompt = prompt}
+						local mentionsEgg = a:find("egg",1,true) or o:find("egg",1,true)
+							or (part.Parent ~= nil and part.Parent.Name:lower():find("egg",1,true))
+						if mentionsEgg then table.insert(strict, entry) else table.insert(loose, entry) end
+					end
+				end
+			end
+		end
+	end)
+	local found = #strict > 0 and strict or loose
+	if #found > 0 then _merchants = found end
+end
+_scanMerchants()
+task.spawn(function()
+	while true do task.wait(10); if #_merchants == 0 then _scanMerchants() end end
+end)
+local function _nearestMerchant(fromPos)
+	local best, bestD = nil, math.huge
+	for _, m in ipairs(_merchants) do
+		local d = (m.pos - fromPos).Magnitude
+		if d < bestD then bestD = d; best = m end
+	end
+	return best
+end
 
 -- ============================================================
 -- PALETTE — IDENTIQUE à Moon Hub (mêmes valeurs RGB exactes, relues
@@ -1142,16 +1198,34 @@ end
 makeRow(farmPage, "instantGrab", "Instant Grab", function(on) setInstantGrab(on) end)
 
 -- Auto Farm — moteur unifié (fini le Tween qui se battait avec Speed
--- Boost/Anti Ragdoll). Timeout de sécurité 6s : jamais bloqué
--- indéfiniment même si le trajet échoue.
+-- Boost/Anti Ragdoll). Timeout de sécurité 6s par trajet : jamais
+-- bloqué indéfiniment même si le trajet échoue. Après la prise, va
+-- automatiquement livrer au marchand le plus proche (découverte
+-- dynamique) au lieu de rester planté sur l'œuf — et TOUT s'arrête
+-- immédiatement (mouvement + spam) dès que Auto Farm est désactivé,
+-- même en plein trajet.
 task.spawn(function()
 	local isFarmingEgg = false
+	local function _farmFullStop()
+		_farmMoving = false
+		_farmTargetPos = nil
+		isFarmingEgg = false
+	end
+
 	while true do
 		task.wait(0.2)
+
+		if not St.autoFarm then
+			-- Coupe tout immédiatement si l'utilisateur désactive en plein
+			-- trajet (les boucles internes ci-dessous vérifient aussi
+			-- St.autoFarm en direct, donc l'arrêt réel est quasi instantané —
+			-- ceci ne fait que remettre l'état à zéro entre deux cycles).
+			if isFarmingEgg or _farmMoving then _farmFullStop() end
+		else
 		local char = LP.Character
 		local rootPart = char and char:FindFirstChild("HumanoidRootPart")
 
-		if St.autoFarm and not isFarmingEgg and rootPart then
+		if not isFarmingEgg and rootPart then
 			if #cachedEggs == 0 then
 				setStatus(string.format("Farm: 0 oeuf — slots=%s total=%d actif=%d",
 					_eggScanSlotsFound and "oui" or "non", _eggScanPromptTotal, _eggScanPromptEnabled), C.DIM)
@@ -1159,7 +1233,6 @@ task.spawn(function()
 				-- Ne cibler que les oeufs PRÊTS, filtres zone+rareté actifs
 				local myPos = rootPart.Position
 				local best, bestDist = nil, math.huge
-				local filteredCount = 0
 				for _, r in ipairs(cachedEggs) do
 					if r.enabled then
 						-- Filtre zone/île
@@ -1176,7 +1249,6 @@ task.spawn(function()
 							end
 						end
 						if zoneOk and rarityOk then
-							filteredCount = filteredCount + 1
 							local d = (r.pos - myPos).Magnitude
 							if d < bestDist then bestDist = d; best = r end
 						end
@@ -1194,13 +1266,18 @@ task.spawn(function()
 					_farmTargetPos = best.pos
 					_farmSpeed = math.max(St.speed, 40)
 
+					-- Retire tout de suite la cible du cache réseau : évite de
+					-- re-sélectionner le même œuf en boucle si le monde met du
+					-- temps à confirmer la prise (corrige le blocage signalé).
+					if best.uid then _fieldEggNet[best.uid] = nil end
+
 					local spamming = true
 					task.spawn(function()
 						while spamming do
 							pcall(function()
 								if best.prompt and fireproximityprompt then
 									fireproximityprompt(best.prompt)
-								elseif best.netOnly and best.uid then
+								elseif best.uid then
 									_invokeRF("RF/EggWorld/AskFieldEggCarry", best.uid)
 								end
 							end)
@@ -1209,19 +1286,63 @@ task.spawn(function()
 					end)
 
 					local t0 = os.clock()
-					while _farmMoving and (os.clock()-t0) < 6 do
+					while St.autoFarm and _farmMoving and (os.clock()-t0) < 6 do
 						local hrp2 = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
 						if not hrp2 then break end
 						if (hrp2.Position - best.pos).Magnitude < 4 then break end
 						task.wait(0.1)
 					end
-					task.wait(0.5)
+					task.wait(0.3)
 					spamming = false
 					_farmMoving = false
-					isFarmingEgg = false
-					setStatus("Farm → "..tostring(best.cat or "?"), C.GREEN)
+
+					if St.autoFarm then
+						setStatus("Farm: pris → "..tostring(best.cat or "?"), C.GREEN)
+
+						-- Livraison auto au marchand le plus proche (découverte
+						-- dynamique, jamais de nom figé) — si aucun marchand
+						-- n'est trouvé, on relâche simplement la cible et on
+						-- repart farmer au lieu de rester bloqué.
+						local hrp3 = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+						local merchant = hrp3 and _nearestMerchant(hrp3.Position)
+						if merchant then
+							_farmMoving = true
+							_farmTargetPos = merchant.pos
+							setStatus("Farm: retour marchand...", C.ACCENT2)
+
+							local sellSpamming = true
+							task.spawn(function()
+								while sellSpamming do
+									pcall(function()
+										if merchant.prompt and fireproximityprompt then
+											fireproximityprompt(merchant.prompt)
+										end
+									end)
+									task.wait(0.1)
+								end
+							end)
+
+							local t1 = os.clock()
+							while St.autoFarm and _farmMoving and (os.clock()-t1) < 6 do
+								local hrp4 = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+								if not hrp4 then break end
+								if (hrp4.Position - merchant.pos).Magnitude < 5 then break end
+								task.wait(0.1)
+							end
+							-- Une fois arrivé, continue de spammer le prompt de
+							-- vente un court instant (le temps que le serveur
+							-- traite la vente) avant de repartir farmer.
+							local t2 = os.clock()
+							while St.autoFarm and (os.clock()-t2) < 1.2 do task.wait(0.1) end
+							sellSpamming = false
+							if St.autoFarm then setStatus("Farm: tentative de vente au marchand", C.GREEN) end
+						end
+					end
+
+					_farmFullStop()
 				end
 			end
+		end
 		end
 	end
 end)
@@ -1686,7 +1807,7 @@ local function startESP()
 				nameLbl.Size = UDim2.new(1,0,0,17)
 				nameLbl.BackgroundTransparency = 1; nameLbl.Font = Enum.Font.GothamBold
 				nameLbl.TextSize = 12; nameLbl.TextStrokeTransparency = 0.3
-				nameLbl.TextColor3 = col; nameLbl.Text = tostring(r.cat or "Egg")
+				nameLbl.TextColor3 = col; nameLbl.Text = tostring(r.cat or "Oeuf")
 
 				local detailLbl = Instance.new("TextLabel", bb)
 				detailLbl.Size = UDim2.new(1,0,0,15); detailLbl.Position = UDim2.new(0,0,0,17)
@@ -1700,27 +1821,26 @@ local function startESP()
 				metaLbl.TextSize = 9; metaLbl.TextStrokeTransparency = 0.5
 				metaLbl.TextColor3 = C.DIM
 
-				local parts = {}
-				if hasRareTag then
-					local upper = {}
-					for _, t in ipairs(r.tags) do table.insert(upper, t:upper()) end
-					table.insert(parts, table.concat(upper, "/"))
-				end
-				if r.weight then table.insert(parts, r.weight.."kg") end
-				if notReady then table.insert(parts, "CROISSANCE") end
-				if not unlocked then
+				-- Ligne 2 : statut seul (plus de doublon avec le nom, qui
+				-- porte déjà la rareté via r.cat).
+				if notReady then
+					detailLbl.Text = "CROISSANCE"
+				elseif not unlocked then
 					local A = AREA[r.area]
-					table.insert(parts, "LOCKED ".._shortNum(A and A.reqSP))
-				elseif not notReady then
-					table.insert(parts, "PRET")
+					detailLbl.Text = "VERROUILLE ".._shortNum(A and A.reqSP)
+				else
+					detailLbl.Text = "PRET"
 				end
-				detailLbl.Text = #parts > 0 and table.concat(parts, "  ·  ") or "?"
 
-				-- NOUVEAU : distance en direct + zone toujours affichée
-				-- (avant : la zone n'apparaissait qu'en absence d'autre info)
+				-- Ligne 3 : poids (uniquement si une vraie valeur en kg a été
+				-- lue en jeu — jamais une estimation) + distance + zone.
+				local metaParts = {}
+				if r.weight then table.insert(metaParts, r.weight.."kg") end
 				local distTxt = "?m"
 				if myPos then distTxt = math.floor((r.pos - myPos).Magnitude).."m" end
-				metaLbl.Text = distTxt.."  ·  "..tostring(r.area or "?")
+				table.insert(metaParts, distTxt)
+				table.insert(metaParts, tostring(r.area or "?"))
+				metaLbl.Text = table.concat(metaParts, "  ·  ")
 
 				table.insert(_espParts, p)
 			end)
