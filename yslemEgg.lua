@@ -365,16 +365,26 @@ task.spawn(function()
 		local total, enabledCount = 0, 0
 		local slotsRoot = workspace:FindFirstChild("AreaEggSlotsClient", true)
 
-		-- Cross-source deduplication: the same physical egg can be seen
-		-- by BOTH the network listener AND a ProximityPrompt in the
-		-- world. Without this, two ESP billboards would sit almost on
-		-- top of each other, which is what made the display unreadable.
-		-- Keeps the first match found (source order below = priority).
-		local function _tooClose(pos)
-			for _, ex in ipairs(eggs) do
-				if (ex.pos - pos).Magnitude < 4 then return true end
+		-- Cross-source deduplication that PREFERS the most useful entry
+		-- for a physical egg, instead of just keeping whichever source
+		-- happened to scan it first: a real ProximityPrompt (guaranteed
+		-- triggerable) or a confirmed-real id always wins over a
+		-- position-only/non-farmable duplicate at the same spot. Without
+		-- this, a working "Steal" prompt (source 3) could get silently
+		-- shadowed by an earlier, non-functional network-only entry at
+		-- the same position — which is exactly what caused grab to do
+		-- nothing while standing right in front of a visible prompt.
+		local function _upsertEgg(entry)
+			for i, ex in ipairs(eggs) do
+				if (ex.pos - entry.pos).Magnitude < 4 then
+					local newIsBetter = (entry.prompt ~= nil and ex.prompt == nil)
+						or (entry.farmable and not ex.farmable)
+					if newIsBetter then eggs[i] = entry end
+					return false
+				end
 			end
-			return false
+			table.insert(eggs, entry)
+			return true
 		end
 
 		-- Source 1: network FieldEggShifted — 60s TTL
@@ -387,15 +397,15 @@ task.spawn(function()
 		for cacheKey, e in pairs(_fieldEggNet) do
 			if now2 - e.t > 60 then
 				_fieldEggNet[cacheKey] = nil
-			elseif not _tooClose(e.pos) then
-				total = total + 1; enabledCount = enabledCount + 1
-				eggs[#eggs+1] = {
+			else
+				local added = _upsertEgg({
 					pos=e.pos, cf=e.cf, area=e.zone,
 					cat=e.mutation or (e.zone.." Egg"),
 					mutation=e.mutation, tags=e.tags,
 					weight=nil, scale=e.nestScale, rawText=e.mutation or "",
 					enabled=true, uid=e.uid, netOnly=true, farmable=e.farmable,
-				}
+				})
+				if added then total = total + 1; enabledCount = enabledCount + 1 end
 			end
 		end
 
@@ -419,7 +429,6 @@ task.spawn(function()
 						end
 					end
 					if not pos3 then return end
-					if _tooClose(pos3) then return end
 					-- Rarity via attributes, real weight via the model's
 					-- TextLabels (same read as source 3 — reliable and
 					-- already shown in kg by the game itself, unlike a
@@ -427,8 +436,7 @@ task.spawn(function()
 					local mutation2 = slot:GetAttribute("Mutation") or slot:GetAttribute("EggType")
 					local rawText2, tags2, weight2 = _readEggLabels(slot)
 					local cat2 = mutation2 or (tags2[1] and tags2[1]:upper()) or (zone.." Egg")
-					total = total + 1; enabledCount = enabledCount + 1
-					eggs[#eggs+1] = {
+					local added = _upsertEgg({
 						slot=slot, pos=pos3, cf=cf3, area=zone,
 						cat=cat2,
 						mutation=mutation2 or tags2[1], tags=tags2,
@@ -439,7 +447,8 @@ task.spawn(function()
 						-- slot name: targeting them caused "grabs" that did
 						-- nothing. Shown in ESP, but never farmed.
 						enabled=true, uid=sname, farmable=false,
-					}
+					})
+					if added then total = total + 1; enabledCount = enabledCount + 1 end
 				end)
 			end
 		else
@@ -464,21 +473,23 @@ task.spawn(function()
 						or objTxt:find("egg") or parentName:find("egg") or parentName:find("drop")
 						or parentName:find("field") or parentName:find("slot")) then
 						local part, model = _promptOwnerModel(prompt)
-						if part and not _tooClose(part.Position) then
-							total = total + 1
-							if prompt.Enabled then enabledCount = enabledCount + 1 end
+						if part then
 							local full, tags3, weight3 = _readEggLabels(model or part)
 							-- Prioritize a real rarity found in the model's labels
 							-- over the prompt's generic text ("Egg").
 							local cat3 = (tags3[1] and tags3[1]:upper())
 								or (objTxt ~= "" and prompt.ObjectText) or part.Name
-							eggs[#eggs+1] = {
+							local added = _upsertEgg({
 								prompt=prompt, part=part, pos=part.Position, cf=part.CFrame,
 								area="Dropped",
 								cat=cat3,
 								mutation=tags3[1], tags=tags3, weight=weight3, rawText=full,
 								enabled=prompt.Enabled, farmable=true,
-							}
+							})
+							if added then
+								total = total + 1
+								if prompt.Enabled then enabledCount = enabledCount + 1 end
+							end
 						end
 					end
 				end
@@ -1258,39 +1269,6 @@ end
 -- ============================================================
 local farmPage = pages["Farm"]
 
--- Module diagnostics
-do
-	local okCount, total = 0, 0
-	for _, ok in pairs(_ModuleStatus) do total = total+1; if ok then okCount = okCount+1 end end
-	local allOk = okCount == total
-	local row = Instance.new("Frame", farmPage)
-	row.Size = UDim2.new(1,-12,0,26)
-	row.BackgroundColor3 = C.ROW; row.BorderSizePixel = 0; corner(row, 7)
-	local pad = Instance.new("UIPadding", row)
-	pad.PaddingLeft = UDim.new(0,10); pad.PaddingRight = UDim.new(0,10)
-	local lbl = label(row, "Modules: "..okCount.."/"..total.." loaded", UDim2.new(1,0,1,0),
-		allOk and C.GREEN or C.YELLOW, Enum.Font.GothamMedium)
-	lbl.TextSize = 11
-	if not allOk then
-		local btn = Instance.new("TextButton", row)
-		btn.Size = UDim2.new(1,0,1,0); btn.BackgroundTransparency = 1; btn.Text = ""
-		btn.MouseButton1Click:Connect(function()
-			local lines = {}
-			for name, ok in pairs(_ModuleStatus) do
-				local path = _ModuleFound[name]
-				if ok then table.insert(lines, "OK        "..name.."  ("..tostring(path)..")")
-				elseif path then table.insert(lines, "FAILED    "..name.."  (found at "..path..", require() failed)")
-				else table.insert(lines, "NOT FOUND "..name) end
-			end
-			table.sort(lines)
-			local msg = table.concat(lines, "\n")
-			print("[yslemEgg] Module status:\n"..msg)
-			pcall(function() if setclipboard then setclipboard(msg) end end)
-			setStatus("Details copied / see console (F9)", C.YELLOW)
-		end)
-	end
-end
-
 sectionHeader(farmPage, "Grab")
 
 -- Instant Grab
@@ -1332,11 +1310,19 @@ task.spawn(function()
 	_farmFullStopRef = _farmFullStop
 
 	-- Try every known grab trigger on a target — never assumes only one
-	-- mechanism is right for this game build.
+	-- mechanism is right for this game build/executor.
+	local _canFireSignal = typeof(firesignal) == "function"
 	local function _tryGrab(target)
 		pcall(function()
-			if target.prompt and fireproximityprompt then
-				fireproximityprompt(target.prompt)
+			if target.prompt then
+				-- fireproximityprompt is the standard exploit primitive for
+				-- this, but not every executor implements it — firesignal on
+				-- the prompt's own Triggered event (with LP as the arg, its
+				-- real signature) is a proven fallback, and it's the same
+				-- primitive already confirmed working elsewhere in this hub
+				-- (Auto Hatch/Equip's UI button clicks).
+				if fireproximityprompt then pcall(fireproximityprompt, target.prompt) end
+				if _canFireSignal then pcall(firesignal, target.prompt.Triggered, LP) end
 			end
 			if target.uid then
 				_invokeRF("RF/EggWorld/AskFieldEggCarry", target.uid)
@@ -1511,9 +1497,7 @@ task.spawn(function()
 		task.wait(1)
 		if St.autoHatch and (os.clock()-lastHatch) >= 3 then
 			lastHatch = os.clock()
-			if _clickGuiButtonByText(function(t) return t:lower():find("grow all", 1, true) ~= nil end) then
-				setStatus("Hatch: 'Grow All' clicked", C.GREEN)
-			end
+			_clickGuiButtonByText(function(t) return t:lower():find("grow all", 1, true) ~= nil end)
 		end
 	end
 end)
@@ -1525,9 +1509,7 @@ task.spawn(function()
 		task.wait(2)
 		if St.autoEquip and (os.clock()-lastEquip) >= 4 then
 			lastEquip = os.clock()
-			if _clickGuiButtonByText(function(t) return t:lower():find("equip best", 1, true) ~= nil end) then
-				setStatus("'Equip Best' clicked", C.GREEN)
-			end
+			_clickGuiButtonByText(function(t) return t:lower():find("equip best", 1, true) ~= nil end)
 		end
 	end
 end)
@@ -1540,10 +1522,9 @@ task.spawn(function()
 		task.wait(1)
 		if St.autoClaim and (os.clock()-lastClaim) >= 5 then
 			lastClaim = os.clock()
-			local a = _invokeRF("RF/AwayEarnings/AskCollect")
-			local b = _invokeRF("RF/Codex/AskRedeemAll")
-			local c = _invokeRF("RF/GroupPerk/RedeemPerk")
-			if a or b or c then setStatus("Claim: away/codex/group attempted", C.GREEN) end
+			_invokeRF("RF/AwayEarnings/AskCollect")
+			_invokeRF("RF/Codex/AskRedeemAll")
+			_invokeRF("RF/GroupPerk/RedeemPerk")
 		end
 	end
 end)
@@ -1565,7 +1546,7 @@ task.spawn(function()
 				local nextLevel = (data.BaseUpgradeLevel or 0) + 1
 				local nextConfig = Bases and Bases.BASES and Bases.BASES[nextLevel]
 				if nextConfig and data.Money and data.Money >= (nextConfig.Cost or math.huge) then
-					if _invokeRF("AskBaseTierRaise") then setStatus("Pen: tier "..nextLevel.." attempted", C.GREEN) end
+					_invokeRF("AskBaseTierRaise")
 				end
 			end
 		end
@@ -1584,7 +1565,7 @@ task.spawn(function()
 				local nextLevel = (data.TreadmillUpgradeLevel or 0) + 1
 				local nextConfig = Treadmills and Treadmills.GetByUpgradeLevel and Treadmills.GetByUpgradeLevel(nextLevel)
 				if nextConfig and data.Money and data.Money >= (nextConfig.Price or math.huge) then
-					if _invokeRF("AskTierRaise", nextConfig._id) then setStatus("Treadmill: tier "..nextLevel.." attempted", C.GREEN) end
+					_invokeRF("AskTierRaise", nextConfig._id)
 				end
 			end
 		end
@@ -1740,7 +1721,6 @@ local function startAntiTrap()
 				if _stuckSince > 0 and now-_stuckSince > 1.5 then
 					hrp.CFrame = hrp.CFrame * CFrame.new(0,3,0)
 					_stuckSince = 0
-					setStatus("Anti-Trap: unstuck!", C.GREEN)
 				end
 			else _stuckSince = 0 end
 		else _stuckSince = 0 end
