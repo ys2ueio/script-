@@ -305,6 +305,151 @@ end
 R("")
 
 -- ============================================================
+-- PHASE 2c — ZONES / ILES (recherche d'îles/zones pas encore connues du hub)
+-- ============================================================
+setStatus("Scan: zones/iles...", C_YELLOW)
+R("-- ZONES / ILES --")
+uiLine("-- ZONES / ILES --", C_MOON)
+do
+	local function dumpFolder(path, folder)
+		if not folder then
+			log(path..": introuvable", C_DIM, path..": introuvable")
+			return
+		end
+		local children = folder:GetChildren()
+		log(path..": "..#children.." element(s)", C_MOON2, path..": "..#children.." element(s)")
+		for _, c in ipairs(children) do
+			log("  "..c.Name.." ("..c.ClassName..")", C_DIM, "  "..c.Name.." ("..c.ClassName..")")
+		end
+	end
+	-- Zones gardees connues du hub (reqSP) — chemin exact utilise par yslemEgg.lua
+	local objRoot = workspace:FindFirstChild("__OBJECTS")
+	local areasRoot = objRoot and objRoot:FindFirstChild("Areas")
+	local guardAreas = areasRoot and areasRoot:FindFirstChild("GuardAreas")
+	dumpFolder("__OBJECTS.Areas.GuardAreas", guardAreas)
+
+	-- Recherche large, indépendante du chemin ci-dessus : tout dossier/
+	-- modèle dont le NOM évoque une zone/île, n'importe où dans workspace
+	-- — c'est ce qui permet de repérer une île AJOUTÉE récemment même si
+	-- elle n'est pas rangée au même endroit que les zones déjà connues.
+	local seen = {}
+	local candidates = 0
+	for _, inst in ipairs(workspace:GetDescendants()) do
+		local lname = inst.Name:lower()
+		if (lname:find("area") or lname:find("island") or lname:find("zone") or lname:find("ile"))
+			and (inst:IsA("Folder") or inst:IsA("Model") or inst:IsA("Configuration")) then
+			local full = inst:GetFullName()
+			if not seen[full] and candidates < 40 then
+				seen[full] = true
+				candidates = candidates + 1
+				log("  candidat: "..full, C_DIM, "  candidat: "..full)
+			end
+		end
+	end
+	if candidates == 0 then log("Aucun candidat zone/ile trouve par mot-cle", C_DIM) end
+end
+R("")
+
+-- ============================================================
+-- PHASE 2d — OEUFS PAR ZONE + MOTS DE RARETE NON RECONNUS
+-- ============================================================
+-- Objectif direct : repérer une île/rareté que le hub principal ne
+-- connaît pas encore. Liste toutes les zones sous AreaEggSlotsClient
+-- (chaque enfant direct = une aire distincte), dump le texte brut par
+-- modèle d'oeuf UNIQUE, et isole les mots capitalisés qui ne matchent
+-- AUCUN mot-clé de rareté déjà connu du hub — candidats "nouvelle
+-- rareté" directement exploitables.
+setStatus("Scan: oeufs par zone & raretes...", C_YELLOW)
+R("-- OEUFS PAR ZONE + RARETES NON RECONNUES --")
+uiLine("-- OEUFS / RARETES --", C_MOON)
+do
+	local slotsRoot = workspace:FindFirstChild("AreaEggSlotsClient", true)
+	if not slotsRoot then
+		log("AreaEggSlotsClient introuvable (recherche recursive incluse)", C_YELLOW,
+			"AreaEggSlotsClient introuvable (recherche recursive incluse)")
+	else
+		log("AreaEggSlotsClient: "..slotsRoot:GetFullName(), C_GREEN,
+			"AreaEggSlotsClient: "..slotsRoot:GetFullName())
+
+		local zoneNames = {}
+		for _, c in ipairs(slotsRoot:GetChildren()) do table.insert(zoneNames, c.Name) end
+		table.sort(zoneNames)
+		log("Zones ("..#zoneNames.."): "..table.concat(zoneNames, ", "), C_MOON2,
+			"Zones ("..#zoneNames.."): "..table.concat(zoneNames, ", "))
+
+		-- Mots-clés de rareté DEJA connus du hub principal (yslemEgg.lua,
+		-- variable _RARE_KEYWORDS) — tout mot capitalisé qui n'en fait
+		-- pas partie est un candidat "nouvelle rareté / mutation".
+		local KNOWN = {
+			"secret","eternal","divine","divin","mythic","celestial","ancient",
+			"rainbow","golden","shiny","radiant","corrupted","void","legendary",
+		}
+		local STOP = {
+			Steal=true, Grab=true, Take=true, Hold=true, Slot=true, Slots=true,
+			Area=true, Egg=true, Eggs=true, Field=true, Growing=true, Zone=true,
+			The=true, And=true, For=true, You=true, Your=true, This=true, Not=true,
+			Ready=true, Ripe=true, Kg=true, Level=true, Locked=true, Unlock=true,
+			Value=true, Weight=true, Price=true, Cost=true, Buy=true, Sell=true,
+		}
+		local function isKnown(word)
+			local lw = word:lower()
+			for _, k in ipairs(KNOWN) do if lw:find(k, 1, true) then return true end end
+			return false
+		end
+
+		local seenModel, unknownWords, total, shown = {}, {}, 0, 0
+		for _, prompt in ipairs(slotsRoot:GetDescendants()) do
+			if prompt:IsA("ProximityPrompt") then
+				total = total + 1
+				local part = prompt.Parent
+				local model = part
+				while model and model.Parent and model.Parent ~= workspace and not model:IsA("Model") do
+					model = model.Parent
+				end
+				local key = (model and model.Name or (part and part.Name) or "?").."@"..(model and model:GetFullName() or "?")
+				if not seenModel[key] then
+					seenModel[key] = true
+					local texts = {}
+					pcall(function()
+						for _, d in ipairs((model or part):GetDescendants()) do
+							if d:IsA("TextLabel") and d.Text ~= "" then table.insert(texts, d.Text) end
+						end
+					end)
+					local full = table.concat(texts, " | ")
+					if shown < 40 then
+						shown = shown + 1
+						log("  "..(model and model.Name or "?")..": "..full:sub(1,140), C_DIM,
+							"  "..(model and model.Name or "?")..": "..full)
+					end
+					for w in full:gmatch("%a[%a']+") do
+						if #w >= 4 and w:match("^%u") and not STOP[w] and not isKnown(w) then
+							unknownWords[w] = (unknownWords[w] or 0) + 1
+						end
+					end
+				end
+			end
+		end
+		local uniqueModels = 0
+		for _ in pairs(seenModel) do uniqueModels = uniqueModels + 1 end
+		log("Prompts total: "..total.." | modeles uniques: "..uniqueModels, C_MOON2,
+			"Prompts total: "..total.." | modeles uniques: "..uniqueModels)
+
+		local unkList = {}
+		for w, n in pairs(unknownWords) do table.insert(unkList, w.." (x"..n..")") end
+		table.sort(unkList)
+		if #unkList > 0 then
+			log("MOTS NON RECONNUS (candidats nouvelle rarete/mutation) :", C_YELLOW,
+				"MOTS NON RECONNUS (candidats nouvelle rarete/mutation) :")
+			log("  "..table.concat(unkList, ", "), C_YELLOW, "  "..table.concat(unkList, ", "))
+		else
+			log("Aucun mot inconnu detecte (tout correspond a la liste connue)", C_DIM,
+				"Aucun mot inconnu detecte (tout correspond a la liste connue)")
+		end
+	end
+end
+R("")
+
+-- ============================================================
 -- PHASE 3 — LEADERSTATS
 -- ============================================================
 setStatus("Scan: leaderstats...", C_YELLOW)

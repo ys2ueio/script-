@@ -1410,11 +1410,16 @@ end
 
 local _espParts = {}
 local _espConn = nil
+local _espStatsLbl = nil
 local function clearESP()
 	for _, p in ipairs(_espParts) do pcall(function() p:Destroy() end) end
 	_espParts = {}
 end
-local function stopESP() if _espConn then _espConn:Disconnect(); _espConn = nil end; clearESP() end
+local function stopESP()
+	if _espConn then _espConn:Disconnect(); _espConn = nil end
+	clearESP()
+	if _espStatsLbl then _espStatsLbl.Text = "ESP inactif" end
+end
 local function startESP()
 	stopESP()
 	local _t = 0
@@ -1422,12 +1427,24 @@ local function startESP()
 		if not St.esp then return end
 		local now = tick(); if now-_t < 1 then return end; _t = now
 		clearESP()
+
+		local myPos = nil
+		do
+			local mc = LP.Character
+			local mr = mc and mc:FindFirstChild("HumanoidRootPart")
+			myPos = mr and mr.Position
+		end
+
+		local total, readyCount, rareCount, lockedCount = #cachedEggs, 0, 0, 0
 		for _, r in ipairs(cachedEggs) do
 			pcall(function()
 				local unlocked = areaUnlocked(r.area)
 				local hasRareTag = r.tags and #r.tags > 0
 				local notReady = r.enabled == false
 				local col = notReady and C.DIM or (not unlocked) and C.RED or (hasRareTag and C.GOLD or C.GREEN)
+				if r.enabled then readyCount = readyCount + 1 end
+				if hasRareTag then rareCount = rareCount + 1 end
+				if not unlocked then lockedCount = lockedCount + 1 end
 
 				local part = r.part
 				local p = Instance.new("Part")
@@ -1442,21 +1459,28 @@ local function startESP()
 				box.SurfaceTransparency = 0.7; box.SurfaceColor3 = col
 				box.Parent = p
 
+				-- 3 lignes désormais : nom, statut/rareté/poids, distance+zone
 				local bb = Instance.new("BillboardGui")
-				bb.Size = UDim2.fromOffset(220,34); bb.AlwaysOnTop = true; bb.MaxDistance = 800
+				bb.Size = UDim2.fromOffset(230,48); bb.AlwaysOnTop = true; bb.MaxDistance = 800
 				bb.Parent = p
 
 				local nameLbl = Instance.new("TextLabel", bb)
-				nameLbl.Size = UDim2.new(1,0,0.55,0)
+				nameLbl.Size = UDim2.new(1,0,0,17)
 				nameLbl.BackgroundTransparency = 1; nameLbl.Font = Enum.Font.GothamBold
 				nameLbl.TextSize = 12; nameLbl.TextStrokeTransparency = 0.3
 				nameLbl.TextColor3 = col; nameLbl.Text = tostring(r.cat or "Egg")
 
 				local detailLbl = Instance.new("TextLabel", bb)
-				detailLbl.Size = UDim2.new(1,0,0.45,0); detailLbl.Position = UDim2.new(0,0,0.55,0)
+				detailLbl.Size = UDim2.new(1,0,0,15); detailLbl.Position = UDim2.new(0,0,0,17)
 				detailLbl.BackgroundTransparency = 1; detailLbl.Font = Enum.Font.Gotham
 				detailLbl.TextSize = 10; detailLbl.TextStrokeTransparency = 0.4
 				detailLbl.TextColor3 = C.WHITE
+
+				local metaLbl = Instance.new("TextLabel", bb)
+				metaLbl.Size = UDim2.new(1,0,0,14); metaLbl.Position = UDim2.new(0,0,0,32)
+				metaLbl.BackgroundTransparency = 1; metaLbl.Font = Enum.Font.Gotham
+				metaLbl.TextSize = 9; metaLbl.TextStrokeTransparency = 0.5
+				metaLbl.TextColor3 = C.DIM
 
 				local parts = {}
 				if hasRareTag then
@@ -1469,14 +1493,43 @@ local function startESP()
 				if not unlocked then
 					local A = AREA[r.area]
 					table.insert(parts, "LOCKED ".._shortNum(A and A.reqSP))
+				elseif not notReady then
+					table.insert(parts, "PRET")
 				end
-				detailLbl.Text = #parts > 0 and table.concat(parts, "  ·  ") or tostring(r.area or "")
+				detailLbl.Text = #parts > 0 and table.concat(parts, "  ·  ") or "?"
+
+				-- NOUVEAU : distance en direct + zone toujours affichée
+				-- (avant : la zone n'apparaissait qu'en absence d'autre info)
+				local distTxt = "?m"
+				if myPos then distTxt = math.floor((r.pos - myPos).Magnitude).."m" end
+				metaLbl.Text = distTxt.."  ·  "..tostring(r.area or "?")
+
 				table.insert(_espParts, p)
 			end)
+		end
+
+		if _espStatsLbl then
+			_espStatsLbl.Text = string.format(
+				"Total %d  ·  Prets %d  ·  Rares %d  ·  Verrouilles %d",
+				total, readyCount, rareCount, lockedCount)
 		end
 	end)
 end
 makeRow(visualPage, "esp", "Egg ESP", function(on) if on then startESP() else stopESP() end end)
+
+-- Petit récap live sous le toggle ESP — totaux mis à jour à chaque
+-- rafraîchissement (même cadence que les billboards, 1x/s).
+do
+	local row = Instance.new("Frame", visualPage)
+	row.Size = UDim2.new(1,-12,0,24)
+	row.BackgroundColor3 = C.ROW; row.BackgroundTransparency = 0.5
+	row.BorderSizePixel = 0; corner(row, 10); addLivingStroke(row, 1)
+	local pad = Instance.new("UIPadding", row)
+	pad.PaddingLeft = UDim.new(0,10); pad.PaddingRight = UDim.new(0,10)
+	_espStatsLbl = label(row, "ESP inactif", UDim2.new(1,0,1,0), C.DIM, Enum.Font.Gotham)
+	_espStatsLbl.TextSize = 10.5
+	makeDivider(visualPage)
+end
 
 local _origBright = nil
 local function startFullbright()
