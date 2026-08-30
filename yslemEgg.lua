@@ -319,7 +319,7 @@ local C_GOLD   = Color3.fromRGB(255,200,60)
 local St = {
 	instantGrab      = false,
 	autoFarm         = false,
-	farmTier         = "Best Unlocked",
+	farmTier         = "Nearest",
 	autoHatch        = false,
 	autoEquip        = false,
 	autoClaim        = false,
@@ -729,46 +729,33 @@ makeRow(farmPage, "instantGrab", "Instant Grab", function(on)
 	setInstantGrab(on)
 end)
 
--- ── FARM TIER (cible) ────────────────────────────────────────
--- Mêmes valeurs que le dropdown "Target Farm Tier" de la source
--- d'origine. Bouton-cycle plutôt qu'un vrai dropdown (composant UI
--- lourd à construire pour ce hub) — un clic passe à la valeur
--- suivante, le texte affiche toujours la sélection courante.
-local FARM_TIERS = {
-	"Best Unlocked", "All Tiers (Highest First)", "Dropped",
-	"Snow", "Jungle", "Lake", "Abyss Ocean", "Prehistoric",
-	"Cosmic", "Cherry Blossom",
-}
-local _farmTierIdx = 1
+-- ── FARM TIER ────────────────────────────────────────────────
+-- [FIX] L'ancien système comparait r.area (nom du Model porteur du
+-- ProximityPrompt sous AreaEggSlotsClient — un identifiant de slot,
+-- PAS un nom de zone comme "Abyss Ocean") à la valeur choisie ici
+-- ("Abyss Ocean" etc, copiées du dropdown de la source d'origine).
+-- Cette comparaison ne matchait donc JAMAIS → "aucun oeuf valide"
+-- en permanence, quelle que soit la sélection, même quand des œufs
+-- étaient bel et bien détectés. Confirmé par capture d'écran.
+-- Remplacé par un tri simple et toujours valide : le plus proche
+-- d'abord (trajet le plus court, aucune donnée de zone nécessaire).
+St.farmTier = "Nearest"
 do
 	local row = Instance.new("Frame", farmPage)
-	row.Size = UDim2.new(1,-12,0,30)
+	row.Size = UDim2.new(1,-12,0,26)
 	row.BackgroundColor3 = C_ROW; row.BorderSizePixel = 0; corner(row, 6)
 	local pad = Instance.new("UIPadding", row)
 	pad.PaddingLeft = UDim.new(0,8); pad.PaddingRight = UDim.new(0,8)
-	label(row, "Farm Tier", UDim2.new(0.36,0,1,0), C_WHITE, Enum.Font.GothamMedium).TextSize = 12
-	local btn = Instance.new("TextButton", row)
-	btn.Size = UDim2.new(0.62,0,0,20)
-	btn.Position = UDim2.new(0.38,0,0.5,-10)
-	btn.BackgroundColor3 = C_ON_BG; btn.TextColor3 = C_MOON2
-	btn.Text = St.farmTier; btn.TextSize = 10; btn.Font = Enum.Font.GothamBold
-	btn.BorderSizePixel = 0; corner(btn, 8)
-	btn.MouseButton1Click:Connect(function()
-		_farmTierIdx = (_farmTierIdx % #FARM_TIERS) + 1
-		St.farmTier = FARM_TIERS[_farmTierIdx]
-		btn.Text = St.farmTier
-	end)
+	label(row, "Farm: cible le plus proche", UDim2.new(1,0,1,0), C_DIM, Enum.Font.GothamMedium).TextSize = 11
 end
 
 -- ── AUTO FARM — motif "swoop" de la source d'origine ────────
--- 1) Choisit le meilleur œuf valide dans cachedEggs (filtré par
---    farmTier ; "Best Unlocked" ne garde que les zones où
---    areaUnlocked() est vrai selon la Speed Power actuelle).
+-- 1) Choisit l'œuf le plus proche dans cachedEggs.
 -- 2) Tween aller (PlatformStand=true le temps du trajet, pas de
 --    vélocité manuelle donc pas de rollback), spam fireproximityprompt
---    + Network.Invoke(NM.Eggs.BUY,...) pendant le trajet ET sur place,
---    micro-pause pour laisser la réplication réseau rattraper, tween
---    retour à la position de départ exacte.
+--    pendant le trajet ET sur place, micro-pause pour laisser la
+--    réplication réseau rattraper, tween retour à la position de
+--    départ exacte.
 -- Boucle unique démarrée une fois au chargement (comme la source
 -- d'origine) — gate interne sur St.autoFarm, pas de start/stop de
 -- connexion à chaque toggle.
@@ -783,23 +770,15 @@ task.spawn(function()
 		if St.autoFarm and not isFarmingEgg and rootPart then
 			local validEggs = {}
 			for _, r in ipairs(cachedEggs) do
-				local areaStr = tostring(r.area or "")
-				if St.farmTier == "Best Unlocked" then
-					if areaUnlocked(r.area) then validEggs[#validEggs+1] = r end
-				elseif St.farmTier == "All Tiers (Highest First)" then
-					validEggs[#validEggs+1] = r
-				else
-					if areaStr:lower() == St.farmTier:lower() then validEggs[#validEggs+1] = r end
-				end
+				validEggs[#validEggs+1] = r
 			end
 
 			if #validEggs == 0 then
-				setStatus("Farm: aucun oeuf valide ("..St.farmTier..")", C_DIM)
+				setStatus("Farm: aucun oeuf detecte", C_DIM)
 			else
+				local myPos = rootPart.Position
 				table.sort(validEggs, function(a, b)
-					local aA, bA = tostring(a.area or ""), tostring(b.area or "")
-					if aA ~= bA then return aA > bA end
-					return a.pos.Z < b.pos.Z
+					return (a.pos - myPos).Magnitude < (b.pos - myPos).Magnitude
 				end)
 				local bestEgg = validEggs[1]
 
@@ -855,55 +834,71 @@ makeRow(farmPage, "autoFarm", "Auto Farm Eggs", function(on)
 	if not on then setStatus("Farm OFF", C_DIM) end
 end)
 
--- ── AUTO HATCH — vrais appels EggCmds (source d'origine) ────
--- EggCmds.GetOwnerRuntimeRecords(userId) donne les œufs possédés ;
--- IsLocalEggReady(uid) dit si son timer d'incubation est fini ;
--- RequestHatchEgg puis RequestCompleteHatchEgg (avec un court délai
--- entre les deux, comme la source d'origine) déclenchent l'éclosion
--- réelle — bien plus fiable qu'un scan de prompt par mot-clé.
+-- ── CLIC UI RÉEL (indépendant de tout module cassé) ──────────
+-- Le diagnostic confirme 0/16 modules chargés — EggCmds/Network/etc
+-- n'existent sous aucun de ces noms dans ce jeu. Solution robuste :
+-- cliquer directement les VRAIS boutons de l'interface du jeu,
+-- confirmés par capture d'écran ("Grow All" dans le panneau Growing
+-- Eggs, "Equip Best" dans le panneau Pen Roster). firesignal()
+-- déclenche exactement le même code que si le joueur cliquait à la
+-- main — indépendant de la structure interne du jeu, marche tant que
+-- le bouton existe et que l'executor expose firesignal.
+local _guiClickWarned = false
+local function _clickGuiButtonByText(matchFn)
+	local pg = LP:FindFirstChild("PlayerGui")
+	if not pg then return false end
+	local found = nil
+	for _, d in ipairs(pg:GetDescendants()) do
+		if (d:IsA("TextButton") or d:IsA("ImageButton")) and d.Visible then
+			local txt = d:IsA("TextButton") and d.Text or nil
+			if not txt then
+				local tl = d:FindFirstChildWhichIsA("TextLabel", true)
+				txt = tl and tl.Text or ""
+			end
+			if matchFn(txt or "") then found = d; break end
+		end
+	end
+	if not found then return false end
+	if typeof(firesignal) == "function" then
+		local ok = pcall(function() firesignal(found.MouseButton1Click) end)
+		if ok then return true end
+	end
+	if not _guiClickWarned then
+		_guiClickWarned = true
+		setStatus("Clic UI indispo (firesignal manquant sur cet executor)", C_RED)
+	end
+	return false
+end
+
+-- ── AUTO HATCH — clique le vrai bouton "Grow All" ────────────
 task.spawn(function()
 	local lastHatch = 0
 	while true do
-		task.wait(0.5)
-		if St.autoHatch and (os.clock() - lastHatch) >= 2 then
+		task.wait(1)
+		if St.autoHatch and (os.clock() - lastHatch) >= 3 then
 			lastHatch = os.clock()
-			pcall(function()
-				if EggCmds and EggCmds.GetOwnerRuntimeRecords then
-					local ok, recs = pcall(function() return EggCmds.GetOwnerRuntimeRecords(LP.UserId) end)
-					if ok and type(recs) == "table" then
-						for uid, rec in pairs(recs) do
-							local ready = false
-							pcall(function() ready = EggCmds.IsLocalEggReady(uid) end)
-							if rec.Placement ~= nil and ready then
-								local st = pcall(function() return EggCmds.RequestHatchEgg(uid) end)
-								if st then
-									task.wait(0.15)
-									pcall(function() EggCmds.RequestCompleteHatchEgg(uid) end)
-									setStatus("Hatch → "..tostring(uid), C_GREEN)
-								end
-							end
-						end
-					end
-				end
+			local clicked = _clickGuiButtonByText(function(t)
+				local low = t:lower()
+				return low:find("grow all", 1, true) ~= nil
 			end)
+			if clicked then setStatus("Hatch: 'Grow All' clique", C_GREEN) end
 		end
 	end
 end)
 
 makeRow(farmPage, "autoHatch", "Auto Hatch", function(on) end)
 
--- ── AUTO EQUIP BEST ──────────────────────────────────────────
+-- ── AUTO EQUIP BEST — clique le vrai bouton "Equip Best" ─────
 task.spawn(function()
 	local lastEquip = 0
 	while true do
-		task.wait(1)
-		if St.autoEquip and (os.clock() - lastEquip) >= 3 then
+		task.wait(2)
+		if St.autoEquip and (os.clock() - lastEquip) >= 4 then
 			lastEquip = os.clock()
-			pcall(function()
-				if Network and NM and NM.Backpack and NM.Backpack.EQUIP_BEST then
-					Network.Invoke(NM.Backpack.EQUIP_BEST)
-				end
+			local clicked = _clickGuiButtonByText(function(t)
+				return t:lower():find("equip best", 1, true) ~= nil
 			end)
+			if clicked then setStatus("'Equip Best' clique", C_GREEN) end
 		end
 	end
 end)
