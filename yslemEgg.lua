@@ -559,7 +559,6 @@ local St = {
 	fov              = 70,
 	guiVisible       = true,
 	farmZone         = "",
-	farmRarity       = "",
 }
 
 -- ============================================================
@@ -1082,11 +1081,11 @@ gui.IgnoreGuiInset = true
 pcall(function() gui.Parent = game:GetService("CoreGui") end)
 if not gui.Parent then gui.Parent = LP.PlayerGui end
 
--- Main window — compact size (reduced from the original 300x340).
+-- Main window — compact size (reduced from the original 300x340), spawns centered on screen.
 local main = Instance.new("Frame", gui)
 main.Name = "Main"
 main.Size = UDim2.new(0,264,0,296)
-main.Position = UDim2.new(0,14,0.5,-148)
+main.Position = UDim2.new(0.5,-132,0.5,-148)
 main.BackgroundColor3 = C.BG
 main.BorderSizePixel = 0
 main.ClipsDescendants = true
@@ -1321,7 +1320,8 @@ makeRow(farmPage, "instantGrab", "Instant Grab", function(on) setInstantGrab(on)
 -- the guards) instead of standing idle on the egg. EVERYTHING stops
 -- immediately (movement + spam) as soon as Auto Farm is disabled —
 -- checked live inside every wait loop AND forced on click via
--- _farmFullStopRef (see makeRow further below).
+-- _farmFullStopRef (see makeRow further below). Runs silently — no
+-- status spam that would drown out other features' status messages.
 task.spawn(function()
 	local isFarmingEgg = false
 	local function _farmFullStop()
@@ -1330,6 +1330,25 @@ task.spawn(function()
 		isFarmingEgg = false
 	end
 	_farmFullStopRef = _farmFullStop
+
+	-- Try every known grab trigger on a target — never assumes only one
+	-- mechanism is right for this game build.
+	local function _tryGrab(target)
+		pcall(function()
+			if target.prompt and fireproximityprompt then
+				fireproximityprompt(target.prompt)
+			end
+			if target.uid then
+				_invokeRF("RF/EggWorld/AskFieldEggCarry", target.uid)
+			end
+			-- Generic ClickDetector fallback, if the egg's part has one.
+			if target.part and fireclickdetector then
+				for _, d in ipairs(target.part:GetChildren()) do
+					if d:IsA("ClickDetector") then pcall(fireclickdetector, d) end
+				end
+			end
+		end)
+	end
 
 	while true do
 		task.wait(0.2)
@@ -1341,103 +1360,77 @@ task.spawn(function()
 		local rootPart = char and char:FindFirstChild("HumanoidRootPart")
 
 		if not isFarmingEgg and rootPart then
-			if #cachedEggs == 0 then
-				setStatus(string.format("Farm: 0 eggs — slots=%s total=%d active=%d",
-					_eggScanSlotsFound and "yes" or "no", _eggScanPromptTotal, _eggScanPromptEnabled), C.DIM)
-			else
-				-- Only target READY and FARMABLE eggs (never your own eggs
-				-- already in a slot — see scanner source 2), island+rarity
-				-- filters applied.
-				local myPos = rootPart.Position
-				local best, bestDist = nil, math.huge
-				for _, r in ipairs(cachedEggs) do
-					if r.enabled and r.farmable ~= false then
-						-- Island filter
-						local zoneOk = St.farmZone == "" or r.area == St.farmZone
-						-- Rarity filter
-						local rarityOk = St.farmRarity == ""
-						if not rarityOk then
-							local low3 = St.farmRarity:lower()
-							if r.mutation and r.mutation:lower():find(low3, 1, true) then rarityOk = true end
-							if r.tags then
-								for _, t in ipairs(r.tags) do
-									if t:lower():find(low3, 1, true) then rarityOk = true end
-								end
-							end
-						end
-						if zoneOk and rarityOk then
-							local d = (r.pos - myPos).Magnitude
-							if d < bestDist then bestDist = d; best = r end
+			-- Only target READY and FARMABLE eggs (never your own eggs
+			-- already in a slot — see scanner source 2), island filter applied.
+			local myPos = rootPart.Position
+			local best, bestDist = nil, math.huge
+			for _, r in ipairs(cachedEggs) do
+				if r.enabled and r.farmable ~= false then
+					local zoneOk = St.farmZone == "" or r.area == St.farmZone
+					if zoneOk then
+						local d = (r.pos - myPos).Magnitude
+						if d < bestDist then bestDist = d; best = r end
+					end
+				end
+			end
+
+			if best then
+				isFarmingEgg = true
+				_farmMoving = true
+				_farmTargetPos = best.pos
+				_farmSpeed = math.max(St.speed, 40)
+
+				-- Remove the target from the network cache right away:
+				-- avoids re-selecting the same egg in a loop if the world
+				-- takes time to confirm the grab.
+				if best.uid then _fieldEggNet[best.uid] = nil end
+
+				-- Grab attempts, moderate rate throughout the approach —
+				-- fast enough to catch the window, not so fast it risks
+				-- being ignored/rate-limited by the server.
+				local spamming = true
+				task.spawn(function()
+					while spamming do
+						_tryGrab(best)
+						task.wait(0.2)
+					end
+				end)
+
+				local t0 = os.clock()
+				while St.autoFarm and _farmMoving and (os.clock()-t0) < 6 do
+					local hrp2 = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+					if not hrp2 then break end
+					if (hrp2.Position - best.pos).Magnitude < 4 then break end
+					task.wait(0.1)
+				end
+				_farmMoving = false
+
+				-- Linger near the egg, still attempting the grab, in case
+				-- the server takes a moment to process it.
+				local t0b = os.clock()
+				while St.autoFarm and (os.clock()-t0b) < 1.5 do task.wait(0.1) end
+				spamming = false
+
+				if St.autoFarm then
+					-- Run to the safe zone to secure the egg (escape the
+					-- guards) — if no safe zone is found, just resume
+					-- farming instead of getting stuck.
+					local safePos = _findSafeZonePos()
+					if safePos then
+						_farmMoving = true
+						_farmTargetPos = safePos
+
+						local t1 = os.clock()
+						while St.autoFarm and _farmMoving and (os.clock()-t1) < 10 do
+							local hrp4 = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+							if not hrp4 then break end
+							if (hrp4.Position - safePos).Magnitude < 6 then break end
+							task.wait(0.1)
 						end
 					end
 				end
-				if not best then
-					local zTxt = St.farmZone ~= "" and (" island:"..St.farmZone) or ""
-					local rTxt = St.farmRarity ~= "" and (" rarity:"..St.farmRarity) or ""
-					setStatus(string.format("Farm: %d seen, 0 farmable target%s%s", #cachedEggs, zTxt, rTxt), C.DIM)
-				end
 
-				if best then
-					isFarmingEgg = true
-					_farmMoving = true
-					_farmTargetPos = best.pos
-					_farmSpeed = math.max(St.speed, 40)
-
-					-- Remove the target from the network cache right away:
-					-- avoids re-selecting the same egg in a loop if the world
-					-- takes time to confirm the grab.
-					if best.uid then _fieldEggNet[best.uid] = nil end
-
-					local spamming = true
-					task.spawn(function()
-						while spamming do
-							pcall(function()
-								if best.prompt and fireproximityprompt then
-									fireproximityprompt(best.prompt)
-								elseif best.uid then
-									_invokeRF("RF/EggWorld/AskFieldEggCarry", best.uid)
-								end
-							end)
-							task.wait(0.05)
-						end
-					end)
-
-					local t0 = os.clock()
-					while St.autoFarm and _farmMoving and (os.clock()-t0) < 6 do
-						local hrp2 = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
-						if not hrp2 then break end
-						if (hrp2.Position - best.pos).Magnitude < 4 then break end
-						task.wait(0.1)
-					end
-					task.wait(0.3)
-					spamming = false
-					_farmMoving = false
-
-					if St.autoFarm then
-						setStatus("Farm: grabbed → "..tostring(best.cat or "?"), C.GREEN)
-
-						-- Run to the safe zone to secure the egg (escape the
-						-- guards) — if no safe zone is found, just resume
-						-- farming instead of getting stuck.
-						local safePos = _findSafeZonePos()
-						if safePos then
-							_farmMoving = true
-							_farmTargetPos = safePos
-							setStatus("Farm: heading to safe zone...", C.ACCENT2)
-
-							local t1 = os.clock()
-							while St.autoFarm and _farmMoving and (os.clock()-t1) < 10 do
-								local hrp4 = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
-								if not hrp4 then break end
-								if (hrp4.Position - safePos).Magnitude < 6 then break end
-								task.wait(0.1)
-							end
-							if St.autoFarm then setStatus("Farm: safe zone reached", C.GREEN) end
-						end
-					end
-
-					_farmFullStop()
-				end
+				_farmFullStop()
 			end
 		end
 		end
@@ -1448,7 +1441,7 @@ makeRow(farmPage, "autoFarm", "Auto Farm Eggs", function(on)
 end)
 
 -- ============================================================
--- ISLAND + RARITY PICKER (swipeable, always visible under Auto Farm)
+-- ISLAND PICKER (swipeable, always visible under Auto Farm)
 -- ============================================================
 do
 	local FARM_ZONES = {
@@ -1459,11 +1452,9 @@ do
 		"All Islands","Forest","Desert","Prehistoric","Abyss Ocean","Snow",
 		"Cosmic","Lake","Volcano","Cherry Blossom","Jungle","Titan Temple",
 	}
-	local FARM_RARITIES = {"","secret","legendary","mythic","divine","celestial"}
-	local FARM_RARITY_LABELS = {"All Rarities","Secret","Legendary","Mythic","Divine","Celestial"}
 
 	local selOuter = Instance.new("Frame", farmPage)
-	selOuter.Size = UDim2.new(1,-12,0,100)
+	selOuter.Size = UDim2.new(1,-12,0,51)
 	selOuter.BackgroundColor3 = C.ROW
 	selOuter.BackgroundTransparency = 0.25
 	selOuter.BorderSizePixel = 0
@@ -1478,17 +1469,6 @@ do
 	zoneCarousel.BackgroundTransparency = 1
 	makeCarousel(zoneCarousel, "Target Island", FARM_ZONES, FARM_ZONE_LABELS, St.farmZone, function(zv)
 		St.farmZone = zv
-		setStatus("Farm island: "..(zv == "" and "All Islands" or zv), C.ACCENT2)
-		saveConfig()
-	end)
-
-	local rareCarousel = Instance.new("Frame", selOuter)
-	rareCarousel.Size = UDim2.new(1,0,0,51)
-	rareCarousel.Position = UDim2.new(0,0,0,55)
-	rareCarousel.BackgroundTransparency = 1
-	makeCarousel(rareCarousel, "Rarity", FARM_RARITIES, FARM_RARITY_LABELS, St.farmRarity, function(rv)
-		St.farmRarity = rv
-		setStatus("Farm rarity: "..(rv == "" and "All Rarities" or rv), C.ACCENT2)
 		saveConfig()
 	end)
 
