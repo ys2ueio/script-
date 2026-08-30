@@ -139,9 +139,23 @@ end
 local _NetworkingFolder = ReplicatedStorage:FindFirstChild("Packages")
 _NetworkingFolder = _NetworkingFolder and _NetworkingFolder:FindFirstChild("Networking")
 
+-- [AMÉLIORATION] Accepte soit le nom complet ("RF/Famille/Action"),
+-- soit juste l'action seule ("Action") — dans ce cas on cherche un
+-- enfant du dossier Networking dont le nom SE TERMINE par "/Action",
+-- peu importe sa famille exacte. Évite d'avoir à deviner le préfixe
+-- ("RF/PenRoster/..." vs "RF/Plot/..." etc.) pour chaque nouvelle
+-- action découverte — juste le nom court suffit.
 local function _getRemote(name)
 	if not _NetworkingFolder then return nil end
-	return _NetworkingFolder:FindFirstChild(name)
+	local exact = _NetworkingFolder:FindFirstChild(name)
+	if exact then return exact end
+	if not name:find("/", 1, true) then
+		local suffix = "/" .. name
+		for _, inst in ipairs(_NetworkingFolder:GetChildren()) do
+			if inst.Name:sub(-#suffix) == suffix then return inst end
+		end
+	end
+	return nil
 end
 
 -- Invoque un RemoteFunction confirmé par son nom exact. Retourne
@@ -1102,35 +1116,55 @@ end)
 
 makeRow(farmPage, "autoClaim", "Auto Claim", function(on) end)
 
--- ── AUTO UPGRADE PEN — "+1 EQUIP" (confirmé par capture d'écran) ──
--- Le panneau Pen Roster montre un bouton "+1 EQUIP [$1T]" — coût en
--- argent du jeu uniquement (pas de Robux visible). RF/PenRoster/
--- AskWearLimit est le remote le plus probable pour "augmenter la
--- limite d'équipement" vu son nom — best-effort, pcall protégé, le
--- serveur rejette si le nom/args ne correspondent pas exactement.
+-- ── AUTO UPGRADE PEN — vraie condition d'argent, remote confirmé ──
+-- [FIX] Un script de référence pour ce même jeu (analysé pour
+-- retrouver les vrais noms, chaînes en clair même dans son code
+-- obfusqué) confirme deux choses : (1) Save.Get() renvoie bien
+-- BaseUpgradeLevel/Money — la logique Save+Bases de la toute première
+-- version de ce hub était donc structurellement correcte, seul
+-- Network (le wrapper d'envoi) manquait ; (2) le vrai remote est
+-- AskBaseTierRaise, pas AskWearLimit (deviné, faux). Envoi via
+-- _invokeRF (fonctionne, confirmé par Auto Claim) au lieu du
+-- Network.Fire cassé de l'ancienne version.
 task.spawn(function()
 	local lastPen = 0
 	while true do
-		task.wait(2)
-		if St.autoUpgradePen and (os.clock() - lastPen) >= 3 then
+		task.wait(1.5)
+		if St.autoUpgradePen and (os.clock() - lastPen) >= 2 then
 			lastPen = os.clock()
-			local ok = _invokeRF("RF/PenRoster/AskWearLimit")
-			if ok then setStatus("Pen: +1 Equip tente", C_GREEN) end
+			local ok, data = pcall(function() return Save and Save.Get and Save.Get() end)
+			if ok and data then
+				local nextLevel = (data.BaseUpgradeLevel or 0) + 1
+				local nextConfig = Bases and Bases.BASES and Bases.BASES[nextLevel]
+				if nextConfig and data.Money and data.Money >= (nextConfig.Cost or math.huge) then
+					if _invokeRF("AskBaseTierRaise") then
+						setStatus("Pen: tier "..nextLevel.." tente", C_GREEN)
+					end
+				end
+			end
 		end
 	end
 end)
 
 makeRow(farmPage, "autoUpgradePen", "Auto Upgrade Pen", function(on) end)
 
--- ── AUTO UPGRADE TREADMILL — "Tier Raise" (confirmé) ──────────
+-- ── AUTO UPGRADE TREADMILL — vraie condition d'argent (confirmé) ──
 task.spawn(function()
 	local lastTM = 0
 	while true do
-		task.wait(2)
-		if St.autoUpgradeTM and (os.clock() - lastTM) >= 3 then
+		task.wait(1.5)
+		if St.autoUpgradeTM and (os.clock() - lastTM) >= 2 then
 			lastTM = os.clock()
-			local ok = _invokeRF("RF/Treadmill/AskTierRaise")
-			if ok then setStatus("Treadmill: tier raise tente", C_GREEN) end
+			local ok, data = pcall(function() return Save and Save.Get and Save.Get() end)
+			if ok and data then
+				local nextLevel = (data.TreadmillUpgradeLevel or 0) + 1
+				local nextConfig = Treadmills and Treadmills.GetByUpgradeLevel and Treadmills.GetByUpgradeLevel(nextLevel)
+				if nextConfig and data.Money and data.Money >= (nextConfig.Price or math.huge) then
+					if _invokeRF("AskTierRaise", nextConfig._id) then
+						setStatus("Treadmill: tier "..nextLevel.." tente", C_GREEN)
+					end
+				end
+			end
 		end
 	end
 end)
