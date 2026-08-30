@@ -249,7 +249,12 @@ local cachedEggs = {}
 task.spawn(function()
 	while true do
 		local eggs = {}
-		local slotsRoot = workspace:FindFirstChild("AreaEggSlotsClient")
+		-- FindFirstChild sans le 2e argument ne cherche que les ENFANTS
+		-- DIRECTS de workspace : si le jeu range ce conteneur plus
+		-- profondément (workspace.Live.AreaEggSlotsClient, etc.), il
+		-- n'était JAMAIS trouvé et on retombait tout le temps sur le
+		-- fallback par mots-clés — recherche récursive maintenant.
+		local slotsRoot = workspace:FindFirstChild("AreaEggSlotsClient", true)
 		local total, enabledCount = 0, 0
 
 		if slotsRoot then
@@ -257,51 +262,60 @@ task.spawn(function()
 				for _, prompt in ipairs(slotsRoot:GetDescendants()) do
 					if prompt:IsA("ProximityPrompt") then
 						total = total + 1
-						if prompt.Enabled then
-							enabledCount = enabledCount + 1
-							local part, model = _promptOwnerModel(prompt)
-							if part then
-								local full, tags, weight = _readEggLabels(model or part)
-								eggs[#eggs+1] = {
-									prompt = prompt, part = part, pos = part.Position, cf = part.CFrame,
-									area = tostring(model and model.Name or part.Name),
-									cat = prompt.ObjectText ~= "" and prompt.ObjectText or (model and model.Name or part.Name),
-									mutation = tags[1], tags = tags, weight = weight, rawText = full,
-								}
-							end
-						end
-					end
-				end
-			end)
-		else
-			pcall(function()
-				for _, prompt in ipairs(workspace:GetDescendants()) do
-					if prompt:IsA("ProximityPrompt") then
-						local action = prompt.ActionText:lower()
-						local objTxt = prompt.ObjectText:lower()
-						local parentName = (prompt.Parent and prompt.Parent.Name or ""):lower()
-						if action:find("grab") or action:find("steal") or action:find("take")
-							or action:find("pick") or action:find("collect")
-							or objTxt:find("egg") or parentName:find("egg") or parentName:find("drop") then
-							total = total + 1
-							if prompt.Enabled then
-								enabledCount = enabledCount + 1
-								local part, model = _promptOwnerModel(prompt)
-								if part then
-									local full, tags, weight = _readEggLabels(model or part)
-									eggs[#eggs+1] = {
-										prompt = prompt, part = part, pos = part.Position, cf = part.CFrame,
-										area = "Dropped",
-										cat = objTxt ~= "" and prompt.ObjectText or part.Name,
-										mutation = tags[1], tags = tags, weight = weight, rawText = full,
-									}
-								end
-							end
+						-- Ne plus exiger Enabled pour AJOUTER l'oeuf : un oeuf pas
+						-- encore prêt (en croissance) a Enabled=false mais doit
+						-- quand même apparaître en ESP (juste pas comme cible de
+						-- farm). N'exiger Enabled QUE pour la sélection du farm.
+						if prompt.Enabled then enabledCount = enabledCount + 1 end
+						local part, model = _promptOwnerModel(prompt)
+						if part then
+							local full, tags, weight = _readEggLabels(model or part)
+							eggs[#eggs+1] = {
+								prompt = prompt, part = part, pos = part.Position, cf = part.CFrame,
+								area = tostring(model and model.Name or part.Name),
+								cat = prompt.ObjectText ~= "" and prompt.ObjectText or (model and model.Name or part.Name),
+								mutation = tags[1], tags = tags, weight = weight, rawText = full,
+								enabled = prompt.Enabled,
+							}
 						end
 					end
 				end
 			end)
 		end
+
+		-- Fallback par mots-clés — TOUJOURS exécuté en plus (pas seulement
+		-- si slotsRoot est absent) : sur certains jeux les oeufs "au sol"
+		-- (déjà volés/lâchés) vivent hors de AreaEggSlotsClient, dans un
+		-- dossier séparé (Dropped/Field/etc.) — les deux sources se
+		-- complètent au lieu de s'exclure.
+		pcall(function()
+			for _, prompt in ipairs(workspace:GetDescendants()) do
+				if prompt:IsA("ProximityPrompt") and prompt.Parent and not (slotsRoot and prompt:IsDescendantOf(slotsRoot)) then
+					local action = prompt.ActionText:lower()
+					local objTxt = prompt.ObjectText:lower()
+					local parentName = (prompt.Parent and prompt.Parent.Name or ""):lower()
+					if action:find("grab") or action:find("steal") or action:find("take")
+						or action:find("pick") or action:find("collect") or action:find("hatch")
+						or action:find("claim") or action:find("harvest")
+						or objTxt:find("egg") or parentName:find("egg") or parentName:find("drop")
+						or parentName:find("field") or parentName:find("slot") then
+						total = total + 1
+						if prompt.Enabled then enabledCount = enabledCount + 1 end
+						local part, model = _promptOwnerModel(prompt)
+						if part then
+							local full, tags, weight = _readEggLabels(model or part)
+							eggs[#eggs+1] = {
+								prompt = prompt, part = part, pos = part.Position, cf = part.CFrame,
+								area = "Dropped",
+								cat = objTxt ~= "" and prompt.ObjectText or part.Name,
+								mutation = tags[1], tags = tags, weight = weight, rawText = full,
+								enabled = prompt.Enabled,
+							}
+						end
+					end
+				end
+			end
+		end)
 
 		_eggScanSlotsFound = slotsRoot ~= nil
 		_eggScanPromptTotal = total
@@ -371,7 +385,6 @@ local St = {
 	fpsBoost         = false,
 	clickTp          = false,
 	infJump          = false,
-	fling            = false,
 	antiDetect       = false,
 	speedOn          = false,
 	floatLocked      = false,
@@ -1051,11 +1064,19 @@ task.spawn(function()
 				setStatus(string.format("Farm: 0 oeuf — slots=%s total=%d actif=%d",
 					_eggScanSlotsFound and "oui" or "non", _eggScanPromptTotal, _eggScanPromptEnabled), C.DIM)
 			else
+				-- Ne cibler que les oeufs PRÊTS (Enabled) — un oeuf encore en
+				-- croissance apparaît dans cachedEggs (pour l'ESP) mais ne
+				-- doit jamais être une cible de déplacement/farm.
 				local myPos = rootPart.Position
 				local best, bestDist = nil, math.huge
 				for _, r in ipairs(cachedEggs) do
-					local d = (r.pos - myPos).Magnitude
-					if d < bestDist then bestDist = d; best = r end
+					if r.enabled then
+						local d = (r.pos - myPos).Magnitude
+						if d < bestDist then bestDist = d; best = r end
+					end
+				end
+				if not best then
+					setStatus(string.format("Farm: %d oeuf(s) vus, 0 pret (croissance)", #cachedEggs), C.DIM)
 				end
 
 				if best then
@@ -1406,7 +1427,8 @@ local function startESP()
 			pcall(function()
 				local unlocked = areaUnlocked(r.area)
 				local hasRareTag = r.tags and #r.tags > 0
-				local col = (not unlocked) and C.RED or (hasRareTag and C.GOLD or C.GREEN)
+				local notReady = r.enabled == false
+				local col = notReady and C.DIM or (not unlocked) and C.RED or (hasRareTag and C.GOLD or C.GREEN)
 
 				local part = r.part
 				local p = Instance.new("Part")
@@ -1444,6 +1466,7 @@ local function startESP()
 					table.insert(parts, table.concat(upper, "/"))
 				end
 				if r.weight then table.insert(parts, r.weight.."kg") end
+				if notReady then table.insert(parts, "CROISSANCE") end
 				if not unlocked then
 					local A = AREA[r.area]
 					table.insert(parts, "LOCKED ".._shortNum(A and A.reqSP))
@@ -1718,41 +1741,47 @@ end
 -- ============================================================
 -- FLING — lance tous les joueurs proches radialement
 -- ============================================================
+-- Comme AimBat/Bypass : jamais dans St, jamais restauré au chargement
+-- (action agressive, uniquement sur clic frais du bouton flottant).
+local _flingActive = false
 local _flingConn = nil
-makeRow(miscPage, "fling", "Fling Nearby", function(on)
-	if _flingConn then _flingConn:Disconnect(); _flingConn = nil end
-	if on then
-		_flingConn = RunService.Heartbeat:Connect(function()
-			if not St.fling then return end
-			local myChar = LP.Character
-			local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
-			if not myRoot then return end
-			local myPos = myRoot.Position
-			for _, plr in ipairs(Players:GetPlayers()) do
-				if plr ~= LP and plr.Character then
-					local hrp = plr.Character:FindFirstChild("HumanoidRootPart")
-					if hrp then
-						local diff = hrp.Position - myPos
-						local dist = diff.Magnitude
-						if dist < 80 then
-							local dir
-							if dist > 0.5 then
-								dir = diff.Unit
-							else
-								dir = Vector3.new(math.random()-0.5, 0.2, math.random()-0.5).Unit
-							end
-							pcall(function()
-								hrp.AssemblyLinearVelocity = dir * 280 + Vector3.new(0, 110, 0)
-							end)
+local function startFling()
+	_flingActive = true
+	if _flingConn then _flingConn:Disconnect() end
+	_flingConn = RunService.Heartbeat:Connect(function()
+		if not _flingActive then return end
+		local myChar = LP.Character
+		local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+		if not myRoot then return end
+		local myPos = myRoot.Position
+		for _, plr in ipairs(Players:GetPlayers()) do
+			if plr ~= LP and plr.Character then
+				local hrp = plr.Character:FindFirstChild("HumanoidRootPart")
+				if hrp then
+					local diff = hrp.Position - myPos
+					local dist = diff.Magnitude
+					if dist < 80 then
+						local dir
+						if dist > 0.5 then
+							dir = diff.Unit
+						else
+							dir = Vector3.new(math.random()-0.5, 0.2, math.random()-0.5).Unit
 						end
+						pcall(function()
+							hrp.AssemblyLinearVelocity = dir * 280 + Vector3.new(0, 110, 0)
+						end)
 					end
 				end
 			end
-		end)
-	else
-		setStatus("Fling OFF", C.DIM)
-	end
-end)
+		end
+	end)
+	setStatus("Fling ON", C.GREEN)
+end
+local function stopFling()
+	_flingActive = false
+	if _flingConn then _flingConn:Disconnect(); _flingConn = nil end
+	setStatus("Fling OFF", C.DIM)
+end
 
 -- ============================================================
 -- ANTI-DETECT — Anti-Kick + Spoof Télémétrie (portage Moon Hub)
@@ -1951,12 +1980,13 @@ local function stopAimBat()
 end
 
 -- ============================================================
--- DOCK FLOTTANT — Speed / AimBat / Bypass / Lock
+-- DOCK FLOTTANT — Speed / AimBat / Bypass / Fling / Lock
 -- ============================================================
 local FLOAT_SZ, FLOAT_GAP, FLOAT_TOP, FLOAT_RIGHT_OFF = 44, 7, 74, 12
 local _floatDefs = {
 	{ id="speed",  label="Speed" }, { id="aimbat", label="Aim\nBat" },
-	{ id="bypass", label="Bypass" }, { id="lock",   label="Lock" },
+	{ id="bypass", label="Bypass" }, { id="fling",  label="Fling" },
+	{ id="lock",   label="Lock" },
 }
 local _floatBtns = {}
 
@@ -2051,6 +2081,11 @@ for i, def in ipairs(_floatDefs) do
 				if removeBypass() then _bypassOn = false; if _bypassPillRefresh then _bypassPillRefresh() end end
 			end
 			setAct(_bypassOn)
+		end)
+	elseif def.id == "fling" then
+		_floatBtns["fling"].btn.MouseButton1Click:Connect(function()
+			if _flingActive then stopFling() else startFling() end
+			setAct(_flingActive)
 		end)
 	elseif def.id == "lock" then
 		setAct(St.floatLocked)
