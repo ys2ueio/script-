@@ -13,6 +13,7 @@ local Players      = game:GetService("Players")
 local RunService   = game:GetService("RunService")
 local HttpService  = game:GetService("HttpService")
 local Lighting     = game:GetService("Lighting")
+local RS           = game:GetService("ReplicatedStorage")
 local LP           = Players.LocalPlayer
 if not LP.Character then LP.CharacterAdded:Wait() end
 
@@ -450,6 +451,186 @@ end
 R("")
 
 -- ============================================================
+-- PHASE 2e — STRUCTURE DÉTAILLÉE D'UN SLOT D'OEUF (AreaEggSlotsClient)
+-- ============================================================
+-- Le rapport precedent a montre 0 ProximityPrompt sous
+-- AreaEggSlotsClient malgre 592 descendants au total — le scanner
+-- ESP/Auto Farm actuel (base sur ProximityPrompt) tape donc a cote sur
+-- CE build du jeu. Cette phase dump la structure REELLE d'un enfant
+-- (souvent un GUID, ex "00921def...") pour trouver le vrai mecanisme
+-- (SmartPromptPart, Attributes, ClickDetector, etc.).
+setStatus("Scan: structure d'un slot d'oeuf...", C_YELLOW)
+R("-- STRUCTURE D'UN SLOT (AreaEggSlotsClient) --")
+uiLine("-- STRUCTURE SLOT OEUF --", C_MOON)
+do
+	local slotsRoot = workspace:FindFirstChild("AreaEggSlotsClient", true)
+	if not slotsRoot then
+		log("AreaEggSlotsClient introuvable", C_DIM, "AreaEggSlotsClient introuvable")
+	else
+		local children = slotsRoot:GetChildren()
+		local samples = {}
+		-- 1 GUID-like + 1 "FirstAreaEgg_..." si possible (deux formes vues)
+		for _, c in ipairs(children) do
+			if #samples >= 2 then break end
+			if c.Name:find(":Slot_") and #samples < 2 then table.insert(samples, c)
+			elseif #c.Name == 32 and not c.Name:find(":") and #samples < 1 then table.insert(samples, c) end
+		end
+		if #samples == 0 and #children > 0 then table.insert(samples, children[1]) end
+
+		for _, slot in ipairs(samples) do
+			log("Slot: "..slot.Name.." (".. slot.ClassName ..")", C_GREEN,
+				"Slot: "..slot.Name.." (".. slot.ClassName ..")")
+			local okA, attrs = pcall(function() return slot:GetAttributes() end)
+			if okA and attrs and next(attrs) then
+				for k, v in pairs(attrs) do
+					log("  [Attribute] "..k.." = "..tostring(v), C_MOON2, "  [Attribute] "..k.." = "..tostring(v))
+				end
+			else
+				log("  (aucun attribute sur le slot lui-meme)", C_DIM)
+			end
+			local shown = 0
+			pcall(function()
+				for _, d in ipairs(slot:GetDescendants()) do
+					shown = shown + 1
+					if shown > 45 then
+						log("  ... (+"..(#slot:GetDescendants()-45).." autres descendants, non affiches)", C_DIM)
+						return
+					end
+					local extra = ""
+					pcall(function()
+						local a2 = d:GetAttributes()
+						if a2 and next(a2) then
+							local kv = {}
+							for k, v in pairs(a2) do table.insert(kv, k.."="..tostring(v)) end
+							extra = "  {"..table.concat(kv, ", ").."}"
+						end
+					end)
+					log("    "..d.Name.." (".. d.ClassName ..")"..extra, C_DIM,
+						"    "..d.Name.." (".. d.ClassName ..")"..extra)
+				end
+			end)
+		end
+	end
+end
+R("")
+
+-- ============================================================
+-- PHASE 2f — SMARTPROMPTPART (mécanisme d'interaction custom ?)
+-- ============================================================
+-- "SmartPromptPart" apparait plusieurs fois en top-level de workspace
+-- dans le rapport precedent — probablement le remplacant maison de
+-- ProximityPrompt sur ce jeu. On dump un exemplaire en detail.
+setStatus("Scan: SmartPromptPart...", C_YELLOW)
+R("-- SMARTPROMPTPART (exemplaire) --")
+uiLine("-- SMARTPROMPTPART --", C_MOON)
+do
+	local found = nil
+	local total = 0
+	for _, inst in ipairs(workspace:GetDescendants()) do
+		if inst.Name == "SmartPromptPart" then
+			total = total + 1
+			if not found then found = inst end
+		end
+	end
+	log("SmartPromptPart trouves au total: "..total, C_MOON2, "SmartPromptPart trouves au total: "..total)
+	if found then
+		log("Exemplaire: "..found:GetFullName(), C_GREEN, "Exemplaire: "..found:GetFullName())
+		log("  ClassName: "..found.ClassName, C_DIM)
+		local okA, attrs = pcall(function() return found:GetAttributes() end)
+		if okA and attrs and next(attrs) then
+			for k, v in pairs(attrs) do
+				log("  [Attribute] "..k.." = "..tostring(v), C_MOON2, "  [Attribute] "..k.." = "..tostring(v))
+			end
+		else
+			log("  (aucun attribute)", C_DIM)
+		end
+		-- Parent chain — pour savoir a quel oeuf/pen/plot il appartient
+		local chain, anc = {}, found.Parent
+		local hops = 0
+		while anc and hops < 6 do
+			table.insert(chain, anc.Name.."(".. anc.ClassName ..")")
+			anc = anc.Parent; hops = hops + 1
+		end
+		log("  Parents: "..table.concat(chain, " < "), C_DIM, "  Parents: "..table.concat(chain, " < "))
+		local shown = 0
+		pcall(function()
+			for _, d in ipairs(found:GetDescendants()) do
+				shown = shown + 1
+				if shown > 25 then log("  ... (troque)", C_DIM); return end
+				log("    "..d.Name.." (".. d.ClassName ..")", C_DIM, "    "..d.Name.." (".. d.ClassName ..")")
+			end
+		end)
+	else
+		log("Aucun SmartPromptPart trouve", C_DIM)
+	end
+end
+R("")
+
+-- ============================================================
+-- PHASE 2g — REMOTES DE LECTURE EggWorld (snapshot complet, non tronque)
+-- ============================================================
+-- Uniquement les remotes dont le nom sonne "lecture seule" (Ask*Snapshot
+-- / AskEggRecord / AskFieldEggRarityShows) — on evite volontairement
+-- AskHatch/AskPlaceEgg/AskFieldEggDrop/AskFieldEggCarry/AskSkipGrowth/
+-- AskWearTool/AskDoffTool qui modifient l'etat du jeu.
+setStatus("Scan: remotes EggWorld (lecture)...", C_YELLOW)
+R("-- REMOTES EggWorld (invocations en lecture seule) --")
+uiLine("-- EggWorld: donnees completes --", C_MOON)
+do
+	local netFolder = RS:FindFirstChild("Packages")
+	netFolder = netFolder and netFolder:FindFirstChild("Networking")
+	local function dumpFull(v, cap)
+		cap = cap or 2500
+		local ok, s = pcall(function()
+			if typeof(v) == "table" then
+				local ok2, j = pcall(function() return HttpService:JSONEncode(v) end)
+				return ok2 and j or "<table non serialisable>"
+			end
+			return tostring(v)
+		end)
+		if not ok then return "<erreur serialisation>" end
+		if #s > cap then return s:sub(1, cap).."... (tronque, "..#s.." caracteres au total)" end
+		return s
+	end
+	local function tryInvoke(name, ...)
+		if not netFolder then return false, "dossier Networking introuvable" end
+		local inst = netFolder:FindFirstChild(name)
+		if not inst or not inst:IsA("RemoteFunction") then return false, "remote introuvable: "..name end
+		-- Lua 5.1 : '...' n'est pas capturable par une closure imbriquée,
+		-- on le fige dans une table avant de créer le pcall(function()...end).
+		local args, n = {...}, select("#", ...)
+		return pcall(function() return inst:InvokeServer(table.unpack(args, 1, n)) end)
+	end
+
+	local sampleUid = nil
+	do
+		local slotsRoot = workspace:FindFirstChild("AreaEggSlotsClient", true)
+		if slotsRoot then
+			local kids = slotsRoot:GetChildren()
+			if #kids > 0 then sampleUid = kids[1].Name end
+		end
+	end
+	log("UID d'exemple utilise: "..tostring(sampleUid), C_DIM, "UID d'exemple utilise: "..tostring(sampleUid))
+
+	local READ_ONLY = { "RF/EggWorld/AskFieldEggSnapshot", "RF/EggWorld/AskLiveSnapshot",
+		"RF/EggWorld/AskFieldEggRarityShows", "RF/EggWorld/AskEggRecord" }
+	for _, name in ipairs(READ_ONLY) do
+		local ok, res = tryInvoke(name)
+		if not ok and sampleUid then
+			-- essai avec l'UID d'exemple si l'appel sans argument echoue
+			ok, res = tryInvoke(name, sampleUid)
+		end
+		if ok then
+			log(name..":", C_GREEN, name..":")
+			log("  "..dumpFull(res), C_DIM, "  "..dumpFull(res))
+		else
+			log(name..": echec — "..tostring(res), C_YELLOW, name..": echec — "..tostring(res))
+		end
+	end
+end
+R("")
+
+-- ============================================================
 -- PHASE 3 — LEADERSTATS
 -- ============================================================
 setStatus("Scan: leaderstats...", C_YELLOW)
@@ -487,7 +668,6 @@ end
 setStatus("Scan: remotes ReplicatedStorage...", C_YELLOW)
 R("-- REMOTES (ReplicatedStorage) --")
 uiLine("-- REMOTES ReplicatedStorage --", C_MOON)
-local RS = game:GetService("ReplicatedStorage")
 local rsEvents, rsFuncs = scanRemotes(RS, "ReplicatedStorage")
 log("RemoteEvent: "..#rsEvents.." | RemoteFunction: "..#rsFuncs, C_MOON2,
 	"RemoteEvent: "..#rsEvents.." | RemoteFunction: "..#rsFuncs)
