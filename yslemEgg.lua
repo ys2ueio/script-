@@ -33,48 +33,76 @@ local EggCmds, Ragdoll, Network, NM, PlotCmds, GEP, GCP, RGSR, SPP, GuardsD, Are
 local Save, Constants, Bases, Treadmills, Trails
 local PlotsNet, TreadmillsNet, TrailsNet
 
-local _ModuleStatus = {}  -- nom -> true/false, pour diagnostic UI
-local function _tryRequire(name, path)
-	local ok, result = pcall(require, path)
+-- [FIX] L'ancienne version devinait le CHEMIN complet (Library.Client.X,
+-- Directory.Y...) copié de la source d'origine — si le jeu a réorganisé
+-- ses dossiers depuis, aucun de ces chemins ne matche même si le
+-- ModuleScript existe toujours ailleurs. Nouvelle approche : une seule
+-- passe sur TOUT ReplicatedStorage:GetDescendants(), indexée par NOM de
+-- ModuleScript — peu importe où il vit réellement. Bien plus robuste
+-- qu'un chemin figé, et ça ne coûte qu'un seul scan (pas 16).
+local _moduleIndex = {}  -- nom exact -> première instance ModuleScript trouvée
+for _, inst in ipairs(ReplicatedStorage:GetDescendants()) do
+	if inst:IsA("ModuleScript") and not _moduleIndex[inst.Name] then
+		_moduleIndex[inst.Name] = inst
+	end
+end
+
+local _ModuleStatus = {}    -- nom -> true/false (chargé avec succès)
+local _ModuleFound  = {}    -- nom -> chemin complet où il a été trouvé (ou nil)
+local function _tryRequire(name)
+	local inst = _moduleIndex[name]
+	_ModuleFound[name] = inst and inst:GetFullName() or nil
+	if not inst then
+		_ModuleStatus[name] = false
+		return nil
+	end
+	local ok, result = pcall(require, inst)
 	_ModuleStatus[name] = ok and result ~= nil
 	if ok then return result end
 	return nil
 end
 
-EggCmds    = _tryRequire("EggCmds",    ReplicatedStorage:FindFirstChild("Library") and ReplicatedStorage.Library:FindFirstChild("Client") and ReplicatedStorage.Library.Client:FindFirstChild("EggCmds"))
-Ragdoll    = _tryRequire("Ragdoll",    ReplicatedStorage:FindFirstChild("Library") and ReplicatedStorage.Library:FindFirstChild("Modules") and ReplicatedStorage.Library.Modules:FindFirstChild("Ragdoll"))
-Network    = _tryRequire("Network",    ReplicatedStorage:FindFirstChild("Library") and ReplicatedStorage.Library:FindFirstChild("Client") and ReplicatedStorage.Library.Client:FindFirstChild("Network"))
+EggCmds    = _tryRequire("EggCmds")
+Ragdoll    = _tryRequire("Ragdoll")
+Network    = _tryRequire("Network")
 NM         = Network and Network.NET_MAP
-PlotCmds   = _tryRequire("PlotCmds",   ReplicatedStorage:FindFirstChild("Library") and ReplicatedStorage.Library:FindFirstChild("Client") and ReplicatedStorage.Library.Client:FindFirstChild("PlotCmds"))
-GEP        = _tryRequire("GEP",        ReplicatedStorage:FindFirstChild("Library") and ReplicatedStorage.Library:FindFirstChild("Modules") and ReplicatedStorage.Library.Modules:FindFirstChild("GuardAreas") and ReplicatedStorage.Library.Modules.GuardAreas:FindFirstChild("GuardEscapePrediction"))
-GCP        = _tryRequire("GCP",        ReplicatedStorage:FindFirstChild("Library") and ReplicatedStorage.Library:FindFirstChild("Modules") and ReplicatedStorage.Library.Modules:FindFirstChild("GuardAreas") and ReplicatedStorage.Library.Modules.GuardAreas:FindFirstChild("GuardChasePolicy"))
-RGSR       = _tryRequire("RGSR",       ReplicatedStorage:FindFirstChild("Library") and ReplicatedStorage.Library:FindFirstChild("Functions") and ReplicatedStorage.Library.Functions:FindFirstChild("ResolveGuardSpeedRequirement"))
-SPP        = _tryRequire("SPP",        ReplicatedStorage:FindFirstChild("Library") and ReplicatedStorage.Library:FindFirstChild("Client") and ReplicatedStorage.Library.Client:FindFirstChild("SpeedPowerProjection"))
-GuardsD    = _tryRequire("GuardsD",    ReplicatedStorage:FindFirstChild("Directory") and ReplicatedStorage.Directory:FindFirstChild("Guards"))
-AreasD     = _tryRequire("AreasD",     ReplicatedStorage:FindFirstChild("Directory") and ReplicatedStorage.Directory:FindFirstChild("Areas"))
-SlotId     = _tryRequire("SlotId",     ReplicatedStorage:FindFirstChild("Library") and ReplicatedStorage.Library:FindFirstChild("Util") and ReplicatedStorage.Library.Util:FindFirstChild("AreaEggSlotIdentity"))
+PlotCmds   = _tryRequire("PlotCmds")
+GEP        = _tryRequire("GuardEscapePrediction")
+GCP        = _tryRequire("GuardChasePolicy")
+RGSR       = _tryRequire("ResolveGuardSpeedRequirement")
+SPP        = _tryRequire("SpeedPowerProjection")
+GuardsD    = _tryRequire("Guards")
+AreasD     = _tryRequire("Areas")
+SlotId     = _tryRequire("AreaEggSlotIdentity")
 
-Save       = _tryRequire("Save",       ReplicatedStorage:FindFirstChild("Library") and ReplicatedStorage.Library:FindFirstChild("Client") and ReplicatedStorage.Library.Client:FindFirstChild("Save"))
-Constants  = _tryRequire("Constants",  ReplicatedStorage:FindFirstChild("Library") and ReplicatedStorage.Library:FindFirstChild("Globals") and ReplicatedStorage.Library.Globals:FindFirstChild("Constants"))
-Bases      = _tryRequire("Bases",      ReplicatedStorage:FindFirstChild("Directory") and ReplicatedStorage.Directory:FindFirstChild("Bases"))
-Treadmills = _tryRequire("Treadmills", ReplicatedStorage:FindFirstChild("Directory") and ReplicatedStorage.Directory:FindFirstChild("Treadmills"))
-Trails     = _tryRequire("Trails",     ReplicatedStorage:FindFirstChild("Directory") and ReplicatedStorage.Directory:FindFirstChild("Trails"))
+Save       = _tryRequire("Save")
+Constants  = _tryRequire("Constants")
+Bases      = _tryRequire("Bases")
+Treadmills = _tryRequire("Treadmills")
+Trails     = _tryRequire("Trails")
 
 PlotsNet      = Constants and Constants.NETWORK_MAP and Constants.NETWORK_MAP.Plots
 TreadmillsNet = Constants and Constants.NETWORK_MAP and Constants.NETWORK_MAP.Treadmills
 TrailsNet     = Constants and Constants.NETWORK_MAP and Constants.NETWORK_MAP.Trails
 
--- Print immédiat en console (F9), sans dépendre de l'UI/du scroll —
--- Auto Farm ne dépend d'AUCUN de ces modules (voir scanner cachedEggs
--- plus bas), mais Auto Hatch/Equip/Claim/Upgrade/Buy Trails et le
--- système de zones gardées EN dépendent tous. Si un nom ci-dessous
--- dit ECHEC, la feature correspondante est un no-op tant que ce
--- chemin ne sera pas corrigé (le jeu a peut-être renommé sa structure
--- interne depuis la source d'origine dont ces chemins viennent).
+-- Print immédiat en console (F9), sans dépendre de l'UI/du scroll.
+-- Distingue maintenant 2 échecs différents :
+--  - INTROUVABLE : aucun ModuleScript de ce nom nulle part dans
+--    ReplicatedStorage (renommé, déplacé hors RS, ou jamais existé
+--    sous ce nom dans ce jeu).
+--  - ECHEC : trouvé (chemin affiché) mais require() a levé une
+--    erreur — utile pour distinguer "n'existe pas" de "existe mais
+--    plante à l'exécution".
 do
 	local lines = {"[yslemEgg] Statut des modules du jeu :"}
-	for _, name in ipairs({"EggCmds","Network","Ragdoll","PlotCmds","GEP","GCP","RGSR","SPP","GuardsD","AreasD","SlotId","Save","Constants","Bases","Treadmills","Trails"}) do
-		table.insert(lines, "  "..(_ModuleStatus[name] and "OK    " or "ECHEC ")..name)
+	for _, name in ipairs({"EggCmds","Network","Ragdoll","PlotCmds","GuardEscapePrediction","GuardChasePolicy","ResolveGuardSpeedRequirement","SpeedPowerProjection","Guards","Areas","AreaEggSlotIdentity","Save","Constants","Bases","Treadmills","Trails"}) do
+		if _ModuleStatus[name] then
+			table.insert(lines, "  OK          "..name.."  (".._ModuleFound[name]..")")
+		elseif _ModuleFound[name] then
+			table.insert(lines, "  ECHEC       "..name.."  (trouve a ".._ModuleFound[name]..", require() plante)")
+		else
+			table.insert(lines, "  INTROUVABLE "..name)
+		end
 	end
 	print(table.concat(lines, "\n"))
 end
@@ -645,7 +673,14 @@ do
 		btn.MouseButton1Click:Connect(function()
 			local lines = {}
 			for name, ok in pairs(_ModuleStatus) do
-				table.insert(lines, (ok and "OK  " or "ECHEC  ")..name)
+				local path = _ModuleFound[name]
+				if ok then
+					table.insert(lines, "OK          "..name.."  ("..tostring(path)..")")
+				elseif path then
+					table.insert(lines, "ECHEC       "..name.."  (trouve a "..path..", require() plante)")
+				else
+					table.insert(lines, "INTROUVABLE "..name)
+				end
 			end
 			table.sort(lines)
 			local msg = table.concat(lines, "\n")
@@ -1527,21 +1562,31 @@ local miscPage = pages["Misc"]
 --     déjà utilisé et testé par Anti Ragdoll plus haut dans ce fichier.
 local _bypassActive    = false  -- true pendant le swap (garde anti-réentrance)
 local _bypassCooldown  = 0
+local _bypassOn         = false  -- état logique du toggle (ON = swap appliqué)
+local _bypassPillRefresh = nil   -- rempli plus bas ; permet au bouton flottant de resynchroniser le pill de l'onglet Misc
+-- [BUGFIX] _floatBtns est déclaré PLUS BAS dans ce fichier — une closure
+-- créée ici et exécutée plus tard (CharacterAdded) ne capture PAS la
+-- variable locale future : elle résoudrait vers une globale toujours
+-- nil (même piège que documenté ailleurs dans ce fichier pour
+-- refreshUIToggles/mainFrame). Donc pas de référence directe à
+-- _floatBtns ici — on passe par ce slot, rempli quand le bouton
+-- flottant "bypass" est construit plus bas.
+local _bypassFloatRefresh = nil
 local BYPASS_COOLDOWN_S = 5
 
 local function applyBypass()
-	if _bypassActive then return end
+	if _bypassActive then return false end
 	local now = tick()
 	if now - _bypassCooldown < BYPASS_COOLDOWN_S then
 		local left = math.ceil(BYPASS_COOLDOWN_S - (now - _bypassCooldown))
 		setStatus("Bypass: attendre "..left.."s", C_DIM)
-		return
+		return false
 	end
 	local char = LP.Character
 	local oldHum = char and char:FindFirstChildOfClass("Humanoid")
 	if not char or not oldHum then
 		setStatus("Bypass: pas de character", C_RED)
-		return
+		return false
 	end
 	_bypassActive = true
 	local ok = pcall(function()
@@ -1573,13 +1618,48 @@ local function applyBypass()
 	_bypassActive = false
 	_bypassCooldown = tick()
 	if ok then
-		setStatus("Bypass applied", C_GREEN)
+		setStatus("Bypass applique", C_GREEN)
 	else
-		setStatus("Bypass failed — voir console", C_RED)
+		setStatus("Bypass echec — voir console", C_RED)
 	end
 	task.delay(3, function()
 		if not _bypassActive then setStatus("Idle", C_DIM) end
 	end)
+	return ok
+end
+
+-- ── RETIRER LE BYPASS ────────────────────────────────────────
+-- Le clone-swap est une opération instantanée à sens unique — l'ancien
+-- Humanoid est détruit, il n'y a donc RIEN à littéralement "annuler".
+-- La seule façon honnête de revenir à un état 100% propre (pas un
+-- clone, un Humanoid tout neuf généré par le jeu lui-même) est un
+-- respawn contrôlé : humanoid.Health = 0 déclenche le flux de mort/
+-- reset normal du jeu, exactement comme le bouton "Respawn Character"
+-- séparé de la source d'origine. Même cooldown que l'apply pour éviter
+-- un spam de respawns.
+local function removeBypass()
+	if _bypassActive then return false end
+	local now = tick()
+	if now - _bypassCooldown < BYPASS_COOLDOWN_S then
+		local left = math.ceil(BYPASS_COOLDOWN_S - (now - _bypassCooldown))
+		setStatus("Bypass: attendre "..left.."s", C_DIM)
+		return false
+	end
+	local char = LP.Character
+	local hum  = char and char:FindFirstChildOfClass("Humanoid")
+	if not hum then
+		setStatus("Bypass: pas de character", C_RED)
+		return false
+	end
+	_bypassCooldown = tick()
+	local ok = pcall(function() hum.Health = 0 end)
+	if ok then
+		setStatus("Bypass retire (respawn)", C_MOON2)
+	else
+		setStatus("Retrait echec — voir console", C_RED)
+	end
+	task.delay(3, function() setStatus("Idle", C_DIM) end)
+	return ok
 end
 
 do
@@ -1588,14 +1668,37 @@ do
 	row.BackgroundColor3 = C_ROW; row.BorderSizePixel = 0; corner(row, 6)
 	local pad = Instance.new("UIPadding", row)
 	pad.PaddingLeft = UDim.new(0,8); pad.PaddingRight = UDim.new(0,8)
-	label(row, "Bypass Anti-Cheat", UDim2.new(1,-60,1,0), C_WHITE, Enum.Font.GothamMedium).TextSize = 12
-	local btn = Instance.new("TextButton", row)
-	btn.Size = UDim2.new(0,54,0,18)
-	btn.Position = UDim2.new(1,-54,0.5,-9)
-	btn.BackgroundColor3 = C_ON_BG; btn.TextColor3 = C_MOON
-	btn.Text = "Apply"; btn.TextSize = 10; btn.Font = Enum.Font.GothamBold
-	btn.BorderSizePixel = 0; corner(btn, 9)
-	btn.MouseButton1Click:Connect(applyBypass)
+	label(row, "Bypass Anti-Cheat", UDim2.new(1,-50,1,0), C_WHITE, Enum.Font.GothamMedium).TextSize = 12
+	local pill = Instance.new("TextButton", row)
+	pill.Size = UDim2.new(0,44,0,18)
+	pill.Position = UDim2.new(1,-44,0.5,-9)
+	pill.BorderSizePixel = 0; pill.TextSize = 10; pill.Font = Enum.Font.GothamBold
+	corner(pill, 9)
+	local function refresh()
+		pill.BackgroundColor3 = _bypassOn and C_ON_BG or C_OFF_BG
+		pill.TextColor3 = _bypassOn and C_MOON or C_DIM
+		pill.Text = _bypassOn and "ON" or "OFF"
+		row.BackgroundColor3 = _bypassOn and Color3.fromRGB(10,18,32) or C_ROW
+	end
+	refresh()
+	_bypassPillRefresh = refresh
+	-- ON → applique le swap. OFF → respawn propre (seule vraie façon
+	-- de "retirer" un clone-swap déjà appliqué). Le pill ne change
+	-- d'état que si l'action a réellement réussi.
+	pill.MouseButton1Click:Connect(function()
+		if not _bypassOn then
+			if applyBypass() then _bypassOn = true; refresh() end
+		else
+			if removeBypass() then _bypassOn = false; refresh() end
+		end
+	end)
+
+	-- Respawn depuis le jeu = un Humanoid tout neuf, plus de bypass actif.
+	LP.CharacterAdded:Connect(function()
+		_bypassOn = false
+		refresh()
+		if _bypassFloatRefresh then _bypassFloatRefresh(false) end
+	end)
 end
 
 -- ── TP TO COORDS ─────────────────────────────────────────────
@@ -2185,11 +2288,23 @@ for i, def in ipairs(_floatDefs) do
 		end)
 
 	elseif def.id == "bypass" then
+		-- Même toggle que la row de l'onglet Misc (ON = clone-swap
+		-- appliqué, OFF = respawn propre) — le dot reste allumé tant
+		-- que le bypass est actif, plus un simple flash cosmétique.
+		_bypassFloatRefresh = setAct
 		_floatBtns["bypass"].btn.MouseButton1Click:Connect(function()
-			applyBypass()
-			-- flash the dot briefly to confirm
-			setAct(true)
-			task.delay(1.5, function() setAct(false) end)
+			if not _bypassOn then
+				if applyBypass() then
+					_bypassOn = true
+					if _bypassPillRefresh then _bypassPillRefresh() end
+				end
+			else
+				if removeBypass() then
+					_bypassOn = false
+					if _bypassPillRefresh then _bypassPillRefresh() end
+				end
+			end
+			setAct(_bypassOn)
 		end)
 
 	elseif def.id == "lock" then
