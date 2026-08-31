@@ -36,7 +36,9 @@ local UserInputService   = game:GetService("UserInputService")
 local ReplicatedStorage  = game:GetService("ReplicatedStorage")
 local LP = Players.LocalPlayer
 
-local LIVE_CAPTURE_DURATION = 40   -- secondes d'écoute FieldEggShifted
+local LIVE_CAPTURE_DURATION = 40   -- plafond MAXIMUM si (presque) rien ne se passe
+local LIVE_CAPTURE_MIN      = 5    -- minimum avant de pouvoir sortir plus tot
+local LIVE_CAPTURE_EARLY    = 8    -- sortie anticipee des que ce nombre d'evenements est capture
 
 local function log(...) print("[EGGSCAN]", ...) end
 local _scanStart = os.clock()
@@ -345,9 +347,25 @@ local function buildUI()
 end
 buildUI()
 
-local function setStatus(s)
-	if ui.status then pcall(function() ui.status.Text = s end) end
-end
+-- setStatus() ne fait plus qu'enregistrer la PHASE en cours — l'affichage
+-- reel est pris en charge par un ticker independant ci-dessous, qui
+-- tourne en continu meme pendant une section qui ne rappelle pas
+-- setStatus elle-meme (ex: le parcours d'arbre D/E). Sans ca, le
+-- decompte semblait "fige" a chaque gros bloc de travail alors que le
+-- scan avancait bel et bien.
+local _currentPhase = "Demarrage..."
+local function setStatus(s) _currentPhase = s end
+local _scanRunning = true
+task.spawn(function()
+	while _scanRunning do
+		if ui.status then
+			pcall(function()
+				ui.status.Text = _currentPhase.." — "..math.floor(os.clock()-_scanStart).."s ecoulees"
+			end)
+		end
+		task.wait(1)
+	end
+end)
 
 local sectionCount = 0
 local function addSection(title, body)
@@ -845,13 +863,16 @@ do
 end
 
 -- ============================================================
--- SECTION B — capture live de RE/EggWorld/FieldEggShifted pendant
--- LIVE_CAPTURE_DURATION s. Dump BRUT (toutes les clefs) des premiers
--- evenements distincts — complementaire au snapshot: certains champs
--- (ex: Value calculee a l'apparition) peuvent n'exister QUE dans
--- l'evenement de spawn, pas dans le snapshot.
+-- SECTION B — capture live de RE/EggWorld/FieldEggShifted, JUSQU'A
+-- LIVE_CAPTURE_EARLY evenements captures (sortie anticipee des que
+-- LIVE_CAPTURE_MIN s sont passees ET qu'on a assez d'echantillons —
+-- pas la peine d'attendre le plafond si le jeu spawn des oeufs
+-- souvent), sinon plafond dur a LIVE_CAPTURE_DURATION s si peu/rien
+-- ne se passe. C'est la SEULE section a duree fixe du scan (toutes
+-- les autres ne dependent que de la taille du jeu) — cette sortie
+-- anticipee est le levier le plus direct pour aller plus vite sur un
+-- jeu actif, sans rien perdre niveau donnees.
 -- ============================================================
-setStatus("Ecoute live... "..LIVE_CAPTURE_DURATION.."s")
 do
 	local re = getRemote("RE/EggWorld/FieldEggShifted")
 	local captured = {}
@@ -865,9 +886,13 @@ do
 	end
 
 	local t0 = os.clock()
-	while os.clock() - t0 < LIVE_CAPTURE_DURATION do
+	while true do
+		local elapsed = os.clock() - t0
+		if elapsed >= LIVE_CAPTURE_DURATION then break end
+		if elapsed >= LIVE_CAPTURE_MIN and #captured >= LIVE_CAPTURE_EARLY then break end
+		setStatus(string.format("Ecoute live... %ds/%ds (%d captures)",
+			math.floor(elapsed), LIVE_CAPTURE_DURATION, #captured))
 		task.wait(1)
-		setStatus(string.format("Ecoute live... %ds", LIVE_CAPTURE_DURATION - math.floor(os.clock()-t0)))
 	end
 	if conn then conn:Disconnect() end
 
@@ -919,6 +944,7 @@ for _, line in ipairs(report) do
 		if l2 ~= "" then print(l2) end
 	end
 end
+_scanRunning = false  -- arrete le ticker de statut, le scan est termine
 log(string.format("=== FIN — %.1fs ecoulees au total ===", os.clock() - _scanStart))
 
 local fullReport = table.concat(report, "\n")
