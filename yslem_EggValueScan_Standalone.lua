@@ -21,7 +21,7 @@
 	action gameplay.
 
 	Auto-run, auto-stop apres ~40s. Résultats dans une fenêtre en jeu
-	(5 sections scrollables) + dump complet dans la console + bouton
+	(8 sections scrollables) + dump complet dans la console + bouton
 	"Copier" — un seul rapport consolidé, a coller integralement.
 	================================================================
 ]]
@@ -73,6 +73,22 @@ local function fmtLeaf(v)
 	return tostring(v)
 end
 
+-- Detection par FORME de la valeur, independante du nom de la clef —
+-- complementaire a isFlagKey (qui ne regarde que le nom). Un champ
+-- obfusque/court ("w", "v2", "amt") portant un nombre a 6+ chiffres
+-- ou une chaine formatee "26.77M" passe totalement sous le radar
+-- d'un filtre par nom ; celui-ci l'attrape par la FORME de la donnee.
+local function looksLikeMoney(v)
+	if type(v) == "number" then
+		return v >= 1000  -- ce jeu affiche des valeurs en dizaines de millions
+	end
+	if type(v) == "string" then
+		-- "26.77M", "1.2K", "500B", "$1,234", "12500"
+		return v:match("^%$?%d[%d,%.]*%s*[KkMmBbTt]?$") ~= nil and v:match("%d") ~= nil
+	end
+	return false
+end
+
 -- Caps volontairement larges — "scanner tout" prime sur la lisibilite.
 -- MAX_DEPTH/MAX_ITEMS restent en dernier recours anti-crash (stack
 -- overflow / rapport de plusieurs dizaines de Mo), pas des filtres de
@@ -109,6 +125,11 @@ local function dumpTable(t, path, depth, lines, visited)
 			lines[#lines+1] = string.rep("  ", depth)..ks.." = "..leaf
 			if isFlagKey(ks) then
 				flagged[#flagged+1] = {path=kpath, value=leaf}
+			elseif looksLikeMoney(v) then
+				-- Nom de clef quelconque/obfusque mais la VALEUR a la forme
+				-- d'un montant — signale separement (moins fiable qu'un nom
+				-- explicite, donc marque "?" dans le rapport final).
+				flagged[#flagged+1] = {path=kpath.." (forme uniquement)", value=leaf}
 			end
 		end
 	end
@@ -414,22 +435,31 @@ end
 -- ============================================================
 setStatus("Section C: modules...")
 do
-	local CONTAINERS = {
-		ReplicatedStorage, game:GetService("ReplicatedFirst"),
-		game:GetService("StarterGui"), game:GetService("StarterPack"),
-		game:GetService("StarterPlayer"),
-		game:GetService("Lighting"), workspace,
-		game:GetService("Teams"), game:GetService("SoundService"),
-	}
-	pcall(function() CONTAINERS[#CONTAINERS+1] = game:GetService("Chat") end)
-	pcall(function() CONTAINERS[#CONTAINERS+1] = game:GetService("TextChatService") end)
-	-- StarterGui/StarterPack ne sont que les GABARITS. Les copies
-	-- reellement executees (et c'est LA que vivent la plupart des
-	-- controleurs UI/valeur d'un jeu Roblox moderne) sont ici — a
-	-- rater ca, on ratait justement l'endroit le plus probable.
+	-- Decouverte DYNAMIQUE plutot qu'une liste devinee a la main: on
+	-- prend TOUT ce que `game` expose comme enfant direct — c'est la
+	-- liste reelle des services existants dans CE jeu precis, donc par
+	-- construction on ne peut plus en "oublier un" comme le tour d'avant
+	-- (StarterPlayer avait ete ajoute a la main, PlayerGui etait reste
+	-- manquant). ServerScriptService/ServerStorage apparaissent dans
+	-- cette liste mais leur contenu n'est jamais replique au client —
+	-- GetDescendants() y renverra 0 module, ce qui EST la reponse
+	-- correcte (limite Roblox, pas un bug de ce scan).
+	local CONTAINERS = {}
+	pcall(function()
+		for _, svc in ipairs(game:GetChildren()) do CONTAINERS[#CONTAINERS+1] = svc end
+	end)
+	-- Ajouts qui ne sont PAS des services top-level de `game` mais des
+	-- instances specifiques au LocalPlayer — les copies REELLEMENT
+	-- executees de StarterGui/StarterPack/StarterPlayerScripts, la ou
+	-- vivent la plupart des controleurs UI/valeur d'un jeu Roblox
+	-- moderne (rater ca, c'est rater l'endroit le plus probable).
 	pcall(function() if LP:FindFirstChild("PlayerGui") then CONTAINERS[#CONTAINERS+1] = LP.PlayerGui end end)
 	pcall(function() if LP:FindFirstChild("PlayerScripts") then CONTAINERS[#CONTAINERS+1] = LP.PlayerScripts end end)
 	pcall(function() if LP:FindFirstChild("Backpack") then CONTAINERS[#CONTAINERS+1] = LP.Backpack end end)
+	-- CoreGui: normalement proteger par le moteur, mais accessible sur
+	-- certains executeurs — tente quand meme, echoue silencieusement
+	-- sinon (pcall sur GetDescendants plus bas gere ca).
+	pcall(function() CONTAINERS[#CONTAINERS+1] = game:GetService("CoreGui") end)
 	local allMods, seen = {}, {}
 	for _, root in ipairs(CONTAINERS) do
 		pcall(function()
@@ -668,6 +698,129 @@ do
 		body = table.concat(lines, "\n")
 	end
 	addSection("F. Inventaire complet des remotes (Networking)", body)
+end
+
+-- ============================================================
+-- SECTION G — meme arbre enrichi (ValueBase/.Value + attributs +
+-- tags) que D/E, applique a TOUS les AUTRES services decouverts
+-- dynamiquement (game:GetChildren(), meme decouverte que la Section
+-- C) — Players (attributs poses sur le Player lui-meme, pas juste
+-- son Character deja vu en D), Lighting, Teams, SoundService,
+-- StarterGui/StarterPack/StarterPlayer (gabarits), Chat,
+-- TextChatService, et les copies runtime PlayerGui/PlayerScripts/
+-- Backpack. workspace et ReplicatedStorage sont exclus: deja couverts
+-- integralement par D et E, inutile de dupliquer un rapport deja
+-- tres volumineux.
+-- ============================================================
+setStatus("Section G: autres services...")
+do
+	local CollectionService = game:GetService("CollectionService")
+	local VALUE_CLASSES = {
+		IntValue=true, NumberValue=true, StringValue=true, BoolValue=true,
+		ObjectValue=true, Vector3Value=true, CFrameValue=true, Color3Value=true,
+	}
+	local MAX_TREE_DEPTH, MAX_TREE_LINES = 80, 150000
+
+	local function extra(child)
+		local extras = {}
+		if VALUE_CLASSES[child.ClassName] then
+			local ok, v = pcall(function() return child.Value end)
+			if ok then extras[#extras+1] = "value="..fmtLeaf(v) end
+		end
+		local okA, attrs = pcall(function() return child:GetAttributes() end)
+		if okA and next(attrs) then
+			local parts = {}
+			for k, v in pairs(attrs) do
+				parts[#parts+1] = k.."="..fmtLeaf(v)
+				if isFlagKey(k) or looksLikeMoney(v) then
+					flagged[#flagged+1] = {path="Attribute."..child:GetFullName().."."..k, value=fmtLeaf(v)}
+				end
+			end
+			extras[#extras+1] = "attrs{"..table.concat(parts, ", ").."}"
+		end
+		local okT, tags = pcall(function() return CollectionService:GetTags(child) end)
+		if okT and #tags > 0 then extras[#extras+1] = "tags["..table.concat(tags, ",").."]" end
+		if #extras == 0 then return "" end
+		return "  <"..table.concat(extras, " | ")..">"
+	end
+
+	local roots = {}
+	pcall(function()
+		for _, svc in ipairs(game:GetChildren()) do
+			if svc ~= workspace and svc ~= ReplicatedStorage then roots[#roots+1] = svc end
+		end
+	end)
+	pcall(function() if LP:FindFirstChild("PlayerGui") then roots[#roots+1] = LP.PlayerGui end end)
+	pcall(function() if LP:FindFirstChild("PlayerScripts") then roots[#roots+1] = LP.PlayerScripts end end)
+	pcall(function() if LP:FindFirstChild("Backpack") then roots[#roots+1] = LP.Backpack end end)
+
+	local body = ""
+	for _, root in ipairs(roots) do
+		local lines, truncated = {}, false
+		local function walk(inst, depth, prefix)
+			for _, child in ipairs(inst:GetChildren()) do
+				if #lines >= MAX_TREE_LINES then truncated = true; return end
+				local tag = child:IsA("ModuleScript") and "  (dump complet: voir Section C)" or extra(child)
+				local sub = #child:GetChildren()
+				lines[#lines+1] = string.format("%s%s (%s)%s%s", prefix, child.Name, child.ClassName,
+					sub > 0 and string.format(" — %d enfant(s)", sub) or "", tag)
+				if sub > 0 and depth < MAX_TREE_DEPTH then walk(child, depth + 1, prefix.."  ") end
+			end
+		end
+		local ok = pcall(function()
+			-- Le root lui-meme peut porter des attributs (ex: Player).
+			local rootExtra = extra(root)
+			lines[#lines+1] = root.Name.." (racine)"..rootExtra
+			walk(root, 1, "  ")
+		end)
+		if ok and #lines > 1 then  -- >1: la ligne racine seule sans enfant n'a aucun interet
+			body = body.."\n=== "..root:GetFullName().." ===\n"..table.concat(lines, "\n")
+			if truncated then body = body.."\n... (garde-fou lignes atteint)" end
+		end
+	end
+	if body == "" then body = "(aucun service supplementaire accessible ou tous vides)" end
+	addSection("G. Autres services (arbre enrichi generique)", body)
+end
+
+-- ============================================================
+-- SECTION H — scan textuel de TOUTE l'interface (PlayerGui, et
+-- CoreGui si accessible): tout GuiObject dont la propriete .Text
+-- RESSEMBLE a un montant ("26.77M", "1,234", "$500", ...). C'est la
+-- source la plus directe qui soit: LENNON HUB affiche litteralement
+-- "26.77M" quelque part dans son interface — si CE jeu calcule et
+-- affiche deja une valeur d'oeuf/pet cote client (ce qui est presque
+-- certain, sinon rien n'apparaitrait a l'ecran), le TextLabel qui la
+-- contient est ici, avec son chemin complet pour la retrouver en jeu.
+-- ============================================================
+setStatus("Section H: texte UI...")
+do
+	local roots = {}
+	pcall(function() if LP:FindFirstChild("PlayerGui") then roots[#roots+1] = LP.PlayerGui end end)
+	pcall(function() roots[#roots+1] = game:GetService("CoreGui") end)
+
+	local hits = {}
+	for _, root in ipairs(roots) do
+		pcall(function()
+			for _, inst in ipairs(root:GetDescendants()) do
+				if (inst:IsA("TextLabel") or inst:IsA("TextButton") or inst:IsA("TextBox"))
+					and inst.Text ~= "" and looksLikeMoney(inst.Text) then
+					hits[#hits+1] = string.format("%s = %q", inst:GetFullName(), inst.Text)
+					flagged[#flagged+1] = {path="UI-Text."..inst:GetFullName(), value=inst.Text}
+				end
+			end
+		end)
+	end
+	local body
+	if #hits == 0 then
+		body = "Aucun texte d'interface ne ressemble a un montant sur l'instant T "
+			.."(la fenetre de ce scan n'affiche peut-etre pas encore l'ecran "
+			.."concerne — p.ex. si le panneau 'Best Egg' du jeu n'est pas ouvert "
+			.."au moment du scan). Relancer avec le bon panneau ouvert si "
+			.."pertinent."
+	else
+		body = string.format("%d texte(s) ressemblant a un montant:\n", #hits)..table.concat(hits, "\n")
+	end
+	addSection("H. Scan textuel UI (valeurs deja affichees a l'ecran)", body)
 end
 
 -- ============================================================
