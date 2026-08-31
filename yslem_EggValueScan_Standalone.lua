@@ -441,22 +441,18 @@ do
 end
 
 -- ============================================================
--- SECTION C — TOUS les ModuleScript, sans filtre par nom, dans TOUS
--- les conteneurs accessibles cote client : ReplicatedStorage,
--- ReplicatedFirst, StarterGui, StarterPack, StarterPlayer, Lighting,
--- workspace, Teams, SoundService, Chat, TextChatService — PLUS les
--- copies REELLEMENT EXECUTEES cote joueur (PlayerGui, PlayerScripts,
--- Backpack de LocalPlayer), qui sont ou vivent la plupart des
--- controleurs UI/valeur d'un jeu Roblox moderne — StarterGui/
--- StarterPack ne sont que les gabarits, les rater aurait rate
--- l'endroit le plus probable. ServerScriptService/ServerStorage
--- restent invisibles au client : pas un choix, une limite Roblox
--- infranchissable depuis un script client. Chaque module est
--- require() (protege par timeout 1s, voir requireWithTimeout) et son
--- contenu integralement dump — plus de filtre "egg/pet + value/...":
--- si un module ne matche aucun mot-clef mais contient bien une table
--- de valeurs sous un nom auquel on n'a pas pense, ce scan le trouve
--- quand meme.
+-- SECTION C — inventaire de TOUS les ModuleScript (juste les noms,
+-- rapide) dans TOUS les conteneurs accessibles cote client, MAIS
+-- dump integral (require + contenu) reserve aux modules dont le nom
+-- evoque des donnees egg/pet — c'est le retour arriere volontaire
+-- apres le test en jeu: dump integral de TOUT (des centaines de
+-- modules, la plupart des composants UI generiques sans aucun rapport
+-- avec des oeufs) faisait tourner la duree totale a plusieurs
+-- minutes pour tres peu de gain reel. Rien n'est invisible pour
+-- autant: l'inventaire des noms reste complet et rapide (juste une
+-- boucle GetDescendants, pas de require()), donc un module au nom
+-- inattendu qu'on aurait mal filtre reste visible — il suffit de me
+-- dire lequel dumper en detail.
 -- ============================================================
 setStatus("Section C: modules...")
 do
@@ -498,24 +494,50 @@ do
 		end)
 	end
 
-	local body = string.format("%d ModuleScript(s) au total (tous conteneurs client confondus).\n"
-		.."require() + dump integral de CHAQUE module ci-dessous "
-		.."(timeout 0.2s par module si un chargement bloque).\n", #allMods)
-	-- Un require() + dump peut etre lourd, et avec PlayerGui/CoreGui
-	-- inclus la liste peut atteindre plusieurs centaines de modules:
-	-- sans pause, cette boucle tourne d'un bloc et gele le jeu (aucune
-	-- image n'est rendue tant qu'un script ne rend pas la main).
-	-- task.wait() CHAQUE iteration force une pause d'une frame — le
-	-- scan devient plus long mais le jeu reste jouable/fluide pendant
-	-- qu'il tourne, ce qui est le vrai objectif ici, pas la vitesse.
-	-- Idem: body est accumule dans une table + table.concat() final au
-	-- lieu de "body = body..." repete, qui ralentit de plus en plus a
-	-- mesure que la chaine grossit (des centaines de modules avec dump
-	-- complet -> ca comptait clairement dans le gel).
-	local bodyParts = {body}
-	local nOk, nErr, nTimeout, nNonTable = 0, 0, 0, 0
+	local INCLUDE_A = {"egg","pet"}
+	local INCLUDE_B = {"value","price","worth","data","config","rarity","mutation","index","list"}
+	local EXCLUDE    = {"controller","manager","service","handler","system","network","remote","ui","gui"}
+	local function matches(name)
+		local nl = name:lower()
+		local hasA, hasB, hasEx = false, false, false
+		for _, w in ipairs(INCLUDE_A) do if nl:find(w,1,true) then hasA=true break end end
+		if not hasA then return false end
+		for _, w in ipairs(INCLUDE_B) do if nl:find(w,1,true) then hasB=true break end end
+		if not hasB then return false end
+		for _, w in ipairs(EXCLUDE) do if nl:find(w,1,true) then hasEx=true break end end
+		return not hasEx
+	end
+	local candidates = {}
+	for _, mod in ipairs(allMods) do
+		if matches(mod.Name) then candidates[#candidates+1] = mod end
+	end
+
+	local bodyParts = {string.format(
+		"%d ModuleScript(s) au total (tous conteneurs client confondus). "
+		.."Inventaire complet des noms ci-dessous, plafonne a 400 "
+		.."(rapide — pas de require()).\n", #allMods)}
 	for i, mod in ipairs(allMods) do
-		setStatus(string.format("Section C: modules %d/%d", i, #allMods))
+		if i > 400 then
+			bodyParts[#bodyParts+1] = string.format("  ... (+%d autres, tronque)\n", #allMods - 400)
+			break
+		end
+		bodyParts[#bodyParts+1] = "  "..mod:GetFullName().."\n"
+		if i % 300 == 0 then task.wait() end
+	end
+
+	bodyParts[#bodyParts+1] = string.format(
+		"\n%d candidat(s) donnees egg/pet — dump integral (require + contenu) "
+		.."ci-dessous (timeout 0.2s si un chargement bloque):\n", #candidates)
+	if #candidates == 0 then
+		bodyParts[#bodyParts+1] = "Aucun module dont le nom evoque une table de valeurs "
+			.."(egg/pet + value/price/worth/data/config/rarity/mutation).\n"
+			.."Regarde l'inventaire complet ci-dessus: si un nom inattendu "
+			.."ressemble a une table de donnees egg/pet, dis-le pour que je "
+			.."le dump specifiquement au prochain tour."
+	end
+	local nOk, nErr, nTimeout, nNonTable = 0, 0, 0, 0
+	for i, mod in ipairs(candidates) do
+		setStatus(string.format("Section C: candidats %d/%d", i, #candidates))
 		bodyParts[#bodyParts+1] = "\n--- "..mod:GetFullName().." ---\n"
 		local ok, result = requireWithTimeout(mod, 0.2)
 		if not ok then
@@ -531,16 +553,18 @@ do
 		end
 		task.wait()
 	end
-	bodyParts[#bodyParts+1] = string.format(
-		"\nResume: %d dumpes en table, %d non-table, %d en erreur, %d en timeout (sur %d).",
-		nOk, nNonTable, nErr, nTimeout, #allMods)
-	addSection("C. TOUS les ModuleScripts (dump integral)", table.concat(bodyParts))
+	if #candidates > 0 then
+		bodyParts[#bodyParts+1] = string.format(
+			"\nResume candidats: %d dumpes en table, %d non-table, %d en erreur, %d en timeout (sur %d).",
+			nOk, nNonTable, nErr, nTimeout, #candidates)
+	end
+	addSection("C. ModuleScripts (inventaire complet + dump cible egg/pet)", table.concat(bodyParts))
 end
 
 -- ============================================================
 -- SECTION D — arbre COMPLET du workspace, tout niveau, tout dossier
 -- (plus de plafond "3 niveaux" ni de saut des dossiers >60 enfants —
--- "tout" veut dire tout), ENRICHI de 3 sources de donnees que le
+-- "tout" veut dire tout), ENRICHI de 2 sources de donnees que le
 -- premier passage ratait completement :
 --   1) ValueBase (.Value) — IntValue/NumberValue/StringValue/
 --      BoolValue affichent leur valeur directement (motif classique
@@ -549,8 +573,8 @@ end
 --   2) Attributs (Instance:GetAttributes()) — motif moderne
 --      equivalent, tres courant pour poser p.ex. Value/Rarity/Price
 --      directement sur le modele d'un oeuf sans passer par un remote.
---   3) Tags CollectionService — categorisation frequente (ex: tag
---      "Egg" ou "RarityLegendary" sur un modele).
+-- (les tags CollectionService ont ete retires: cout reel par instance
+-- pour un signal quasi jamais porteur d'une valeur numerique)
 -- MAX_TREE_DEPTH n'est qu'un garde-fou anti-stack-overflow (aucune
 -- hierarchie Roblox reelle n'atteint 80 niveaux), pas un filtre de
 -- contenu ; MAX_TREE_LINES est un garde-fou de derniere ligne contre
@@ -563,7 +587,6 @@ end
 -- ============================================================
 setStatus("Section D: map...")
 do
-	local CollectionService = game:GetService("CollectionService")
 	local VALUE_CLASSES = {
 		IntValue=true, NumberValue=true, StringValue=true, BoolValue=true,
 		ObjectValue=true, Vector3Value=true, CFrameValue=true, Color3Value=true,
@@ -573,6 +596,10 @@ do
 	local classTally = {}
 	local truncated = false
 
+	-- CollectionService:GetTags() retire: cout reel (1 appel API de
+	-- plus par instance, sur potentiellement des dizaines de milliers
+	-- d'instances) pour un signal quasi jamais porteur d'une valeur
+	-- numerique (les tags sont categoriels, pas des montants).
 	local function extra(child)
 		local extras = {}
 		if VALUE_CLASSES[child.ClassName] then
@@ -588,8 +615,6 @@ do
 			end
 			extras[#extras+1] = "attrs{"..table.concat(parts, ", ").."}"
 		end
-		local okT, tags = pcall(function() return CollectionService:GetTags(child) end)
-		if okT and #tags > 0 then extras[#extras+1] = "tags["..table.concat(tags, ",").."]" end
 		if #extras == 0 then return "" end
 		return "  <"..table.concat(extras, " | ")..">"
 	end
@@ -643,19 +668,18 @@ do
 		end
 	end)
 	if not anyLs then body = body.."  (aucun joueur present n'a de leaderstats)" end
-	addSection("D. Catalogue map COMPLET (+ValueBase/attrs/tags) + leaderstats", body)
+	addSection("D. Catalogue map COMPLET (+ValueBase/attrs) + leaderstats", body)
 end
 
 -- ============================================================
--- SECTION E — meme arbre enrichi (ValueBase/.Value + attributs +
--- tags CollectionService) que la Section D, mais sur ReplicatedStorage
--- au lieu du workspace: l'autre grand conteneur de donnees statiques
+-- SECTION E — meme arbre enrichi (ValueBase/.Value + attributs) que
+-- la Section D, mais sur ReplicatedStorage au lieu du workspace:
+-- l'autre grand conteneur de donnees statiques
 -- d'un jeu Roblox (Configuration/Folder avec attributs, en dehors de
 -- tout ModuleScript deja couvert par la Section C).
 -- ============================================================
 setStatus("Section E: ReplicatedStorage...")
 do
-	local CollectionService = game:GetService("CollectionService")
 	local VALUE_CLASSES = {
 		IntValue=true, NumberValue=true, StringValue=true, BoolValue=true,
 		ObjectValue=true, Vector3Value=true, CFrameValue=true, Color3Value=true,
@@ -664,6 +688,7 @@ do
 	local lines = {}
 	local truncated = false
 
+	-- CollectionService:GetTags() retire ici aussi, meme raison que D.
 	local function extra(child)
 		local extras = {}
 		if VALUE_CLASSES[child.ClassName] then
@@ -679,8 +704,6 @@ do
 			end
 			extras[#extras+1] = "attrs{"..table.concat(parts, ", ").."}"
 		end
-		local okT, tags = pcall(function() return CollectionService:GetTags(child) end)
-		if okT and #tags > 0 then extras[#extras+1] = "tags["..table.concat(tags, ",").."]" end
 		if #extras == 0 then return "" end
 		return "  <"..table.concat(extras, " | ")..">"
 	end
@@ -705,7 +728,7 @@ do
 	if truncated then
 		body = body..string.format("\n... (garde-fou %d lignes atteint)", MAX_TREE_LINES)
 	end
-	addSection("E. Catalogue ReplicatedStorage COMPLET (+ValueBase/attrs/tags)", body)
+	addSection("E. Catalogue ReplicatedStorage COMPLET (+ValueBase/attrs)", body)
 end
 
 -- ============================================================
@@ -744,86 +767,39 @@ do
 end
 
 -- ============================================================
--- SECTION G — meme arbre enrichi (ValueBase/.Value + attributs +
--- tags) que D/E, applique a TOUS les AUTRES services decouverts
--- dynamiquement (game:GetChildren(), meme decouverte que la Section
--- C) — Players (attributs poses sur le Player lui-meme, pas juste
--- son Character deja vu en D), Lighting, Teams, SoundService,
--- StarterGui/StarterPack/StarterPlayer (gabarits), Chat,
--- TextChatService, et les copies runtime PlayerGui/PlayerScripts/
--- Backpack. workspace et ReplicatedStorage sont exclus: deja couverts
--- integralement par D et E, inutile de dupliquer un rapport deja
--- tres volumineux.
+-- SECTION G — attributs poses directement sur chaque objet Player
+-- (pas son Character, deja couvert par l'arbre D — le Player lui-meme,
+-- un motif reel pour des donnees "best value" par joueur). Retour
+-- arriere volontaire: la version precedente parcourait EN PLUS
+-- Lighting/Teams/SoundService/Chat/Starter*/PlayerGui/PlayerScripts/
+-- Backpack en entier avec attributs+tags sur chaque instance — cout
+-- reel (PlayerGui peut avoir des milliers de descendants) pour une
+-- zone quasi jamais porteuse de donnees egg/pet (PlayerGui est deja
+-- couvert plus efficacement par le scan textuel cible de la Section
+-- H). Coupe pour rester rapide: cout ici = O(nombre de joueurs), donc
+-- negligeable.
 -- ============================================================
-setStatus("Section G: autres services...")
+setStatus("Section G: joueurs...")
 do
-	local CollectionService = game:GetService("CollectionService")
-	local VALUE_CLASSES = {
-		IntValue=true, NumberValue=true, StringValue=true, BoolValue=true,
-		ObjectValue=true, Vector3Value=true, CFrameValue=true, Color3Value=true,
-	}
-	local MAX_TREE_DEPTH, MAX_TREE_LINES = 80, 150000
-
-	local function extra(child)
-		local extras = {}
-		if VALUE_CLASSES[child.ClassName] then
-			local ok, v = pcall(function() return child.Value end)
-			if ok then extras[#extras+1] = "value="..fmtLeaf(v) end
-		end
-		local okA, attrs = pcall(function() return child:GetAttributes() end)
-		if okA and next(attrs) then
-			local parts = {}
-			for k, v in pairs(attrs) do
-				parts[#parts+1] = k.."="..fmtLeaf(v)
-				if isFlagKey(k) or looksLikeMoney(v) then
-					flagged[#flagged+1] = {path="Attribute."..child:GetFullName().."."..k, value=fmtLeaf(v)}
-				end
-			end
-			extras[#extras+1] = "attrs{"..table.concat(parts, ", ").."}"
-		end
-		local okT, tags = pcall(function() return CollectionService:GetTags(child) end)
-		if okT and #tags > 0 then extras[#extras+1] = "tags["..table.concat(tags, ",").."]" end
-		if #extras == 0 then return "" end
-		return "  <"..table.concat(extras, " | ")..">"
-	end
-
-	local roots = {}
+	local lines = {}
 	pcall(function()
-		for _, svc in ipairs(game:GetChildren()) do
-			if svc ~= workspace and svc ~= ReplicatedStorage then roots[#roots+1] = svc end
+		for _, plr in ipairs(Players:GetPlayers()) do
+			local okA, attrs = pcall(function() return plr:GetAttributes() end)
+			if okA and next(attrs) then
+				local parts = {}
+				for k, v in pairs(attrs) do
+					parts[#parts+1] = k.."="..fmtLeaf(v)
+					if isFlagKey(k) or looksLikeMoney(v) then
+						flagged[#flagged+1] = {path="Attribute.Player."..plr.Name.."."..k, value=fmtLeaf(v)}
+					end
+				end
+				lines[#lines+1] = "  ["..plr.Name.."] "..table.concat(parts, ", ")
+			end
 		end
 	end)
-	pcall(function() if LP:FindFirstChild("PlayerGui") then roots[#roots+1] = LP.PlayerGui end end)
-	pcall(function() if LP:FindFirstChild("PlayerScripts") then roots[#roots+1] = LP.PlayerScripts end end)
-	pcall(function() if LP:FindFirstChild("Backpack") then roots[#roots+1] = LP.Backpack end end)
-
-	local body = ""
-	for _, root in ipairs(roots) do
-		local lines, truncated = {}, false
-		local function walk(inst, depth, prefix)
-			for _, child in ipairs(inst:GetChildren()) do
-				if #lines >= MAX_TREE_LINES then truncated = true; return end
-				local tag = child:IsA("ModuleScript") and "  (dump complet: voir Section C)" or extra(child)
-				local sub = #child:GetChildren()
-				lines[#lines+1] = string.format("%s%s (%s)%s%s", prefix, child.Name, child.ClassName,
-					sub > 0 and string.format(" — %d enfant(s)", sub) or "", tag)
-				if #lines % 300 == 0 then task.wait() end
-				if sub > 0 and depth < MAX_TREE_DEPTH then walk(child, depth + 1, prefix.."  ") end
-			end
-		end
-		local ok = pcall(function()
-			-- Le root lui-meme peut porter des attributs (ex: Player).
-			local rootExtra = extra(root)
-			lines[#lines+1] = root.Name.." (racine)"..rootExtra
-			walk(root, 1, "  ")
-		end)
-		if ok and #lines > 1 then  -- >1: la ligne racine seule sans enfant n'a aucun interet
-			body = body.."\n=== "..root:GetFullName().." ===\n"..table.concat(lines, "\n")
-			if truncated then body = body.."\n... (garde-fou lignes atteint)" end
-		end
-	end
-	if body == "" then body = "(aucun service supplementaire accessible ou tous vides)" end
-	addSection("G. Autres services (arbre enrichi generique)", body)
+	local body = #lines > 0 and table.concat(lines, "\n")
+		or "(aucun joueur present n'a d'attributs)"
+	addSection("G. Attributs des objets Player", body)
 end
 
 -- ============================================================
