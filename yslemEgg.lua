@@ -2206,11 +2206,25 @@ makeButton(miscPage, "Rejoin Server", "Rejoin", function()
 end, true)
 
 makeButton(miscPage, "Copy Player ID", "Copy", function()
-	pcall(function()
-		setclipboard(tostring(LP.UserId))
-		setStatus("ID copied: "..LP.UserId, C.GREEN)
-		task.delay(2, function() setStatus("Idle", C.DIM) end)
-	end)
+	-- setclipboard n'existe pas sur tous les executeurs — appele sans
+	-- verif, ça levait une erreur avalee silencieusement par le pcall
+	-- englobant: le bouton semblait ne rien faire, aucun signe, aucun
+	-- feedback (meme confusion que vecue sur le scan d'analyse). Fallback:
+	-- si aucune fonction de presse-papiers n'est dispo, affiche l'ID
+	-- directement dans le statut pour qu'il reste lisible/notable.
+	local id = tostring(LP.UserId)
+	local copied = false
+	if type(setclipboard) == "function" then
+		copied = pcall(setclipboard, id)
+	elseif type(toclipboard) == "function" then
+		copied = pcall(toclipboard, id)
+	end
+	if copied then
+		setStatus("ID copied: "..id, C.GREEN)
+	else
+		setStatus("Clipboard unsupported — ID: "..id, C.YELLOW)
+	end
+	task.delay(4, function() setStatus("Idle", C.DIM) end)
 end)
 
 -- Click TP
