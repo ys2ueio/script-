@@ -1,23 +1,28 @@
 --[[
 	yslem_EggValueScan_Standalone.lua
 	================================================================
-	Objectif : savoir si CE jeu expose une "valeur" d'œuf (prix/worth,
-	comme "Snowy Owl — 26.77M" vu dans LENNON HUB, avec un toggle
-	"Teleguiado" qui vise toujours l'œuf le plus cher). yslemEgg.lua
-	ne lit aujourd'hui QUE Mutation/NestScale/Zone/CFrame dans les
-	payloads FieldEggShifted / AskFieldEggSnapshot — tout autre champ
+	Objectif : UN SEUL rapport, complet, qui donne toute la
+	connaissance nécessaire sur le systeme d'oeufs de CE jeu — pas
+	seulement "y a-t-il une valeur" mais toute la structure autour :
+	valeur d'oeuf (comme "Snowy Owl — 26.77M" vu dans LENNON HUB avec
+	son toggle "Teleguiado"), tables de donnees statiques, inventaire
+	complet des remotes, et carte de la map. yslemEgg.lua ne lit
+	aujourd'hui QUE Mutation/NestScale/Zone/CFrame dans les payloads
+	FieldEggShifted / AskFieldEggSnapshot — tout autre champ
 	(Value/Price/Worth/Species/...) est actuellement ignoré en
-	silence. Ce script dump TOUT le contenu brut (toutes les clefs)
-	pour voir ce qui existe réellement, avant d'aller construire une
-	fonctionnalité "Best Egg" sur une supposition.
+	silence. Ce script dump TOUT (toutes les clefs, tous les modules,
+	tous les remotes) pour construire une comprehension complete
+	avant d'aller batir une fonctionnalite "Best Egg" sur une
+	supposition.
 
 	100% lecture seule : aucun hook ne bloque ni ne modifie quoi que
 	ce soit. On écoute, on Invoke (lecture), on require() des
 	ModuleScripts de données (lecture de leur table retournée). Aucune
 	action gameplay.
 
-	Auto-run, auto-stop. Résultats dans une fenêtre en jeu (3 sections
-	scrollables) + dump complet dans la console + bouton "Copier".
+	Auto-run, auto-stop apres ~40s. Résultats dans une fenêtre en jeu
+	(5 sections scrollables) + dump complet dans la console + bouton
+	"Copier" — un seul rapport consolidé, a coller integralement.
 	================================================================
 ]]
 
@@ -26,10 +31,10 @@ local UserInputService   = game:GetService("UserInputService")
 local ReplicatedStorage  = game:GetService("ReplicatedStorage")
 local LP = Players.LocalPlayer
 
-local LIVE_CAPTURE_DURATION = 15   -- secondes d'écoute FieldEggShifted
+local LIVE_CAPTURE_DURATION = 40   -- secondes d'écoute FieldEggShifted
 
 local function log(...) print("[EGGSCAN]", ...) end
-log("=== DEBUT EggValueScan ===")
+log("=== DEBUT Analyse complete (40s) ===")
 
 -- ============================================================
 -- Rapport texte (console + presse-papiers) — rempli au fur et à
@@ -188,7 +193,7 @@ local function buildUI()
 		title.TextSize = 15
 		title.TextColor3 = C_TEXT
 		title.TextXAlignment = Enum.TextXAlignment.Left
-		title.Text = "Egg Value Scan"
+		title.Text = "Analyse complete (40s)"
 		title.Parent = header
 
 		local status = Instance.new("TextLabel")
@@ -307,7 +312,7 @@ end
 -- On dump TOUTES les clefs de TOUTES les entrees (pas juste
 -- Mutation/NestScale/Zone comme yslemEgg.lua) pour voir ce qui existe.
 -- ============================================================
-setStatus("Section A/D...")
+setStatus("Section A...")
 do
 	local rf = getRemote("RF/EggWorld/AskFieldEggSnapshot")
 	if not (rf and rf:IsA("RemoteFunction")) then
@@ -354,13 +359,26 @@ do
 end
 
 -- ============================================================
--- SECTION C — scan des ModuleScript de donnees dans ReplicatedStorage.
--- Filtre: nom contenant ("egg" ou "pet") ET un mot-clef valeur/config,
--- sans mot-clef "controller/manager/service/handler/system/network"
--- (evite de require() des modules actifs, on cible les tables statiques).
+-- SECTION C — scan des ModuleScript de ReplicatedStorage.
+-- 1) Inventaire COMPLET (juste les noms, groupes par dossier parent)
+--    de tous les ModuleScripts — pour avoir la carte complete de
+--    l'espace de donnees du jeu, meme ceux qu'aucun mot-clef ne
+--    matche (utile si le nommage reel differe de nos suppositions).
+-- 2) Dump complet (require + contenu) des candidats dont le nom
+--    evoque des donnees d'oeuf/pet statiques: ("egg" ou "pet") ET
+--    un mot-clef valeur/config, sans mot-clef "controller/manager/
+--    service/handler/system/network" (evite de require() des
+--    modules actifs, on cible les tables statiques).
 -- ============================================================
 setStatus("Section C...")
 do
+	local allMods = {}
+	pcall(function()
+		for _, inst in ipairs(ReplicatedStorage:GetDescendants()) do
+			if inst:IsA("ModuleScript") then allMods[#allMods+1] = inst end
+		end
+	end)
+
 	local INCLUDE_A = {"egg","pet"}
 	local INCLUDE_B = {"value","price","worth","data","config","rarity","mutation","index","list"}
 	local EXCLUDE    = {"controller","manager","service","handler","system","network","remote","ui","gui"}
@@ -376,20 +394,27 @@ do
 	end
 
 	local candidates = {}
-	pcall(function()
-		for _, inst in ipairs(ReplicatedStorage:GetDescendants()) do
-			if inst:IsA("ModuleScript") and matches(inst.Name) then
-				candidates[#candidates+1] = inst
-			end
-		end
-	end)
+	for _, mod in ipairs(allMods) do
+		if matches(mod.Name) then candidates[#candidates+1] = mod end
+	end
 
-	local body = string.format("%d ModuleScript(s) candidat(s) trouve(s).\n", #candidates)
+	local body = string.format("%d ModuleScript(s) au total sous ReplicatedStorage.\n", #allMods)
+	body = body.."Inventaire complet (nom + chemin), plafonne a 200:\n"
+	for i, mod in ipairs(allMods) do
+		if i > 200 then
+			body = body..string.format("  ... (+%d autres, tronque)\n", #allMods - 200)
+			break
+		end
+		body = body.."  "..mod:GetFullName().."\n"
+	end
+
+	body = body.."\n"..string.format("%d candidat(s) donnees oeuf/pet (dump complet ci-dessous):\n", #candidates)
 	if #candidates == 0 then
 		body = body.."Aucun module dont le nom evoque une table de valeurs "
 			.."(egg/pet + value/price/worth/data/config/rarity/mutation).\n"
-			.."Le jeu utilise peut-etre un autre nommage, ou les valeurs "
-			.."sont calculees cote serveur uniquement (jamais envoyees au client)."
+			.."Le jeu utilise peut-etre un autre nommage (voir l'inventaire "
+			.."complet ci-dessus), ou les valeurs sont calculees cote serveur "
+			.."uniquement (jamais envoyees au client)."
 	else
 		for _, mod in ipairs(candidates) do
 			body = body.."\n--- "..mod:GetFullName().." ---\n"
@@ -403,25 +428,45 @@ do
 			end
 		end
 	end
-	addSection("C. ModuleScripts de donnees (ReplicatedStorage)", body)
+	addSection("C. ModuleScripts (inventaire complet + dump cible)", body)
 end
 
 -- ============================================================
--- SECTION D — catalogue rapide de la map (2 niveaux) + leaderstats
--- du joueur (souvent le seul endroit ou une "valeur" en $/points
--- apparait deja formatee, ce qui confirme si le jeu a un concept
--- de valeur monetaire du tout).
+-- SECTION D — catalogue de la map sur 3 niveaux (arbre workspace) +
+-- tally des ClassName rencontres + leaderstats du joueur (souvent le
+-- seul endroit ou une "valeur" en $/points apparait deja formatee,
+-- ce qui confirme si le jeu a un concept de valeur monetaire).
 -- ============================================================
+setStatus("Section D...")
 do
 	local lines = {}
+	local classTally = {}
+	local function walk(inst, depth, prefix)
+		classTally[inst.ClassName] = (classTally[inst.ClassName] or 0) + 1
+		if depth > 3 then return end
+		for _, child in ipairs(inst:GetChildren()) do
+			local sub = #child:GetChildren()
+			lines[#lines+1] = string.format("%s%s (%s)%s", prefix, child.Name, child.ClassName,
+				sub > 0 and string.format(" — %d enfant(s)", sub) or "")
+			classTally[child.ClassName] = (classTally[child.ClassName] or 0) + 1
+			if depth < 3 then walk(child, depth + 1, prefix.."  ") end
+		end
+	end
 	pcall(function()
 		for _, child in ipairs(workspace:GetChildren()) do
-			local sub = 0
-			for _, gc in ipairs(child:GetChildren()) do sub = sub + 1 end
-			lines[#lines+1] = string.format("%s (%s) — %d enfant(s)", child.Name, child.ClassName, sub)
+			local sub = #child:GetChildren()
+			lines[#lines+1] = string.format("%s (%s)%s", child.Name, child.ClassName,
+				sub > 0 and string.format(" — %d enfant(s)", sub) or "")
+			if sub > 0 and sub < 60 then walk(child, 2, "  ") end
 		end
 	end)
-	local body = table.concat(lines, "\n")
+	local body = "Arbre workspace (3 niveaux, dossiers de plus de 60 enfants non-expanses):\n"
+		..table.concat(lines, "\n")
+
+	local tallyLines = {}
+	for cn, n in pairs(classTally) do tallyLines[#tallyLines+1] = string.format("  %s: %d", cn, n) end
+	table.sort(tallyLines)
+	body = body.."\n\nRepartition par ClassName:\n"..table.concat(tallyLines, "\n")
 
 	local ls = LP:FindFirstChild("leaderstats")
 	if ls then
@@ -432,7 +477,42 @@ do
 	else
 		body = body.."\n\n(pas de leaderstats trouve sur le joueur)"
 	end
-	addSection("D. Catalogue map + leaderstats", body)
+	addSection("D. Catalogue map (3 niveaux) + leaderstats", body)
+end
+
+-- ============================================================
+-- SECTION E — inventaire COMPLET des remotes (Packages.Networking),
+-- groupes par famille (le prefixe avant le 2e "/"). Donne la carte
+-- complete de la surface reseau du jeu, pas seulement EggWorld —
+-- utile pour reperer d'autres systemes lies a la valeur (Shop,
+-- Market, Inventory, PetIndex, ...).
+-- ============================================================
+setStatus("Section E...")
+do
+	local body
+	if not NetFolder then
+		body = "Packages.Networking introuvable — le jeu utilise peut-etre "
+			.."un autre systeme de remotes."
+	else
+		local families = {}
+		local total = 0
+		for _, inst in ipairs(NetFolder:GetChildren()) do
+			total = total + 1
+			local fam = inst.Name:match("^([^/]+/[^/]+)/") or inst.Name:match("^([^/]+)/") or "?"
+			families[fam] = families[fam] or {}
+			table.insert(families[fam], string.format("%s [%s]", inst.Name, inst.ClassName))
+		end
+		local famNames = {}
+		for fam in pairs(families) do famNames[#famNames+1] = fam end
+		table.sort(famNames)
+		local lines = {string.format("%d remote(s) au total, %d famille(s):", total, #famNames)}
+		for _, fam in ipairs(famNames) do
+			lines[#lines+1] = "\n"..fam..":"
+			for _, entry in ipairs(families[fam]) do lines[#lines+1] = "  "..entry end
+		end
+		body = table.concat(lines, "\n")
+	end
+	addSection("E. Inventaire complet des remotes (Networking)", body)
 end
 
 -- ============================================================
@@ -449,7 +529,7 @@ do
 	local conn
 	if re and re:IsA("RemoteEvent") then
 		conn = re.OnClientEvent:Connect(function(a1, a2)
-			if #captured >= 6 then return end
+			if #captured >= 12 then return end
 			local data = (type(a2) == "table" and a2) or (type(a1) == "table" and a1) or nil
 			if data then captured[#captured+1] = data end
 		end)
