@@ -471,26 +471,66 @@ end
 -- ============================================================
 -- SECTION D — arbre COMPLET du workspace, tout niveau, tout dossier
 -- (plus de plafond "3 niveaux" ni de saut des dossiers >60 enfants —
--- "tout" veut dire tout). MAX_TREE_DEPTH n'est qu'un garde-fou anti-
--- stack-overflow (aucune hierarchie Roblox reelle n'atteint 60
--- niveaux), pas un filtre de contenu ; MAX_TREE_LINES est un garde-
--- fou de derniere ligne contre un rapport de plusieurs dizaines de
--- Mo si la map est extraordinairement massive.
--- Tally des ClassName rencontres + leaderstats du joueur (souvent le
--- seul endroit ou une "valeur" en $/points apparait deja formatee).
+-- "tout" veut dire tout), ENRICHI de 3 sources de donnees que le
+-- premier passage ratait completement :
+--   1) ValueBase (.Value) — IntValue/NumberValue/StringValue/
+--      BoolValue affichent leur valeur directement (motif classique
+--      Roblox pour stocker une donnee sur une instance, comme
+--      leaderstats mais n'importe ou dans la hierarchie).
+--   2) Attributs (Instance:GetAttributes()) — motif moderne
+--      equivalent, tres courant pour poser p.ex. Value/Rarity/Price
+--      directement sur le modele d'un oeuf sans passer par un remote.
+--   3) Tags CollectionService — categorisation frequente (ex: tag
+--      "Egg" ou "RarityLegendary" sur un modele).
+-- MAX_TREE_DEPTH n'est qu'un garde-fou anti-stack-overflow (aucune
+-- hierarchie Roblox reelle n'atteint 80 niveaux), pas un filtre de
+-- contenu ; MAX_TREE_LINES est un garde-fou de derniere ligne contre
+-- un rapport de plusieurs dizaines de Mo si la map est
+-- extraordinairement massive.
+-- Tally des ClassName rencontres + leaderstats de TOUS les joueurs
+-- (pas seulement LocalPlayer — c'est un dossier public, diffuse a
+-- tout le monde par design, donc une vraie source si le jeu y affiche
+-- une "meilleure valeur" par joueur).
 -- ============================================================
 setStatus("Section D: map...")
 do
+	local CollectionService = game:GetService("CollectionService")
+	local VALUE_CLASSES = {
+		IntValue=true, NumberValue=true, StringValue=true, BoolValue=true,
+		ObjectValue=true, Vector3Value=true, CFrameValue=true, Color3Value=true,
+	}
 	local MAX_TREE_DEPTH, MAX_TREE_LINES = 80, 150000
 	local lines = {}
 	local classTally = {}
 	local truncated = false
+
+	local function extra(child)
+		local extras = {}
+		if VALUE_CLASSES[child.ClassName] then
+			local ok, v = pcall(function() return child.Value end)
+			if ok then extras[#extras+1] = "value="..fmtLeaf(v) end
+		end
+		local okA, attrs = pcall(function() return child:GetAttributes() end)
+		if okA and next(attrs) then
+			local parts = {}
+			for k, v in pairs(attrs) do
+				parts[#parts+1] = k.."="..fmtLeaf(v)
+				if isFlagKey(k) then flagged[#flagged+1] = {path="Attribute."..child:GetFullName().."."..k, value=fmtLeaf(v)} end
+			end
+			extras[#extras+1] = "attrs{"..table.concat(parts, ", ").."}"
+		end
+		local okT, tags = pcall(function() return CollectionService:GetTags(child) end)
+		if okT and #tags > 0 then extras[#extras+1] = "tags["..table.concat(tags, ",").."]" end
+		if #extras == 0 then return "" end
+		return "  <"..table.concat(extras, " | ")..">"
+	end
+
 	local function walk(inst, depth, prefix)
 		for _, child in ipairs(inst:GetChildren()) do
 			if #lines >= MAX_TREE_LINES then truncated = true; return end
 			local sub = #child:GetChildren()
-			lines[#lines+1] = string.format("%s%s (%s)%s", prefix, child.Name, child.ClassName,
-				sub > 0 and string.format(" — %d enfant(s)", sub) or "")
+			lines[#lines+1] = string.format("%s%s (%s)%s%s", prefix, child.Name, child.ClassName,
+				sub > 0 and string.format(" — %d enfant(s)", sub) or "", extra(child))
 			classTally[child.ClassName] = (classTally[child.ClassName] or 0) + 1
 			if sub > 0 and depth < MAX_TREE_DEPTH then walk(child, depth + 1, prefix.."  ") end
 		end
@@ -498,14 +538,14 @@ do
 	pcall(function()
 		for _, child in ipairs(workspace:GetChildren()) do
 			local sub = #child:GetChildren()
-			lines[#lines+1] = string.format("%s (%s)%s", child.Name, child.ClassName,
-				sub > 0 and string.format(" — %d enfant(s)", sub) or "")
+			lines[#lines+1] = string.format("%s (%s)%s%s", child.Name, child.ClassName,
+				sub > 0 and string.format(" — %d enfant(s)", sub) or "", extra(child))
 			classTally[child.ClassName] = (classTally[child.ClassName] or 0) + 1
 			if sub > 0 then walk(child, 1, "  ") end
 		end
 	end)
-	local body = "Arbre workspace COMPLET (aucun niveau ni dossier saute):\n"
-		..table.concat(lines, "\n")
+	local body = "Arbre workspace COMPLET (aucun niveau ni dossier saute; "
+		.."<value=/attrs{}/tags[]> quand presents):\n"..table.concat(lines, "\n")
 	if truncated then
 		body = body..string.format("\n... (garde-fou %d lignes atteint, map exceptionnellement massive)", MAX_TREE_LINES)
 	end
@@ -515,26 +555,94 @@ do
 	table.sort(tallyLines)
 	body = body.."\n\nRepartition par ClassName:\n"..table.concat(tallyLines, "\n")
 
-	local ls = LP:FindFirstChild("leaderstats")
-	if ls then
-		body = body.."\n\nleaderstats du joueur:\n"
-		for _, v in ipairs(ls:GetChildren()) do
-			body = body..string.format("  %s = %s\n", v.Name, tostring(v.Value))
+	body = body.."\n\nleaderstats — TOUS les joueurs presents (dossier public):\n"
+	local anyLs = false
+	pcall(function()
+		for _, plr in ipairs(Players:GetPlayers()) do
+			local ls = plr:FindFirstChild("leaderstats")
+			if ls then
+				anyLs = true
+				body = body.."  ["..plr.Name.."]\n"
+				for _, v in ipairs(ls:GetChildren()) do
+					body = body..string.format("    %s = %s\n", v.Name, tostring(v.Value))
+					if isFlagKey(v.Name) then flagged[#flagged+1] = {path="leaderstats."..plr.Name.."."..v.Name, value=tostring(v.Value)} end
+				end
+			end
 		end
-	else
-		body = body.."\n\n(pas de leaderstats trouve sur le joueur)"
-	end
-	addSection("D. Catalogue map COMPLET + leaderstats", body)
+	end)
+	if not anyLs then body = body.."  (aucun joueur present n'a de leaderstats)" end
+	addSection("D. Catalogue map COMPLET (+ValueBase/attrs/tags) + leaderstats", body)
 end
 
 -- ============================================================
--- SECTION E — inventaire COMPLET des remotes (Packages.Networking),
+-- SECTION E — meme arbre enrichi (ValueBase/.Value + attributs +
+-- tags CollectionService) que la Section D, mais sur ReplicatedStorage
+-- au lieu du workspace: l'autre grand conteneur de donnees statiques
+-- d'un jeu Roblox (Configuration/Folder avec attributs, en dehors de
+-- tout ModuleScript deja couvert par la Section C).
+-- ============================================================
+setStatus("Section E: ReplicatedStorage...")
+do
+	local CollectionService = game:GetService("CollectionService")
+	local VALUE_CLASSES = {
+		IntValue=true, NumberValue=true, StringValue=true, BoolValue=true,
+		ObjectValue=true, Vector3Value=true, CFrameValue=true, Color3Value=true,
+	}
+	local MAX_TREE_DEPTH, MAX_TREE_LINES = 80, 150000
+	local lines = {}
+	local truncated = false
+
+	local function extra(child)
+		local extras = {}
+		if VALUE_CLASSES[child.ClassName] then
+			local ok, v = pcall(function() return child.Value end)
+			if ok then extras[#extras+1] = "value="..fmtLeaf(v) end
+		end
+		local okA, attrs = pcall(function() return child:GetAttributes() end)
+		if okA and next(attrs) then
+			local parts = {}
+			for k, v in pairs(attrs) do
+				parts[#parts+1] = k.."="..fmtLeaf(v)
+				if isFlagKey(k) then flagged[#flagged+1] = {path="Attribute."..child:GetFullName().."."..k, value=fmtLeaf(v)} end
+			end
+			extras[#extras+1] = "attrs{"..table.concat(parts, ", ").."}"
+		end
+		local okT, tags = pcall(function() return CollectionService:GetTags(child) end)
+		if okT and #tags > 0 then extras[#extras+1] = "tags["..table.concat(tags, ",").."]" end
+		if #extras == 0 then return "" end
+		return "  <"..table.concat(extras, " | ")..">"
+	end
+
+	local function walk(inst, depth, prefix)
+		for _, child in ipairs(inst:GetChildren()) do
+			if #lines >= MAX_TREE_LINES then truncated = true; return end
+			-- ModuleScript deja integralement dump en Section C — ici on
+			-- note juste sa presence pour ne pas dupliquer un contenu deja
+			-- affiche ailleurs dans le meme rapport.
+			local tag = child:IsA("ModuleScript") and "  (dump complet: voir Section C)" or extra(child)
+			local sub = #child:GetChildren()
+			lines[#lines+1] = string.format("%s%s (%s)%s%s", prefix, child.Name, child.ClassName,
+				sub > 0 and string.format(" — %d enfant(s)", sub) or "", tag)
+			if sub > 0 and depth < MAX_TREE_DEPTH then walk(child, depth + 1, prefix.."  ") end
+		end
+	end
+	pcall(function() walk(ReplicatedStorage, 0, "") end)
+	local body = "Arbre ReplicatedStorage COMPLET (aucun niveau ni dossier saute; "
+		.."<value=/attrs{}/tags[]> quand presents):\n"..table.concat(lines, "\n")
+	if truncated then
+		body = body..string.format("\n... (garde-fou %d lignes atteint)", MAX_TREE_LINES)
+	end
+	addSection("E. Catalogue ReplicatedStorage COMPLET (+ValueBase/attrs/tags)", body)
+end
+
+-- ============================================================
+-- SECTION F — inventaire COMPLET des remotes (Packages.Networking),
 -- groupes par famille (le prefixe avant le 2e "/"). Donne la carte
 -- complete de la surface reseau du jeu, pas seulement EggWorld —
 -- utile pour reperer d'autres systemes lies a la valeur (Shop,
 -- Market, Inventory, PetIndex, ...).
 -- ============================================================
-setStatus("Section E...")
+setStatus("Section F...")
 do
 	local body
 	if not NetFolder then
@@ -559,7 +667,7 @@ do
 		end
 		body = table.concat(lines, "\n")
 	end
-	addSection("E. Inventaire complet des remotes (Networking)", body)
+	addSection("F. Inventaire complet des remotes (Networking)", body)
 end
 
 -- ============================================================
@@ -622,7 +730,7 @@ do
 		head[#head+1] = "=> Soit ce jeu ne renvoie jamais de valeur cote client"
 		head[#head+1] = "   (calculee uniquement serveur), soit elle est"
 		head[#head+1] = "   nommee autrement — a verifier dans le dump complet"
-		head[#head+1] = "   ci-dessous (sections A/B/C)."
+		head[#head+1] = "   ci-dessous (sections A a F)."
 	else
 		for _, f in ipairs(flagged) do
 			head[#head+1] = string.format("  %s = %s", f.path, f.value)
