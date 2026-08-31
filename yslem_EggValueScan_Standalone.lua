@@ -73,23 +73,35 @@ local function fmtLeaf(v)
 	return tostring(v)
 end
 
-local MAX_DEPTH, MAX_ITEMS = 3, 30
-local function dumpTable(t, path, depth, lines)
+-- Caps volontairement larges — "scanner tout" prime sur la lisibilite.
+-- MAX_DEPTH/MAX_ITEMS restent en dernier recours anti-crash (stack
+-- overflow / rapport de plusieurs dizaines de Mo), pas des filtres de
+-- contenu : la detection de cycle (visited) est ce qui protege
+-- vraiment contre une table auto-referentielle (OOP a la
+-- Roblox, __index vers elle-meme, etc.) — sans elle, un cycle a
+-- N'IMPORTE quelle profondeur boucle a l'infini.
+local MAX_DEPTH, MAX_ITEMS = 12, 500
+local function dumpTable(t, path, depth, lines, visited)
+	if visited[t] then
+		lines[#lines+1] = string.rep("  ", depth).."<cycle: deja visite plus haut>"
+		return
+	end
+	visited[t] = true
 	local n = 0
 	for k, v in pairs(t) do
 		n = n + 1
 		if n > MAX_ITEMS then
-			lines[#lines+1] = string.rep("  ", depth).."... (plus d'entrees, tronque)"
+			lines[#lines+1] = string.rep("  ", depth)..string.format("... (+%d entrees restantes, tronque)", 0)
 			break
 		end
 		local ks   = tostring(k)
 		local kpath = path.."."..ks
 		if typeof(v) == "table" then
 			if depth >= MAX_DEPTH then
-				lines[#lines+1] = string.rep("  ", depth)..ks.." = { ... (profondeur max) }"
+				lines[#lines+1] = string.rep("  ", depth)..ks.." = { ... (profondeur max "..MAX_DEPTH..") }"
 			else
 				lines[#lines+1] = string.rep("  ", depth)..ks.." = {"
-				dumpTable(v, kpath, depth+1, lines)
+				dumpTable(v, kpath, depth+1, lines, visited)
 				lines[#lines+1] = string.rep("  ", depth).."}"
 			end
 		else
@@ -100,6 +112,7 @@ local function dumpTable(t, path, depth, lines)
 			end
 		end
 	end
+	visited[t] = nil  -- depile: un meme sous-tableau reference 2x en parallele (pas en cycle) doit re-dumper
 	if n == 0 then
 		lines[#lines+1] = string.rep("  ", depth).."(table vide)"
 	end
@@ -107,7 +120,7 @@ end
 
 local function dumpRoot(label, t)
 	local lines = {}
-	local ok = pcall(dumpTable, t, label, 1, lines)
+	local ok = pcall(dumpTable, t, label, 1, lines, {})
 	if not ok then lines[#lines+1] = "  (erreur pendant le dump — table incompatible)" end
 	return table.concat(lines, "\n")
 end
@@ -130,6 +143,29 @@ local function getRemote(name)
 		end
 	end
 	return nil
+end
+
+-- require() protege par timeout — indispensable des lors qu'on
+-- require() TOUS les ModuleScripts sans filtre par nom: un module
+-- "controller" peut faire un WaitForChild/InvokeServer bloquant a
+-- son chargement, ce qui gelerait le script entier sans pcall
+-- (pcall n'attrape que les erreurs, pas un yield qui ne revient
+-- jamais). On lance le require() dans son propre thread et on
+-- abandonne si rien n'est revenu apres timeoutSec.
+local function requireWithTimeout(mod, timeoutSec)
+	local done, ok, result = false, false, nil
+	task.spawn(function()
+		ok, result = pcall(require, mod)
+		done = true
+	end)
+	local t0 = os.clock()
+	while not done and os.clock() - t0 < timeoutSec do
+		task.wait(0.05)
+	end
+	if not done then
+		return false, string.format("(timeout %.1fs — le module yield probablement au chargement, ignore)", timeoutSec)
+	end
+	return ok, result
 end
 
 -- ============================================================
@@ -349,8 +385,8 @@ do
 			end
 			table.sort(keyLines)
 			body = body.."Clefs vues sur l'ensemble des entrees:\n"..table.concat(keyLines, "\n")
-			body = body.."\n\nDump complet des 3 premieres entrees:\n"
-			for i = 1, math.min(3, #entries) do
+			body = body..string.format("\n\nDump complet des %d entree(s) (TOUTES, pas un echantillon):\n", #entries)
+			for i = 1, #entries do
 				body = body..dumpRoot("entry"..i, entries[i]).."\n"
 			end
 			addSection("A. AskFieldEggSnapshot", body)
@@ -359,97 +395,87 @@ do
 end
 
 -- ============================================================
--- SECTION C — scan des ModuleScript de ReplicatedStorage.
--- 1) Inventaire COMPLET (juste les noms, groupes par dossier parent)
---    de tous les ModuleScripts — pour avoir la carte complete de
---    l'espace de donnees du jeu, meme ceux qu'aucun mot-clef ne
---    matche (utile si le nommage reel differe de nos suppositions).
--- 2) Dump complet (require + contenu) des candidats dont le nom
---    evoque des donnees d'oeuf/pet statiques: ("egg" ou "pet") ET
---    un mot-clef valeur/config, sans mot-clef "controller/manager/
---    service/handler/system/network" (evite de require() des
---    modules actifs, on cible les tables statiques).
+-- SECTION C — TOUS les ModuleScript, sans filtre par nom, dans TOUS
+-- les conteneurs accessibles cote client (ReplicatedStorage,
+-- ReplicatedFirst, StarterGui, StarterPack, Lighting, workspace —
+-- ServerScriptService/ServerStorage sont invisibles au client, ce
+-- n'est pas un choix mais une limite Roblox). Chaque module est
+-- require() (protege par timeout, voir requireWithTimeout) et son
+-- contenu integralement dump — plus de filtre "egg/pet + value/...":
+-- si un module ne matche aucun mot-clef mais contient bien une table
+-- de valeurs sous un nom auquel on n'a pas pense, ce scan le trouve
+-- quand meme.
 -- ============================================================
-setStatus("Section C...")
+setStatus("Section C: modules...")
 do
-	local allMods = {}
-	pcall(function()
-		for _, inst in ipairs(ReplicatedStorage:GetDescendants()) do
-			if inst:IsA("ModuleScript") then allMods[#allMods+1] = inst end
-		end
-	end)
-
-	local INCLUDE_A = {"egg","pet"}
-	local INCLUDE_B = {"value","price","worth","data","config","rarity","mutation","index","list"}
-	local EXCLUDE    = {"controller","manager","service","handler","system","network","remote","ui","gui"}
-	local function matches(name)
-		local nl = name:lower()
-		local hasA, hasB, hasEx = false, false, false
-		for _, w in ipairs(INCLUDE_A) do if nl:find(w,1,true) then hasA=true break end end
-		if not hasA then return false end
-		for _, w in ipairs(INCLUDE_B) do if nl:find(w,1,true) then hasB=true break end end
-		if not hasB then return false end
-		for _, w in ipairs(EXCLUDE) do if nl:find(w,1,true) then hasEx=true break end end
-		return not hasEx
-	end
-
-	local candidates = {}
-	for _, mod in ipairs(allMods) do
-		if matches(mod.Name) then candidates[#candidates+1] = mod end
-	end
-
-	local body = string.format("%d ModuleScript(s) au total sous ReplicatedStorage.\n", #allMods)
-	body = body.."Inventaire complet (nom + chemin), plafonne a 200:\n"
-	for i, mod in ipairs(allMods) do
-		if i > 200 then
-			body = body..string.format("  ... (+%d autres, tronque)\n", #allMods - 200)
-			break
-		end
-		body = body.."  "..mod:GetFullName().."\n"
-	end
-
-	body = body.."\n"..string.format("%d candidat(s) donnees oeuf/pet (dump complet ci-dessous):\n", #candidates)
-	if #candidates == 0 then
-		body = body.."Aucun module dont le nom evoque une table de valeurs "
-			.."(egg/pet + value/price/worth/data/config/rarity/mutation).\n"
-			.."Le jeu utilise peut-etre un autre nommage (voir l'inventaire "
-			.."complet ci-dessus), ou les valeurs sont calculees cote serveur "
-			.."uniquement (jamais envoyees au client)."
-	else
-		for _, mod in ipairs(candidates) do
-			body = body.."\n--- "..mod:GetFullName().." ---\n"
-			local ok, result = pcall(require, mod)
-			if not ok then
-				body = body.."  require() a echoue: "..tostring(result).."\n"
-			elseif type(result) ~= "table" then
-				body = body.."  retourne un "..typeof(result)..", pas une table: "..fmtLeaf(result).."\n"
-			else
-				body = body..dumpRoot(mod.Name, result).."\n"
+	local CONTAINERS = {
+		ReplicatedStorage, game:GetService("ReplicatedFirst"),
+		game:GetService("StarterGui"), game:GetService("StarterPack"),
+		game:GetService("Lighting"), workspace,
+	}
+	local allMods, seen = {}, {}
+	for _, root in ipairs(CONTAINERS) do
+		pcall(function()
+			for _, inst in ipairs(root:GetDescendants()) do
+				if inst:IsA("ModuleScript") and not seen[inst] then
+					seen[inst] = true
+					allMods[#allMods+1] = inst
+				end
 			end
+		end)
+	end
+
+	local body = string.format("%d ModuleScript(s) au total (tous conteneurs client confondus).\n"
+		.."require() + dump integral de CHAQUE module ci-dessous "
+		.."(timeout 0.3s par module si un chargement bloque).\n", #allMods)
+	local nOk, nErr, nTimeout, nNonTable = 0, 0, 0, 0
+	for i, mod in ipairs(allMods) do
+		setStatus(string.format("Section C: modules %d/%d", i, #allMods))
+		body = body.."\n--- "..mod:GetFullName().." ---\n"
+		local ok, result = requireWithTimeout(mod, 0.3)
+		if not ok then
+			local msg = tostring(result)
+			if msg:find("timeout", 1, true) then nTimeout = nTimeout + 1 else nErr = nErr + 1 end
+			body = body.."  echec: "..msg.."\n"
+		elseif type(result) ~= "table" then
+			nNonTable = nNonTable + 1
+			body = body.."  retourne un "..typeof(result)..", pas une table: "..fmtLeaf(result).."\n"
+		else
+			nOk = nOk + 1
+			body = body..dumpRoot(mod.Name, result).."\n"
 		end
 	end
-	addSection("C. ModuleScripts (inventaire complet + dump cible)", body)
+	body = body..string.format(
+		"\nResume: %d dumpes en table, %d non-table, %d en erreur, %d en timeout (sur %d).",
+		nOk, nNonTable, nErr, nTimeout, #allMods)
+	addSection("C. TOUS les ModuleScripts (dump integral)", body)
 end
 
 -- ============================================================
--- SECTION D — catalogue de la map sur 3 niveaux (arbre workspace) +
--- tally des ClassName rencontres + leaderstats du joueur (souvent le
--- seul endroit ou une "valeur" en $/points apparait deja formatee,
--- ce qui confirme si le jeu a un concept de valeur monetaire).
+-- SECTION D — arbre COMPLET du workspace, tout niveau, tout dossier
+-- (plus de plafond "3 niveaux" ni de saut des dossiers >60 enfants —
+-- "tout" veut dire tout). MAX_TREE_DEPTH n'est qu'un garde-fou anti-
+-- stack-overflow (aucune hierarchie Roblox reelle n'atteint 60
+-- niveaux), pas un filtre de contenu ; MAX_TREE_LINES est un garde-
+-- fou de derniere ligne contre un rapport de plusieurs dizaines de
+-- Mo si la map est extraordinairement massive.
+-- Tally des ClassName rencontres + leaderstats du joueur (souvent le
+-- seul endroit ou une "valeur" en $/points apparait deja formatee).
 -- ============================================================
-setStatus("Section D...")
+setStatus("Section D: map...")
 do
+	local MAX_TREE_DEPTH, MAX_TREE_LINES = 60, 50000
 	local lines = {}
 	local classTally = {}
+	local truncated = false
 	local function walk(inst, depth, prefix)
-		classTally[inst.ClassName] = (classTally[inst.ClassName] or 0) + 1
-		if depth > 3 then return end
 		for _, child in ipairs(inst:GetChildren()) do
+			if #lines >= MAX_TREE_LINES then truncated = true; return end
 			local sub = #child:GetChildren()
 			lines[#lines+1] = string.format("%s%s (%s)%s", prefix, child.Name, child.ClassName,
 				sub > 0 and string.format(" — %d enfant(s)", sub) or "")
 			classTally[child.ClassName] = (classTally[child.ClassName] or 0) + 1
-			if depth < 3 then walk(child, depth + 1, prefix.."  ") end
+			if sub > 0 and depth < MAX_TREE_DEPTH then walk(child, depth + 1, prefix.."  ") end
 		end
 	end
 	pcall(function()
@@ -457,11 +483,15 @@ do
 			local sub = #child:GetChildren()
 			lines[#lines+1] = string.format("%s (%s)%s", child.Name, child.ClassName,
 				sub > 0 and string.format(" — %d enfant(s)", sub) or "")
-			if sub > 0 and sub < 60 then walk(child, 2, "  ") end
+			classTally[child.ClassName] = (classTally[child.ClassName] or 0) + 1
+			if sub > 0 then walk(child, 1, "  ") end
 		end
 	end)
-	local body = "Arbre workspace (3 niveaux, dossiers de plus de 60 enfants non-expanses):\n"
+	local body = "Arbre workspace COMPLET (aucun niveau ni dossier saute):\n"
 		..table.concat(lines, "\n")
+	if truncated then
+		body = body..string.format("\n... (garde-fou %d lignes atteint, map exceptionnellement massive)", MAX_TREE_LINES)
+	end
 
 	local tallyLines = {}
 	for cn, n in pairs(classTally) do tallyLines[#tallyLines+1] = string.format("  %s: %d", cn, n) end
@@ -477,7 +507,7 @@ do
 	else
 		body = body.."\n\n(pas de leaderstats trouve sur le joueur)"
 	end
-	addSection("D. Catalogue map (3 niveaux) + leaderstats", body)
+	addSection("D. Catalogue map COMPLET + leaderstats", body)
 end
 
 -- ============================================================
@@ -529,7 +559,7 @@ do
 	local conn
 	if re and re:IsA("RemoteEvent") then
 		conn = re.OnClientEvent:Connect(function(a1, a2)
-			if #captured >= 12 then return end
+			if #captured >= 500 then return end  -- garde-fou memoire, pas une limite intentionnelle
 			local data = (type(a2) == "table" and a2) or (type(a1) == "table" and a1) or nil
 			if data then captured[#captured+1] = data end
 		end)
