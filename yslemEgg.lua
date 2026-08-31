@@ -326,7 +326,9 @@ pcall(function()
 
 		local mutation = type(data.Mutation) == "string" and data.Mutation or nil
 		local nestScale = type(data.NestScale) == "number" and data.NestScale or nil
-		local zone = _posToZone(pos2)
+		-- Try direct Zone field first (most reliable, server sends it explicitly).
+		local zoneDir = data.Zone or data.Area or data.AreaName or data.Island or data.ZoneName
+		local zone = (type(zoneDir)=="string" and zoneDir~="") and zoneDir or _posToZone(pos2)
 
 		local tags = {}
 		local low = (mutation or ""):lower()
@@ -336,8 +338,10 @@ pcall(function()
 
 		-- Stable cache key even without a real id (rounded position).
 		local cacheKey = realUid or string.format("%.0f_%.0f_%.0f", pos2.X, pos2.Y, pos2.Z)
+		-- Use BottomCFrame as the physical walk target when available (less elevated than center).
+		local walkPos = (typeof(data.BottomCFrame)=="CFrame" and data.BottomCFrame.Position) or pos2
 		_fieldEggNet[cacheKey] = {
-			pos=pos2, cf=cf2, mutation=mutation, nestScale=nestScale,
+			pos=walkPos, cf=cf2, mutation=mutation, nestScale=nestScale,
 			zone=zone, tags=tags, uid=realUid, t=tick(), enabled=true,
 			farmable=(realUid ~= nil),
 		}
@@ -386,17 +390,20 @@ task.spawn(function()
 						if pos2 then
 							local mutation = type(data.Mutation) == "string" and data.Mutation or nil
 							local nestScale = type(data.NestScale) == "number" and data.NestScale or nil
-							local zone = _posToZone(pos2)
+							local zoneDir2 = data.Zone or data.Area or data.AreaName or data.Island or data.ZoneName
+							local zone = (type(zoneDir2)=="string" and zoneDir2~="") and zoneDir2 or _posToZone(pos2)
 							local tags2 = {}
 							local low2 = (mutation or ""):lower()
 							for _, kw in ipairs(_RARE_KEYWORDS) do
 								if low2:find(kw,1,true) then table.insert(tags2, kw) end
 							end
+							-- Use BottomCFrame as walk target when available.
+							local walkPos2 = (typeof(data.BottomCFrame)=="CFrame" and data.BottomCFrame.Position) or pos2
 							-- Only add if not already present (FieldEggShifted may have a
 							-- fresher entry with the same uid — don't overwrite it).
 							if not _fieldEggNet[uid2] then
 								_fieldEggNet[uid2] = {
-									pos=pos2, cf=cf2, mutation=mutation, nestScale=nestScale,
+									pos=walkPos2, cf=cf2, mutation=mutation, nestScale=nestScale,
 									zone=zone, tags=tags2, uid=uid2,
 									t=now2, enabled=true, farmable=true,
 								}
@@ -548,6 +555,32 @@ task.spawn(function()
 				end
 			end
 		end)
+
+		-- Zone correction: Source 1 farmable eggs whose zone is "?" (AREA
+		-- build failed — game path unavailable) inherit the zone of the
+		-- nearest Source 2 slot egg (zone extracted from slot name, always
+		-- reliable). Both sources cover the same islands, so proximity is a
+		-- sound proxy for island membership.
+		do
+			local knownSlots = {}
+			for _, r in ipairs(eggs) do
+				if r.slot and r.area and r.area ~= "?" then
+					knownSlots[#knownSlots+1] = r
+				end
+			end
+			if #knownSlots > 0 then
+				for _, r in ipairs(eggs) do
+					if r.area == "?" then
+						local bestZone, bestD = "?", math.huge
+						for _, s in ipairs(knownSlots) do
+							local d = (r.pos - s.pos).Magnitude
+							if d < bestD then bestD = d; bestZone = s.area end
+						end
+						r.area = bestZone
+					end
+				end
+			end
+		end
 
 		_eggScanPromptTotal = total
 		_eggScanPromptEnabled = enabledCount
@@ -1417,10 +1450,20 @@ task.spawn(function()
 			-- already in a slot — see scanner source 2), island filter applied.
 			local myPos = rootPart.Position
 			local best, bestDist = nil, math.huge
+			-- Fuzzy zone match: exact → case-insensitive substring both ways.
+			-- Handles AREA key names that differ in case or carry a suffix
+			-- vs the FARM_ZONES canonical names (e.g. "ForestArea" vs "Forest").
+			local fzLow = St.farmZone:lower()
+			local function _zoneOk(area)
+				if St.farmZone == "" then return true end
+				if not area or area == "?" then return false end
+				if area == St.farmZone then return true end
+				local al = area:lower()
+				return al:find(fzLow,1,true)~=nil or fzLow:find(al,1,true)~=nil
+			end
 			for _, r in ipairs(cachedEggs) do
 				if r.enabled and r.farmable ~= false then
-					local zoneOk = St.farmZone == "" or r.area == St.farmZone
-					if zoneOk then
+					if _zoneOk(r.area) then
 						local d = (r.pos - myPos).Magnitude
 						if d < bestDist then bestDist = d; best = r end
 					end
