@@ -20,7 +20,12 @@
 	ModuleScripts de données (lecture de leur table retournée). Aucune
 	action gameplay.
 
-	Auto-run, auto-stop apres ~40s. Résultats dans une fenêtre en jeu
+	Auto-run, auto-stop. Duree totale variable (peut se compter en
+	minutes selon la taille du jeu) — c'est attendu: priorite donnee a
+	la couverture complete + a ne jamais geler le client, pas a la
+	vitesse. Voir les logs "termine — Xs ecoulees" par section dans la
+	console pour suivre precisement ou passe le temps. Resultats dans
+	une fenêtre en jeu
 	(8 sections scrollables) + dump complet dans la console + bouton
 	"Copier" — un seul rapport consolidé, a coller integralement.
 	================================================================
@@ -34,7 +39,8 @@ local LP = Players.LocalPlayer
 local LIVE_CAPTURE_DURATION = 40   -- secondes d'écoute FieldEggShifted
 
 local function log(...) print("[EGGSCAN]", ...) end
-log("=== DEBUT Analyse complete (40s) ===")
+local _scanStart = os.clock()
+log("=== DEBUT Analyse complete ===")
 
 -- ============================================================
 -- Rapport texte (console + presse-papiers) — rempli au fur et à
@@ -260,7 +266,7 @@ local function buildUI()
 		title.TextSize = 15
 		title.TextColor3 = C_TEXT
 		title.TextXAlignment = Enum.TextXAlignment.Left
-		title.Text = "Analyse complete (40s)"
+		title.Text = "Analyse complete"
 		title.Parent = header
 
 		local status = Instance.new("TextLabel")
@@ -371,11 +377,13 @@ local function addSection(title, body)
 			pad.Parent = lbl
 		end)
 	end
-	-- Pause explicite entre chaque section: laisse le jeu respirer un
-	-- instant entre deux phases du scan au lieu d'enchainer tout d'un
-	-- bloc, en plus des pauses deja inserees a l'interieur des grosses
-	-- boucles (Section C, arbres D/E/G, texte H).
-	task.wait(1)
+	-- Une seule frame suffit a rendre la main entre 2 sections — les
+	-- grosses boucles (C, arbres D/E/G, texte H) ont deja leurs propres
+	-- pauses internes qui font le vrai travail anti-gel. Une pause d'1s
+	-- ICI EN PLUS ne protegeait de rien et ajoutait 8s pour rien sur la
+	-- duree totale (8 sections) — coupe.
+	task.wait()
+	log(string.format("[%s] termine — %.1fs ecoulees depuis le debut", title, os.clock() - _scanStart))
 end
 
 -- ============================================================
@@ -492,7 +500,7 @@ do
 
 	local body = string.format("%d ModuleScript(s) au total (tous conteneurs client confondus).\n"
 		.."require() + dump integral de CHAQUE module ci-dessous "
-		.."(timeout 1s par module si un chargement bloque).\n", #allMods)
+		.."(timeout 0.2s par module si un chargement bloque).\n", #allMods)
 	-- Un require() + dump peut etre lourd, et avec PlayerGui/CoreGui
 	-- inclus la liste peut atteindre plusieurs centaines de modules:
 	-- sans pause, cette boucle tourne d'un bloc et gele le jeu (aucune
@@ -509,7 +517,7 @@ do
 	for i, mod in ipairs(allMods) do
 		setStatus(string.format("Section C: modules %d/%d", i, #allMods))
 		bodyParts[#bodyParts+1] = "\n--- "..mod:GetFullName().." ---\n"
-		local ok, result = requireWithTimeout(mod, 1.0)
+		local ok, result = requireWithTimeout(mod, 0.2)
 		if not ok then
 			local msg = tostring(result)
 			if msg:find("timeout", 1, true) then nTimeout = nTimeout + 1 else nErr = nErr + 1 end
@@ -935,7 +943,7 @@ for _, line in ipairs(report) do
 		if l2 ~= "" then print(l2) end
 	end
 end
-log("=== FIN ===")
+log(string.format("=== FIN — %.1fs ecoulees au total ===", os.clock() - _scanStart))
 
 local fullReport = table.concat(report, "\n")
 local function copyToClipboard(text)
