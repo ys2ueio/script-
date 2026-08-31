@@ -240,8 +240,13 @@ local function buildUI()
 		end
 
 		local main = Instance.new("Frame")
-		main.Size = UDim2.fromOffset(340, 400)
-		main.Position = UDim2.new(0.5, -170, 0.5, -200)
+		-- Nettement plus grande qu'avant (340x400): pour un rapport a
+		-- 8 sections avec des dumps parfois tres longs, une petite fenetre
+		-- rendait le contenu illisible/tasse. La taille en pourcentage de
+		-- l'ecran (avec un plafond en pixels) s'adapte aussi aux petits
+		-- ecrans au lieu d'un fixe qui deborde.
+		main.Size = UDim2.new(0.7, 0, 0.85, 0)
+		main.Position = UDim2.new(0.15, 0, 0.075, 0)
 		main.BackgroundColor3 = C_BG
 		main.BorderSizePixel = 0
 		main.Parent = gui
@@ -375,24 +380,66 @@ local function addSection(title, body)
 	log(title.." — voir console / UI pour le detail")
 	if ui.scroll then
 		pcall(function()
-			local lbl = Instance.new("TextLabel")
-			lbl.LayoutOrder = sectionCount
-			lbl.BackgroundColor3 = C_PANEL
-			lbl.Size = UDim2.new(1, 0, 0, 0)
-			lbl.AutomaticSize = Enum.AutomaticSize.Y
-			lbl.Font = Enum.Font.Code
-			lbl.TextSize = 12
-			lbl.TextColor3 = C_TEXT
-			lbl.TextXAlignment = Enum.TextXAlignment.Left
-			lbl.TextYAlignment = Enum.TextYAlignment.Top
-			lbl.TextWrapped = true
-			lbl.Text = "» "..title.."\n"..body
-			lbl.Parent = ui.scroll
-			corner(lbl, 6)
+			-- Titre et corps separes en 2 labels distincts (avant: un seul
+			-- TextLabel avec le titre juste prefixe "» " dans la meme police/
+			-- taille/couleur que le contenu — illisible pour distinguer une
+			-- section de la suivante dans un rapport dense). Le titre est
+			-- maintenant en gras, plus grand, couleur accent, sur un bandeau
+			-- separe — le corps garde la police a chasse fixe pour
+			-- l'alignement des dumps de table.
+			local card = Instance.new("Frame")
+			card.LayoutOrder = sectionCount
+			card.BackgroundColor3 = C_PANEL
+			card.Size = UDim2.new(1, 0, 0, 0)
+			card.AutomaticSize = Enum.AutomaticSize.Y
+			card.Parent = ui.scroll
+			corner(card, 6)
+			stroke(card, C_ACCENT, 1)
+			local cardLayout = Instance.new("UIListLayout")
+			cardLayout.SortOrder = Enum.SortOrder.LayoutOrder
+			cardLayout.Parent = card
 			local pad = Instance.new("UIPadding")
 			pad.PaddingLeft = UDim.new(0, 8); pad.PaddingRight = UDim.new(0, 8)
-			pad.PaddingTop = UDim.new(0, 6); pad.PaddingBottom = UDim.new(0, 6)
-			pad.Parent = lbl
+			pad.PaddingTop = UDim.new(0, 6); pad.PaddingBottom = UDim.new(0, 8)
+			pad.Parent = card
+
+			local head = Instance.new("TextLabel")
+			head.LayoutOrder = 1
+			head.BackgroundTransparency = 1
+			head.Size = UDim2.new(1, 0, 0, 0)
+			head.AutomaticSize = Enum.AutomaticSize.Y
+			head.Font = Enum.Font.GothamBold
+			head.TextSize = 16
+			head.TextColor3 = C_ACCENT
+			head.TextXAlignment = Enum.TextXAlignment.Left
+			head.TextWrapped = true
+			head.Text = title
+			head.Parent = card
+
+			local rule = Instance.new("Frame")
+			rule.LayoutOrder = 2
+			rule.Size = UDim2.new(1, 0, 0, 1)
+			rule.BackgroundColor3 = C_ACCENT
+			rule.BackgroundTransparency = 0.6
+			rule.BorderSizePixel = 0
+			rule.Parent = card
+
+			local bodyLbl = Instance.new("TextLabel")
+			bodyLbl.LayoutOrder = 3
+			bodyLbl.BackgroundTransparency = 1
+			bodyLbl.Size = UDim2.new(1, 0, 0, 0)
+			bodyLbl.AutomaticSize = Enum.AutomaticSize.Y
+			bodyLbl.Font = Enum.Font.Code
+			bodyLbl.TextSize = 13
+			bodyLbl.TextColor3 = C_TEXT
+			bodyLbl.TextXAlignment = Enum.TextXAlignment.Left
+			bodyLbl.TextYAlignment = Enum.TextYAlignment.Top
+			bodyLbl.TextWrapped = true
+			bodyLbl.Text = body
+			local bodyPad = Instance.new("UIPadding")
+			bodyPad.PaddingTop = UDim.new(0, 6)
+			bodyPad.Parent = bodyLbl
+			bodyLbl.Parent = card
 		end)
 	end
 	-- Une seule frame suffit a rendre la main entre 2 sections — les
