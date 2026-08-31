@@ -2253,23 +2253,21 @@ do
 end
 
 -- ============================================================
--- FLING — proximity ejection (NPCs / guards that approach LP)
+-- FLING — proximity neutralisation of NPCs / guards
 -- ============================================================
--- Heartbeat loop: every 0.05 s, scan all workspace Humanoid models
--- within FLING_RADIUS studs of the local player. Any model that is
--- NOT a real player character gets an outward AssemblyLinearVelocity
--- impulse (away from LP), launching it clear of the area. Real player
--- characters are skipped entirely — we never touch another user's
--- network-owned parts.
+-- _flingRunning is at root scope so the float-dock button handler
+-- (outside the do block) can read it. All other locals stay inside
+-- the do block to stay within the 200-local root-chunk limit.
+local _flingRunning = false
 local startFling, stopFling
 do
-	local FLING_RADIUS  = 25
-	local FLING_FORCE   = 140
-	local _flingActive  = false
-	local _flingConn    = nil
-	local _flingHB      = 0
-	local _flingScanT   = 0
-	local _flingNpcHRPs = {}
+	local FLING_RADIUS = 25   -- stud radius to trigger on a model
+	local FLING_FORCE  = 160  -- outward launch speed (studs/s)
+	local _flingConn   = nil
+	local _flingHB     = 0
+	local _flingScanT  = 0
+	-- Each entry: {hrp, hum, model, savedWS, savedJP}
+	local _flingNpcs   = {}
 
 	local function _isPlayerChar(model)
 		for _, plr in ipairs(Players:GetPlayers()) do
@@ -2278,48 +2276,98 @@ do
 		return false
 	end
 
-	local function _flingApply(hrp, myPos)
+	local function _applyNpc(entry, myPos)
+		local hrp, hum, model = entry.hrp, entry.hum, entry.model
+		if not (hrp and hrp.Parent) then return end
 		local diff = hrp.Position - myPos
 		local mag  = diff.Magnitude
 		if mag >= FLING_RADIUS then return end
+
 		local dir = mag > 0.1
 			and diff.Unit
 			or Vector3.new(math.random()-0.5, 0.5, math.random()-0.5).Unit
-		local vel = dir * FLING_FORCE + Vector3.new(0, 35, 0)
+		local vel = dir * FLING_FORCE + Vector3.new(0, 40, 0)
+
+		-- Method A: setnworkowner (exploit func) on every BasePart → full
+		-- physics authority → AssemblyLinearVelocity actually replicates.
 		pcall(function()
-			if setnworkowner then setnworkowner(hrp, LP) end
+			if setnworkowner then
+				for _, p in ipairs(model:GetDescendants()) do
+					if p:IsA("BasePart") then pcall(setnworkowner, p, LP) end
+				end
+				setnworkowner(hrp, LP)
+			end
 			hrp.AssemblyLinearVelocity = vel
 		end)
+
+		-- Method B: BodyVelocity — persists for 0.4s, may replicate via
+		-- server physics on games where NPC ownership is mixed.
 		pcall(function()
 			local bv = Instance.new("BodyVelocity")
-			bv.Velocity = vel; bv.MaxForce = Vector3.new(1e6,1e6,1e6); bv.P = 1e5
-			bv.Parent = hrp
-			task.delay(0.35, function() pcall(function() bv:Destroy() end) end)
+			bv.Velocity  = vel
+			bv.MaxForce  = Vector3.new(math.huge, math.huge, math.huge)
+			bv.P         = 1e5
+			bv.Parent    = hrp
+			task.delay(0.4, function() pcall(function() bv:Destroy() end) end)
+		end)
+
+		-- Method C: Humanoid state / property manipulation — no network
+		-- ownership required on many executors; at minimum stops the NPC
+		-- from chasing even when velocity methods are blocked.
+		pcall(function()
+			if not hum or not hum.Parent then return end
+			-- Save original values the first time we touch this NPC.
+			if not entry.savedWS then
+				entry.savedWS = hum.WalkSpeed
+				entry.savedJP = hum.JumpPower
+			end
+			hum.WalkSpeed     = 0
+			hum.JumpPower     = 0
+			hum.PlatformStand = true
+			hum:ChangeState(Enum.HumanoidStateType.FallingDown)
+		end)
+	end
+
+	local function _restoreNpc(entry)
+		pcall(function()
+			local hum = entry.hum
+			if not (hum and hum.Parent) then return end
+			if entry.savedWS then hum.WalkSpeed = entry.savedWS end
+			if entry.savedJP then hum.JumpPower = entry.savedJP end
+			hum.PlatformStand = false
 		end)
 	end
 
 	startFling = function()
 		if _flingConn then _flingConn:Disconnect(); _flingConn = nil end
-		_flingActive = true; _flingHB = 0; _flingScanT = 0; _flingNpcHRPs = {}
+		_flingRunning = true; _flingHB = 0; _flingScanT = 0; _flingNpcs = {}
 		_flingConn = RunService.Heartbeat:Connect(function(dt)
-			if not _flingActive then return end
-			-- Rebuild NPC list every 0.5 s — avoids per-frame GetDescendants.
+			if not _flingRunning then return end
+
+			-- Rebuild NPC list every 0.5 s (avoids per-frame GetDescendants).
 			_flingScanT = _flingScanT + dt
 			if _flingScanT >= 0.5 then
 				_flingScanT = 0
+				-- Restore any NPC that disappeared (destroyed between scans).
+				for _, e in ipairs(_flingNpcs) do
+					if not (e.hrp and e.hrp.Parent) then _restoreNpc(e) end
+				end
 				local found = {}
 				for _, desc in ipairs(workspace:GetDescendants()) do
 					if desc:IsA("Humanoid") then
 						local mdl = desc.Parent
 						if mdl and not _isPlayerChar(mdl) then
 							local h = mdl:FindFirstChild("HumanoidRootPart")
-							if h then found[#found+1] = h end
+							if h then
+								found[#found+1] = {hrp=h, hum=desc, model=mdl}
+							end
 						end
 					end
 				end
-				_flingNpcHRPs = found
+				_flingNpcs = found
 			end
-			-- Apply every 0.05 s using the cached list.
+
+			-- Fling pass every 0.05 s against the cached list.
 			_flingHB = _flingHB + dt
 			if _flingHB < 0.05 then return end
 			_flingHB = 0
@@ -2327,16 +2375,16 @@ do
 			local myHRP  = myChar and myChar:FindFirstChild("HumanoidRootPart")
 			if not myHRP then return end
 			local myPos  = myHRP.Position
-			for _, hrp in ipairs(_flingNpcHRPs) do
-				if hrp and hrp.Parent then _flingApply(hrp, myPos) end
-			end
+			for _, e in ipairs(_flingNpcs) do _applyNpc(e, myPos) end
 		end)
 	end
 
 	stopFling = function()
-		_flingActive = false
+		_flingRunning = false
 		if _flingConn then _flingConn:Disconnect(); _flingConn = nil end
-		_flingNpcHRPs = {}
+		-- Restore all affected NPCs.
+		for _, e in ipairs(_flingNpcs) do _restoreNpc(e) end
+		_flingNpcs = {}
 	end
 end
 
@@ -2768,7 +2816,7 @@ for i, def in ipairs(_floatDefs) do
 		-- Persistent toggle: green dot = actively held in the air.
 		-- Click once → launch + hold aloft. Click again → release, fall normally.
 		_floatBtns["fling"].btn.MouseButton1Click:Connect(function()
-			if _flingActive then
+			if _flingRunning then
 				stopFling(); setAct(false)
 			else
 				startFling(); setAct(true)
