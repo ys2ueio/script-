@@ -372,6 +372,41 @@ task.spawn(function()
 	end
 end)
 
+-- Bouton "Copier" connecte ICI, juste apres la creation de l'UI — PAS
+-- a la toute fin du fichier comme avant. Bug reel trouve en jeu: le
+-- script est un long bloc synchrone (section A, puis C, D, E... jusqu'a
+-- B qui peut prendre jusqu'a 40s) ; MouseButton1Click:Connect etant la
+-- DERNIERE instruction du fichier, il ne s'executait qu'une fois TOUT
+-- termine — cliquer pendant le scan (le cas le plus naturel: rien
+-- n'indique "Termine" avant la toute fin, alors on clique des qu'on
+-- voit du contenu) ne faisait ABSOLUMENT rien, aucune erreur, aucun
+-- signe. Maintenant actif des le debut: lit l'etat COURANT de `report`
+-- a chaque clic, donc copie un rapport partiel (mais reel et
+-- exploitable) si cliqué en cours de scan, et le rapport complet une
+-- fois "Termine" affiche.
+local function copyToClipboard(text)
+	if type(setclipboard) == "function" then return pcall(setclipboard, text) end
+	if type(toclipboard) == "function" then return pcall(toclipboard, text) end
+	return false
+end
+if ui.copyBtn then
+	ui.copyBtn.MouseButton1Click:Connect(function()
+		-- Une fois le scan termine, la section "CHAMPS SUSPECTS" a deja
+		-- ete inseree en tete de `report` (indice 1) par le bloc final —
+		-- ce snapshot l'inclut donc automatiquement, rien de plus a faire.
+		local snapshot = table.concat(report, "\n")
+		local ok = copyToClipboard(snapshot)
+		if ok then
+			ui.copyBtn.Text = _scanRunning and "Copie ! (partiel — scan en cours)" or "Copie !"
+		else
+			ui.copyBtn.Text = "Copie indisponible — utilise la console (F9)"
+		end
+		task.delay(2, function()
+			pcall(function() ui.copyBtn.Text = "Copier les resultats" end)
+		end)
+	end)
+end
+
 local sectionCount = 0
 local function addSection(title, body)
 	sectionCount = sectionCount + 1
@@ -993,20 +1028,3 @@ for _, line in ipairs(report) do
 end
 _scanRunning = false  -- arrete le ticker de statut, le scan est termine
 log(string.format("=== FIN — %.1fs ecoulees au total ===", os.clock() - _scanStart))
-
-local fullReport = table.concat(report, "\n")
-local function copyToClipboard(text)
-	if type(setclipboard) == "function" then return pcall(setclipboard, text) end
-	if type(toclipboard) == "function" then return pcall(toclipboard, text) end
-	return false
-end
-
-if ui.copyBtn then
-	ui.copyBtn.MouseButton1Click:Connect(function()
-		local ok = copyToClipboard(fullReport)
-		ui.copyBtn.Text = ok and "Copie !" or "Copie indisponible"
-		task.delay(1.5, function()
-			pcall(function() ui.copyBtn.Text = "Copier les resultats" end)
-		end)
-	end)
-end
