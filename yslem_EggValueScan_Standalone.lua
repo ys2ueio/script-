@@ -80,7 +80,7 @@ end
 -- vraiment contre une table auto-referentielle (OOP a la
 -- Roblox, __index vers elle-meme, etc.) — sans elle, un cycle a
 -- N'IMPORTE quelle profondeur boucle a l'infini.
-local MAX_DEPTH, MAX_ITEMS = 12, 500
+local MAX_DEPTH, MAX_ITEMS = 20, 2000
 local function dumpTable(t, path, depth, lines, visited)
 	if visited[t] then
 		lines[#lines+1] = string.rep("  ", depth).."<cycle: deja visite plus haut>"
@@ -396,11 +396,17 @@ end
 
 -- ============================================================
 -- SECTION C — TOUS les ModuleScript, sans filtre par nom, dans TOUS
--- les conteneurs accessibles cote client (ReplicatedStorage,
--- ReplicatedFirst, StarterGui, StarterPack, Lighting, workspace —
--- ServerScriptService/ServerStorage sont invisibles au client, ce
--- n'est pas un choix mais une limite Roblox). Chaque module est
--- require() (protege par timeout, voir requireWithTimeout) et son
+-- les conteneurs accessibles cote client : ReplicatedStorage,
+-- ReplicatedFirst, StarterGui, StarterPack, StarterPlayer, Lighting,
+-- workspace, Teams, SoundService, Chat, TextChatService — PLUS les
+-- copies REELLEMENT EXECUTEES cote joueur (PlayerGui, PlayerScripts,
+-- Backpack de LocalPlayer), qui sont ou vivent la plupart des
+-- controleurs UI/valeur d'un jeu Roblox moderne — StarterGui/
+-- StarterPack ne sont que les gabarits, les rater aurait rate
+-- l'endroit le plus probable. ServerScriptService/ServerStorage
+-- restent invisibles au client : pas un choix, une limite Roblox
+-- infranchissable depuis un script client. Chaque module est
+-- require() (protege par timeout 1s, voir requireWithTimeout) et son
 -- contenu integralement dump — plus de filtre "egg/pet + value/...":
 -- si un module ne matche aucun mot-clef mais contient bien une table
 -- de valeurs sous un nom auquel on n'a pas pense, ce scan le trouve
@@ -411,8 +417,19 @@ do
 	local CONTAINERS = {
 		ReplicatedStorage, game:GetService("ReplicatedFirst"),
 		game:GetService("StarterGui"), game:GetService("StarterPack"),
+		game:GetService("StarterPlayer"),
 		game:GetService("Lighting"), workspace,
+		game:GetService("Teams"), game:GetService("SoundService"),
 	}
+	pcall(function() CONTAINERS[#CONTAINERS+1] = game:GetService("Chat") end)
+	pcall(function() CONTAINERS[#CONTAINERS+1] = game:GetService("TextChatService") end)
+	-- StarterGui/StarterPack ne sont que les GABARITS. Les copies
+	-- reellement executees (et c'est LA que vivent la plupart des
+	-- controleurs UI/valeur d'un jeu Roblox moderne) sont ici — a
+	-- rater ca, on ratait justement l'endroit le plus probable.
+	pcall(function() if LP:FindFirstChild("PlayerGui") then CONTAINERS[#CONTAINERS+1] = LP.PlayerGui end end)
+	pcall(function() if LP:FindFirstChild("PlayerScripts") then CONTAINERS[#CONTAINERS+1] = LP.PlayerScripts end end)
+	pcall(function() if LP:FindFirstChild("Backpack") then CONTAINERS[#CONTAINERS+1] = LP.Backpack end end)
 	local allMods, seen = {}, {}
 	for _, root in ipairs(CONTAINERS) do
 		pcall(function()
@@ -427,12 +444,12 @@ do
 
 	local body = string.format("%d ModuleScript(s) au total (tous conteneurs client confondus).\n"
 		.."require() + dump integral de CHAQUE module ci-dessous "
-		.."(timeout 0.3s par module si un chargement bloque).\n", #allMods)
+		.."(timeout 1s par module si un chargement bloque).\n", #allMods)
 	local nOk, nErr, nTimeout, nNonTable = 0, 0, 0, 0
 	for i, mod in ipairs(allMods) do
 		setStatus(string.format("Section C: modules %d/%d", i, #allMods))
 		body = body.."\n--- "..mod:GetFullName().." ---\n"
-		local ok, result = requireWithTimeout(mod, 0.3)
+		local ok, result = requireWithTimeout(mod, 1.0)
 		if not ok then
 			local msg = tostring(result)
 			if msg:find("timeout", 1, true) then nTimeout = nTimeout + 1 else nErr = nErr + 1 end
@@ -464,7 +481,7 @@ end
 -- ============================================================
 setStatus("Section D: map...")
 do
-	local MAX_TREE_DEPTH, MAX_TREE_LINES = 60, 50000
+	local MAX_TREE_DEPTH, MAX_TREE_LINES = 80, 150000
 	local lines = {}
 	local classTally = {}
 	local truncated = false
@@ -559,7 +576,7 @@ do
 	local conn
 	if re and re:IsA("RemoteEvent") then
 		conn = re.OnClientEvent:Connect(function(a1, a2)
-			if #captured >= 500 then return end  -- garde-fou memoire, pas une limite intentionnelle
+			if #captured >= 2000 then return end  -- garde-fou memoire, pas une limite intentionnelle
 			local data = (type(a2) == "table" and a2) or (type(a1) == "table" and a1) or nil
 			if data then captured[#captured+1] = data end
 		end)
