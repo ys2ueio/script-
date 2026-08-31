@@ -97,9 +97,19 @@ end
 -- Roblox, __index vers elle-meme, etc.) — sans elle, un cycle a
 -- N'IMPORTE quelle profondeur boucle a l'infini.
 local MAX_DEPTH, MAX_ITEMS = 20, 2000
+-- Compteur partage entre tous les appels dumpTable — un SEUL module de
+-- donnees enorme (large ET profond) peut a lui seul generer des
+-- milliers de lignes sans jamais rendre la main tant que le dump n'est
+-- pas fini; on yield au fil de l'eau plutot que d'attendre la fin.
+local _dumpLineCount = 0
+local function emit(lines, s)
+	lines[#lines+1] = s
+	_dumpLineCount = _dumpLineCount + 1
+	if _dumpLineCount % 500 == 0 then task.wait() end
+end
 local function dumpTable(t, path, depth, lines, visited)
 	if visited[t] then
-		lines[#lines+1] = string.rep("  ", depth).."<cycle: deja visite plus haut>"
+		emit(lines, string.rep("  ", depth).."<cycle: deja visite plus haut>")
 		return
 	end
 	visited[t] = true
@@ -107,22 +117,22 @@ local function dumpTable(t, path, depth, lines, visited)
 	for k, v in pairs(t) do
 		n = n + 1
 		if n > MAX_ITEMS then
-			lines[#lines+1] = string.rep("  ", depth)..string.format("... (+%d entrees restantes, tronque)", 0)
+			emit(lines, string.rep("  ", depth)..string.format("... (+%d entrees restantes, tronque)", 0))
 			break
 		end
 		local ks   = tostring(k)
 		local kpath = path.."."..ks
 		if typeof(v) == "table" then
 			if depth >= MAX_DEPTH then
-				lines[#lines+1] = string.rep("  ", depth)..ks.." = { ... (profondeur max "..MAX_DEPTH..") }"
+				emit(lines, string.rep("  ", depth)..ks.." = { ... (profondeur max "..MAX_DEPTH..") }")
 			else
-				lines[#lines+1] = string.rep("  ", depth)..ks.." = {"
+				emit(lines, string.rep("  ", depth)..ks.." = {")
 				dumpTable(v, kpath, depth+1, lines, visited)
-				lines[#lines+1] = string.rep("  ", depth).."}"
+				emit(lines, string.rep("  ", depth).."}")
 			end
 		else
 			local leaf = fmtLeaf(v)
-			lines[#lines+1] = string.rep("  ", depth)..ks.." = "..leaf
+			emit(lines, string.rep("  ", depth)..ks.." = "..leaf)
 			if isFlagKey(ks) then
 				flagged[#flagged+1] = {path=kpath, value=leaf}
 			elseif looksLikeMoney(v) then
@@ -361,6 +371,11 @@ local function addSection(title, body)
 			pad.Parent = lbl
 		end)
 	end
+	-- Pause explicite entre chaque section: laisse le jeu respirer un
+	-- instant entre deux phases du scan au lieu d'enchainer tout d'un
+	-- bloc, en plus des pauses deja inserees a l'interieur des grosses
+	-- boucles (Section C, arbres D/E/G, texte H).
+	task.wait(1)
 end
 
 -- ============================================================
@@ -406,11 +421,13 @@ do
 			end
 			table.sort(keyLines)
 			body = body.."Clefs vues sur l'ensemble des entrees:\n"..table.concat(keyLines, "\n")
-			body = body..string.format("\n\nDump complet des %d entree(s) (TOUTES, pas un echantillon):\n", #entries)
+			local entryParts = {body,
+				string.format("\n\nDump complet des %d entree(s) (TOUTES, pas un echantillon):\n", #entries)}
 			for i = 1, #entries do
-				body = body..dumpRoot("entry"..i, entries[i]).."\n"
+				entryParts[#entryParts+1] = dumpRoot("entry"..i, entries[i]).."\n"
+				if i % 20 == 0 then task.wait() end
 			end
-			addSection("A. AskFieldEggSnapshot", body)
+			addSection("A. AskFieldEggSnapshot", table.concat(entryParts))
 		end
 	end
 end
@@ -463,11 +480,12 @@ do
 	local allMods, seen = {}, {}
 	for _, root in ipairs(CONTAINERS) do
 		pcall(function()
-			for _, inst in ipairs(root:GetDescendants()) do
+			for i2, inst in ipairs(root:GetDescendants()) do
 				if inst:IsA("ModuleScript") and not seen[inst] then
 					seen[inst] = true
 					allMods[#allMods+1] = inst
 				end
+				if i2 % 1000 == 0 then task.wait() end
 			end
 		end)
 	end
@@ -475,27 +493,40 @@ do
 	local body = string.format("%d ModuleScript(s) au total (tous conteneurs client confondus).\n"
 		.."require() + dump integral de CHAQUE module ci-dessous "
 		.."(timeout 1s par module si un chargement bloque).\n", #allMods)
+	-- Un require() + dump peut etre lourd, et avec PlayerGui/CoreGui
+	-- inclus la liste peut atteindre plusieurs centaines de modules:
+	-- sans pause, cette boucle tourne d'un bloc et gele le jeu (aucune
+	-- image n'est rendue tant qu'un script ne rend pas la main).
+	-- task.wait() CHAQUE iteration force une pause d'une frame — le
+	-- scan devient plus long mais le jeu reste jouable/fluide pendant
+	-- qu'il tourne, ce qui est le vrai objectif ici, pas la vitesse.
+	-- Idem: body est accumule dans une table + table.concat() final au
+	-- lieu de "body = body..." repete, qui ralentit de plus en plus a
+	-- mesure que la chaine grossit (des centaines de modules avec dump
+	-- complet -> ca comptait clairement dans le gel).
+	local bodyParts = {body}
 	local nOk, nErr, nTimeout, nNonTable = 0, 0, 0, 0
 	for i, mod in ipairs(allMods) do
 		setStatus(string.format("Section C: modules %d/%d", i, #allMods))
-		body = body.."\n--- "..mod:GetFullName().." ---\n"
+		bodyParts[#bodyParts+1] = "\n--- "..mod:GetFullName().." ---\n"
 		local ok, result = requireWithTimeout(mod, 1.0)
 		if not ok then
 			local msg = tostring(result)
 			if msg:find("timeout", 1, true) then nTimeout = nTimeout + 1 else nErr = nErr + 1 end
-			body = body.."  echec: "..msg.."\n"
+			bodyParts[#bodyParts+1] = "  echec: "..msg.."\n"
 		elseif type(result) ~= "table" then
 			nNonTable = nNonTable + 1
-			body = body.."  retourne un "..typeof(result)..", pas une table: "..fmtLeaf(result).."\n"
+			bodyParts[#bodyParts+1] = "  retourne un "..typeof(result)..", pas une table: "..fmtLeaf(result).."\n"
 		else
 			nOk = nOk + 1
-			body = body..dumpRoot(mod.Name, result).."\n"
+			bodyParts[#bodyParts+1] = dumpRoot(mod.Name, result).."\n"
 		end
+		task.wait()
 	end
-	body = body..string.format(
+	bodyParts[#bodyParts+1] = string.format(
 		"\nResume: %d dumpes en table, %d non-table, %d en erreur, %d en timeout (sur %d).",
 		nOk, nNonTable, nErr, nTimeout, #allMods)
-	addSection("C. TOUS les ModuleScripts (dump integral)", body)
+	addSection("C. TOUS les ModuleScripts (dump integral)", table.concat(bodyParts))
 end
 
 -- ============================================================
@@ -562,6 +593,9 @@ do
 			lines[#lines+1] = string.format("%s%s (%s)%s%s", prefix, child.Name, child.ClassName,
 				sub > 0 and string.format(" — %d enfant(s)", sub) or "", extra(child))
 			classTally[child.ClassName] = (classTally[child.ClassName] or 0) + 1
+			-- Une map peut avoir des dizaines de milliers d'instances: sans
+			-- pause, ce parcours recursif tourne d'un bloc et gele le jeu.
+			if #lines % 300 == 0 then task.wait() end
 			if sub > 0 and depth < MAX_TREE_DEPTH then walk(child, depth + 1, prefix.."  ") end
 		end
 	end
@@ -653,6 +687,7 @@ do
 			local sub = #child:GetChildren()
 			lines[#lines+1] = string.format("%s%s (%s)%s%s", prefix, child.Name, child.ClassName,
 				sub > 0 and string.format(" — %d enfant(s)", sub) or "", tag)
+			if #lines % 300 == 0 then task.wait() end
 			if sub > 0 and depth < MAX_TREE_DEPTH then walk(child, depth + 1, prefix.."  ") end
 		end
 	end
@@ -764,6 +799,7 @@ do
 				local sub = #child:GetChildren()
 				lines[#lines+1] = string.format("%s%s (%s)%s%s", prefix, child.Name, child.ClassName,
 					sub > 0 and string.format(" — %d enfant(s)", sub) or "", tag)
+				if #lines % 300 == 0 then task.wait() end
 				if sub > 0 and depth < MAX_TREE_DEPTH then walk(child, depth + 1, prefix.."  ") end
 			end
 		end
@@ -801,12 +837,13 @@ do
 	local hits = {}
 	for _, root in ipairs(roots) do
 		pcall(function()
-			for _, inst in ipairs(root:GetDescendants()) do
+			for i2, inst in ipairs(root:GetDescendants()) do
 				if (inst:IsA("TextLabel") or inst:IsA("TextButton") or inst:IsA("TextBox"))
 					and inst.Text ~= "" and looksLikeMoney(inst.Text) then
 					hits[#hits+1] = string.format("%s = %q", inst:GetFullName(), inst.Text)
 					flagged[#flagged+1] = {path="UI-Text."..inst:GetFullName(), value=inst.Text}
 				end
+				if i2 % 1000 == 0 then task.wait() end
 			end
 		end)
 	end
