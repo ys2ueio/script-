@@ -2337,32 +2337,46 @@ do
 
 		-- A: setnworkowner (exploit func) + AssemblyLinearVelocity.
 		-- Grants full physics authority → velocity replicates to server.
+		-- The descendant walk + ownership grant only needs to happen ONCE
+		-- per NPC (ownership sticks with LP once set) — redoing it every
+		-- 0.05 s tick was the #1 lag source (a full model:GetDescendants()
+		-- scan x setnworkowner call, 20x/s, per NPC in range).
 		pcall(function()
 			if setnworkowner then
-				for _, p in ipairs(model:GetDescendants()) do
-					if p:IsA("BasePart") then pcall(setnworkowner, p, LP) end
+				if not entry.ownerSet then
+					for _, p in ipairs(model:GetDescendants()) do
+						if p:IsA("BasePart") then pcall(setnworkowner, p, LP) end
+					end
+					setnworkowner(hrp, LP)
+					entry.ownerSet = true
 				end
-				setnworkowner(hrp, LP)
 			end
 			hrp.AssemblyLinearVelocity = outVel
 		end)
 
-		-- B: BodyVelocity (legacy mover) — replace any existing one,
-		-- persists 0.3 s; replicates on some games via mixed ownership.
+		-- B: BodyVelocity (legacy mover) — created ONCE per NPC and reused
+		-- (just update its Velocity) instead of Destroy()+Instance.new()
+		-- every tick. Re-parenting a fresh Instance onto a networked part
+		-- 20x/s replicates to the server every time — that churn was the
+		-- other big lag source. A single long-lived BodyVelocity with its
+		-- Velocity refreshed each tick gets the same push with none of it.
 		pcall(function()
-			local old = hrp:FindFirstChildOfClass("BodyVelocity")
-			if old then old:Destroy() end
-			local bv = Instance.new("BodyVelocity")
+			local bv = entry.bv
+			if not (bv and bv.Parent) then
+				bv = Instance.new("BodyVelocity")
+				bv.MaxForce = Vector3.new(1e9, 1e9, 1e9)
+				bv.P        = 1e6
+				bv.Parent   = hrp
+				entry.bv = bv
+			end
 			bv.Velocity = outVel
-			bv.MaxForce = Vector3.new(1e9, 1e9, 1e9)
-			bv.P        = 1e6
-			bv.Parent   = hrp
-			task.delay(0.3, function() pcall(function() bv:Destroy() end) end)
 		end)
 
-		-- C: Humanoid state — freeze + ragdoll.  Server-side scripts will
-		-- override quickly but each 0.05 s tick re-applies it, creating a
-		-- persistent interrupt to the NPC's pathfinding / chase logic.
+		-- C: Humanoid state — freeze + ragdoll. Server-side scripts will
+		-- override quickly, so this still needs to re-apply every tick to
+		-- interrupt the NPC's pathfinding/chase — but skip the ChangeState
+		-- call when already in that state (avoids spamming a redundant
+		-- state-replication event every 0.05 s).
 		pcall(function()
 			if not hum or not hum.Parent then return end
 			if not entry.savedWS then
@@ -2372,7 +2386,9 @@ do
 			hum.WalkSpeed     = 0
 			hum.JumpPower     = 0
 			hum.PlatformStand = true
-			hum:ChangeState(Enum.HumanoidStateType.FallingDown)
+			if hum:GetState() ~= Enum.HumanoidStateType.FallingDown then
+				hum:ChangeState(Enum.HumanoidStateType.FallingDown)
+			end
 		end)
 
 		-- D: Kill — if the server doesn't protect NPC health this removes
@@ -2420,28 +2436,69 @@ do
 			if entry.savedJP then hum.JumpPower = entry.savedJP end
 			hum.PlatformStand = false
 		end)
+		if entry.bv then pcall(function() entry.bv:Destroy() end); entry.bv = nil end
+	end
+
+	-- Merge a fresh _scanNpcs() pass into the tracked list IN PLACE,
+	-- keeping the existing entry table (and its cached ownerSet/bv) for
+	-- any NPC still present, instead of discarding + rebuilding the whole
+	-- list every scan — that used to throw away the caching from methods
+	-- A/B above every 0.5 s, defeating the point of caching them.
+	local _flingByModel = {}
+	local function _refreshNpcs()
+		local fresh = _scanNpcs()
+		local freshByModel = {}
+		for _, f in ipairs(fresh) do freshByModel[f.model] = f end
+
+		-- Drop/restore entries for NPCs no longer found.
+		for i = #_flingNpcs, 1, -1 do
+			local e = _flingNpcs[i]
+			if not freshByModel[e.model] then
+				_restoreNpc(e)
+				_flingByModel[e.model] = nil
+				table.remove(_flingNpcs, i)
+			end
+		end
+		-- Add entries for newly found NPCs.
+		for _, f in ipairs(fresh) do
+			if not _flingByModel[f.model] then
+				_flingByModel[f.model] = f
+				_flingNpcs[#_flingNpcs+1] = f
+			end
+		end
 	end
 
 	startFling = function()
 		if _flingConn then _flingConn:Disconnect(); _flingConn = nil end
 		_flingRunning = true; _flingHB = 0; _flingScanT = 0
-		_flingNpcs = {}; _lpBumping = false
+		_flingNpcs = {}; _flingByModel = {}; _lpBumping = false
 		_flingConn = RunService.Heartbeat:Connect(function(dt)
 			if not _flingRunning then return end
 
-			-- Rebuild NPC list every 0.5 s.
+			-- Rebuild NPC list every 1.5 s. Fling radius is only 25 studs,
+			-- so an NPC can't teleport into range between scans — no need
+			-- for the old 0.5 s cadence, and the full workspace:GetDescendants()
+			-- walk inside _scanNpcs() is itself not free on a big map.
 			_flingScanT = _flingScanT + dt
-			if _flingScanT >= 0.5 then
+			if _flingScanT >= 1.5 then
 				_flingScanT = 0
-				for _, e in ipairs(_flingNpcs) do
-					if not (e.hrp and e.hrp.Parent) then _restoreNpc(e) end
+				for i = #_flingNpcs, 1, -1 do
+					local e = _flingNpcs[i]
+					if not (e.hrp and e.hrp.Parent) then
+						_restoreNpc(e)
+						_flingByModel[e.model] = nil
+						table.remove(_flingNpcs, i)
+					end
 				end
-				_flingNpcs = _scanNpcs()
+				_refreshNpcs()
 			end
 
-			-- Fling pass every 0.05 s.
+			-- Fling pass every 0.1 s — was 0.05 s (20x/s); halving the
+			-- rate roughly halves the per-tick cost of methods C/D/E/F
+			-- across every NPC in range with no loss of effectiveness
+			-- (A/B no longer redo their expensive work every tick anyway).
 			_flingHB = _flingHB + dt
-			if _flingHB < 0.05 then return end
+			if _flingHB < 0.1 then return end
 			_flingHB = 0
 			local myChar = LP.Character
 			local myHRP  = myChar and myChar:FindFirstChild("HumanoidRootPart")
@@ -2455,7 +2512,7 @@ do
 		_flingRunning = false
 		if _flingConn then _flingConn:Disconnect(); _flingConn = nil end
 		for _, e in ipairs(_flingNpcs) do _restoreNpc(e) end
-		_flingNpcs = {}; _lpBumping = false
+		_flingNpcs = {}; _flingByModel = {}; _lpBumping = false
 	end
 end
 
