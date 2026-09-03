@@ -2,14 +2,20 @@
 -- yslemEgg — Best Egg + Teleport (compact hub)
 -- ============================================================
 -- loadstring(game:HttpGet("https://raw.githubusercontent.com/ys2ueio/script-/refs/heads/main/yslemEgg.lua"))()
+--
+-- v2: the previous scanner assumed an "EggWorld remote / AreaEggSlotsClient"
+-- structure that doesn't exist in this game — nothing was ever detected.
+-- Rebuilt on the SAME structure yslem_hub.lua already uses successfully
+-- here: workspace.Plots.<plot>.AnimalPodiums.<pod> — pod.Name IS the
+-- pet/brainrot identity (exactly what the reference hub shows: name +
+-- rarity + $ value, read directly off the podium before you even steal
+-- it — that's "repérer le pet dans l'oeuf").
 
 if not game:IsLoaded() then game.Loaded:Wait() end
 
 local Players       = game:GetService("Players")
 local UIS           = game:GetService("UserInputService")
 local TweenService  = game:GetService("TweenService")
-local HttpService   = game:GetService("HttpService")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local LP = Players.LocalPlayer
 if not LP.Character then LP.CharacterAdded:Wait() end
 
@@ -22,65 +28,12 @@ pcall(function()
 end)
 
 -- ============================================================
--- REMOTES (ReplicatedStorage.Packages.Networking)
--- ============================================================
-local _NetworkingFolder = ReplicatedStorage:FindFirstChild("Packages")
-_NetworkingFolder = _NetworkingFolder and _NetworkingFolder:FindFirstChild("Networking")
-
-local function _getRemote(name)
-	if not _NetworkingFolder then return nil end
-	local exact = _NetworkingFolder:FindFirstChild(name)
-	if exact then return exact end
-	if not name:find("/", 1, true) then
-		local suffix = "/"..name
-		for _, inst in ipairs(_NetworkingFolder:GetChildren()) do
-			if inst.Name:sub(-#suffix) == suffix then return inst end
-		end
-	end
-	return nil
-end
-
-local function _invokeRF(name, ...)
-	local r = _getRemote(name)
-	if not r or not r:IsA("RemoteFunction") then return false, "not found" end
-	local ok, result = pcall(function(...) return r:InvokeServer(...) end, ...)
-	return ok, result
-end
-
--- ============================================================
--- ZONES
--- ============================================================
-local AREA = {}
-do
-	local folder = workspace:FindFirstChild("__OBJECTS")
-	folder = folder and folder:FindFirstChild("Areas")
-	folder = folder and folder:FindFirstChild("GuardAreas")
-	if folder then
-		for _, a in ipairs(folder:GetChildren()) do
-			pcall(function()
-				local bounds = a:FindFirstChild("Bounds")
-				if bounds and bounds:IsA("BasePart") then
-					AREA[a.Name] = {cf = bounds.CFrame, size = bounds.Size}
-				end
-			end)
-		end
-	end
-end
-local function _posToZone(pos)
-	for zn, A in pairs(AREA) do
-		local lp2 = A.cf:PointToObjectSpace(pos)
-		local hs = A.size * 0.5
-		if math.abs(lp2.X) <= hs.X and math.abs(lp2.Z) <= hs.Z then return zn end
-	end
-	return "?"
-end
-
--- ============================================================
--- RARITY
+-- RARITY / VALUE DETECTION
 -- ============================================================
 local _RARE_KEYWORDS = {
 	"secret","eternal","divine","divin","mythic","celestial","ancient",
 	"rainbow","golden","shiny","radiant","corrupted","void","legendary",
+	"brainrot","og",
 }
 local _TIER = {
 	secret=1, mythic=2, legendary=3, celestial=4, divine=5, divin=5,
@@ -122,18 +75,45 @@ local function _readEggLabels(root)
 	return full, tags, weight
 end
 
+-- Reads the $ value shown near an egg/pet (e.g. "$578.02K") off any
+-- descendant TextLabel — this is the exact readout the reference hub
+-- displays, and the primary ranking signal (real worth, not a guess).
+local _SUFFIX_MULT = {K=1e3, M=1e6, B=1e9, T=1e12}
+local function _extractMoneyText(root)
+	local bestTxt, bestVal = nil, -1
+	pcall(function()
+		for _, d in ipairs(root:GetDescendants()) do
+			if d:IsA("TextLabel") and d.Text ~= "" then
+				local txt = d.Text
+				local num, suf = txt:match("%$([%d][%d%.,]*)%s*([KMBTkmbt]?)")
+				if not num then num, suf = txt:match("([%d][%d%.,]*)%s*([KMBT])") end
+				if num then
+					local n = tonumber((num:gsub(",", "")))
+					if n then
+						local mult = (suf and suf ~= "") and (_SUFFIX_MULT[suf:upper()] or 1) or 1
+						local val = n * mult
+						if val > bestVal then
+							bestVal = val
+							bestTxt = txt:match("%$?[%d][%d%.,]*%s*[KMBTkmbt]?") or txt
+						end
+					end
+				end
+			end
+		end
+	end)
+	if bestTxt then return bestTxt, bestVal end
+	return nil, nil
+end
+
 -- Scans a model/part for any image ID (decals, textures, ImageLabels, mesh textures).
--- Returns a Roblox asset URL string or nil.
 local function _getEggImageId(root)
 	if not root then return nil end
 	local id = nil
 	pcall(function()
-		-- 1. Attributes first (some games store thumbnails as attributes)
 		for _, attr in ipairs({"Thumbnail","Icon","Image","ImageId","TextureId","EggIcon"}) do
 			local v = root:GetAttribute(attr)
 			if type(v) == "string" and v ~= "" then id = v; return end
 		end
-		-- 2. Scan descendants for image-bearing instances
 		for _, d in ipairs(root:GetDescendants()) do
 			if (d:IsA("ImageLabel") or d:IsA("ImageButton")) and d.Image ~= "" then
 				id = d.Image; return
@@ -166,100 +146,35 @@ local function _promptOwnerModel(prompt)
 end
 
 -- ============================================================
--- EGG SCANNER — 3 sources, feeds cachedEggs
+-- EGG / PET SCANNER
+-- Source 1 (primary): workspace.Plots.<plot>.AnimalPodiums.<pod>
+--   — same structure yslem_hub.lua's AutoSteal already relies on in
+--   this game. pod.Name = pet identity, descendant TextLabels carry
+--   rarity + $ value, Base.Spawn.PromptAttachment holds the steal prompt.
+-- Source 2 (fallback): generic ProximityPrompt scan, for anything not
+--   sitting on a podium (dropped eggs, other layouts).
 -- ============================================================
-local _fieldEggNet = {}
-
-pcall(function()
-	local re = _getRemote("RE/EggWorld/FieldEggShifted")
-	if not (re and re:IsA("RemoteEvent")) then return end
-	local _ID_KEYS = {"Uid","UID","Id","ID","SlotId","SlotID","EggId","EggID","EggUid","Guid","GUID"}
-	re.OnClientEvent:Connect(function(a1, a2)
-		local data, realUid
-		if type(a2) == "table" then
-			data = a2
-			if type(a1) == "string" or type(a1) == "number" then realUid = tostring(a1) end
-		elseif type(a1) == "table" then
-			data = a1
-		else return end
-
-		local cf2, pos2
-		if typeof(data.BoundsCFrame) == "CFrame" then
-			cf2 = data.BoundsCFrame; pos2 = cf2.Position
-		elseif typeof(data.BottomCFrame) == "CFrame" then
-			cf2 = data.BottomCFrame; pos2 = cf2.Position
-		elseif typeof(data.CFrame) == "CFrame" then
-			cf2 = data.CFrame; pos2 = cf2.Position
-		end
-		if not pos2 then return end
-
-		if not realUid then
-			for _, k in ipairs(_ID_KEYS) do
-				local v = data[k]
-				if type(v) == "string" or type(v) == "number" then realUid = tostring(v); break end
-			end
-		end
-
-		local mutation = type(data.Mutation) == "string" and data.Mutation or nil
-		local zoneDir = data.Zone or data.Area or data.AreaName or data.Island or data.ZoneName
-		local zone = (type(zoneDir)=="string" and zoneDir~="") and zoneDir or _posToZone(pos2)
-
-		local tags = {}
-		local low = (mutation or ""):lower()
-		for _, kw in ipairs(_RARE_KEYWORDS) do
-			if low:find(kw, 1, true) then table.insert(tags, kw) end
-		end
-
-		local cacheKey = realUid or string.format("%.0f_%.0f_%.0f", pos2.X, pos2.Y, pos2.Z)
-		local walkPos = (typeof(data.BottomCFrame)=="CFrame" and data.BottomCFrame.Position) or pos2
-		_fieldEggNet[cacheKey] = {
-			pos=walkPos, cf=cf2, mutation=mutation, zone=zone, tags=tags,
-			uid=realUid, t=tick(), farmable=(realUid ~= nil),
-		}
-	end)
-end)
-
-task.spawn(function()
-	while true do
-		task.wait(3)
-		local ok, snap = _invokeRF("RF/EggWorld/AskFieldEggSnapshot")
-		if ok and type(snap) == "table" then
-			local now2 = tick()
-			pcall(function()
-				for uid, data in pairs(snap) do
-					local uid2 = tostring(uid)
-					if type(data) == "table" and not _fieldEggNet[uid2] then
-						local cf2, pos2
-						if typeof(data.BoundsCFrame) == "CFrame" then
-							cf2 = data.BoundsCFrame; pos2 = cf2.Position
-						elseif typeof(data.BottomCFrame) == "CFrame" then
-							cf2 = data.BottomCFrame; pos2 = cf2.Position
-						elseif typeof(data.CFrame) == "CFrame" then
-							cf2 = data.CFrame; pos2 = cf2.Position
-						end
-						if pos2 then
-							local mutation = type(data.Mutation) == "string" and data.Mutation or nil
-							local zoneDir2 = data.Zone or data.Area or data.AreaName or data.Island or data.ZoneName
-							local zone = (type(zoneDir2)=="string" and zoneDir2~="") and zoneDir2 or _posToZone(pos2)
-							local tags2 = {}
-							local low2 = (mutation or ""):lower()
-							for _, kw in ipairs(_RARE_KEYWORDS) do
-								if low2:find(kw,1,true) then table.insert(tags2, kw) end
-							end
-							local walkPos2 = (typeof(data.BottomCFrame)=="CFrame" and data.BottomCFrame.Position) or pos2
-							_fieldEggNet[uid2] = {
-								pos=walkPos2, cf=cf2, mutation=mutation, zone=zone,
-								tags=tags2, uid=uid2, t=now2, farmable=true,
-							}
-						end
-					end
-				end
-			end)
+local _plotIsMyCache = {}
+local function _isMyPlot(plotName)
+	local now = tick()
+	local cached = _plotIsMyCache[plotName]
+	if cached and (now - cached.t) < 2 then return cached.val end
+	local plots = workspace:FindFirstChild("Plots")
+	local plot = plots and plots:FindFirstChild(plotName)
+	local r = false
+	if plot then
+		local sign = plot:FindFirstChild("PlotSign")
+		if sign then
+			local yb = sign:FindFirstChild("YourBase")
+			if yb and yb:IsA("BillboardGui") then r = yb.Enabled == true end
 		end
 	end
-end)
+	_plotIsMyCache[plotName] = {val=r, t=now}
+	return r
+end
 
 local cachedEggs = {}
+local _lastScanFoundAny = false  -- surfaced in UI so "0 found" is honest, not silent
 task.spawn(function()
 	while true do
 		local eggs = {}
@@ -275,51 +190,44 @@ task.spawn(function()
 			return true
 		end
 
-		-- Source 1: FieldEggShifted network events — 60s TTL
-		local now2 = tick()
-		for cacheKey, e in pairs(_fieldEggNet) do
-			if now2 - e.t > 60 then
-				_fieldEggNet[cacheKey] = nil
-			else
-				_upsertEgg({
-					pos=e.pos, cf=e.cf, area=e.zone,
-					cat=e.mutation or (e.zone.." Egg"),
-					tags=e.tags, weight=nil, uid=e.uid, farmable=e.farmable,
-					imageId=nil,  -- no accessible model from network events
-				})
-			end
-		end
-
-		-- Source 2: AreaEggSlotsClient (LP's own slots)
-		local slotsRoot = workspace:FindFirstChild("AreaEggSlotsClient", true)
-		if slotsRoot then
-			for _, slot in ipairs(slotsRoot:GetChildren()) do
-				pcall(function()
-					local sname = slot.Name
-					if not sname:find(tostring(LP.UserId), 1, true) then return end
-					local zone = sname:match("_(%u[%a%s]+):Slot") or "?"
-					local pos3, cf3
-					if slot:IsA("BasePart") then
-						pos3=slot.Position; cf3=slot.CFrame
-					else
-						for _, d in ipairs(slot:GetDescendants()) do
-							if d:IsA("BasePart") then pos3=d.Position; cf3=d.CFrame; break end
+		-- Source 1: Plots -> AnimalPodiums (proven structure, primary)
+		pcall(function()
+			local plots = workspace:FindFirstChild("Plots")
+			if not plots then return end
+			for _, plot in ipairs(plots:GetChildren()) do
+				if not _isMyPlot(plot.Name) then
+					local podiums = plot:FindFirstChild("AnimalPodiums")
+					if podiums then
+						for _, pod in ipairs(podiums:GetChildren()) do
+							pcall(function()
+								local base = pod:FindFirstChild("Base")
+								local spawn = base and base:FindFirstChild("Spawn")
+								if not spawn then return end
+								local att = spawn:FindFirstChild("PromptAttachment")
+								local prompt = nil
+								if att then
+									for _, child in ipairs(att:GetChildren()) do
+										if child:IsA("ProximityPrompt") then prompt = child; break end
+									end
+								end
+								if not prompt then return end
+								local _, tags, weight = _readEggLabels(pod)
+								local valueText, valueNum = _extractMoneyText(pod)
+								_upsertEgg({
+									pos=spawn.Position, cf=spawn.CFrame, area=plot.Name,
+									cat=pod.Name, tags=tags, weight=weight,
+									value=valueNum, valueText=valueText,
+									uid=tostring(prompt), farmable=true,
+									imageId=_getEggImageId(pod), prompt=prompt,
+								})
+							end)
 						end
 					end
-					if not pos3 then return end
-					local mutation2 = slot:GetAttribute("Mutation") or slot:GetAttribute("EggType")
-					local _, tags2, weight2 = _readEggLabels(slot)
-					local cat2 = mutation2 or (tags2[1] and tags2[1]:upper()) or (zone.." Egg")
-					_upsertEgg({
-						pos=pos3, cf=cf3, area=zone, cat=cat2,
-						tags=tags2, weight=weight2, uid=sname, farmable=false,
-						imageId=_getEggImageId(slot),
-					})
-				end)
+				end
 			end
-		end
+		end)
 
-		-- Source 3: ProximityPrompt fallback
+		-- Source 2: generic ProximityPrompt fallback
 		pcall(function()
 			for _, prompt in ipairs(workspace:GetDescendants()) do
 				if prompt:IsA("ProximityPrompt") then
@@ -328,20 +236,23 @@ task.spawn(function()
 					local parentName = (prompt.Parent and prompt.Parent.Name or ""):lower()
 					local isSellPrompt = action:find("sell",1,true) or objTxt:find("sell",1,true)
 						or action:find("vend",1,true) or objTxt:find("vend",1,true)
-					if not isSellPrompt and (action:find("grab") or action:find("steal") or action:find("take")
+					local isDropPrompt = action:find("drop",1,true) or objTxt:find("drop",1,true)
+					if not isSellPrompt and not isDropPrompt and (action:find("grab") or action:find("steal") or action:find("take")
 						or action:find("pick") or action:find("collect") or action:find("hatch")
 						or action:find("claim") or action:find("harvest")
-						or objTxt:find("egg") or parentName:find("egg") or parentName:find("drop")
-						or parentName:find("field") or parentName:find("slot")) then
+						or objTxt:find("egg") or parentName:find("egg") or parentName:find("field") or parentName:find("slot")) then
 						local part, model = _promptOwnerModel(prompt)
 						if part then
 							local _, tags3, weight3 = _readEggLabels(model or part)
-							local cat3 = (tags3[1] and tags3[1]:upper())
+							local valueText3, valueNum3 = _extractMoneyText(model or part)
+							local cat3 = (model and model.Name ~= "Model" and model.Name)
+								or (tags3[1] and tags3[1]:upper())
 								or (objTxt ~= "" and prompt.ObjectText) or part.Name
 							_upsertEgg({
-								pos=part.Position, cf=part.CFrame, area="Dropped", cat=cat3,
-								tags=tags3, weight=weight3, uid=tostring(part), farmable=true,
-								imageId=_getEggImageId(model or part),
+								pos=part.Position, cf=part.CFrame, area="Trouve", cat=cat3,
+								tags=tags3, weight=weight3, value=valueNum3, valueText=valueText3,
+								uid=tostring(prompt), farmable=true,
+								imageId=_getEggImageId(model or part), prompt=prompt,
 							})
 						end
 					end
@@ -350,12 +261,14 @@ task.spawn(function()
 		end)
 
 		cachedEggs = eggs
-		task.wait(0.5)
+		_lastScanFoundAny = (#eggs > 0)
+		task.wait(0.75)
 	end
 end)
 
 -- ============================================================
--- RANKING
+-- RANKING — real $ value first (matches the reference hub), then
+-- rarity tier, then kg weight as a last resort tiebreaker.
 -- ============================================================
 local function tierOf(entry)
 	local best = 99
@@ -371,6 +284,8 @@ local function rankEggs()
 	local list = {}
 	for _, e in ipairs(cachedEggs) do list[#list+1] = e end
 	table.sort(list, function(a, b)
+		local va, vb = a.value or -1, b.value or -1
+		if va ~= vb then return va > vb end
 		local ta, tb = tierOf(a), tierOf(b)
 		if ta ~= tb then return ta < tb end
 		local wa = tonumber((a.weight or ""):gsub(",", "")) or 0
@@ -392,10 +307,32 @@ end
 
 -- ============================================================
 -- TELEPORT — Moon Hub bat method
--- CFrame teleport → InputHoldBegin → fireproximityprompt (same
--- pattern as yslem_hub.lua tryStealOnce), adapted for field eggs.
+-- CFrame teleport -> InputHoldBegin -> fireproximityprompt (same
+-- pattern as yslem_hub.lua tryStealOnce). Fires the EXACT prompt
+-- captured during scanning when we have it (more reliable than a
+-- fresh nearby search), falls back to a generic search otherwise.
 -- ============================================================
-local function _fireNearestStealPrompt(pos)
+local function _fireStealPrompt(prompt)
+	if not prompt or not prompt.Parent then return false end
+	pcall(function() prompt:InputHoldBegin() end)
+	task.wait(0.12 + math.random() * 0.06)
+	local hasFire = type(fireproximityprompt) == "function"
+	if hasFire then
+		pcall(function() fireproximityprompt(prompt) end)
+	else
+		pcall(function()
+			if getconnections then
+				for _, c in ipairs(getconnections(prompt.Triggered)) do
+					if c.Function then task.spawn(c.Function) end
+				end
+			end
+		end)
+		pcall(function() prompt:InputHoldEnd() end)
+	end
+	return true
+end
+
+local function _findNearestStealPrompt(pos)
 	local nearest, nearestDist = nil, 12
 	for _, prompt in ipairs(workspace:GetDescendants()) do
 		if prompt:IsA("ProximityPrompt") then
@@ -418,27 +355,7 @@ local function _fireNearestStealPrompt(pos)
 			end
 		end
 	end
-	if not nearest then return false end
-	-- Hold begin (visual cue to server), then fire (Moon Hub pattern)
-	pcall(function() nearest:InputHoldBegin() end)
-	task.wait(0.12 + math.random() * 0.06)
-	local hasFire = type(fireproximityprompt) == "function"
-	if hasFire then
-		pcall(function() fireproximityprompt(nearest) end)
-	end
-	-- Fallback: trigger getconnections (same as Moon Hub Méthode 2)
-	if not hasFire then
-		pcall(function()
-			if getconnections then
-				for _, c in ipairs(getconnections(nearest.Triggered)) do
-					if c.Function then task.spawn(c.Function) end
-				end
-			end
-		end)
-		-- Fallback 2: InputHoldEnd (Moon Hub Méthode 3)
-		pcall(function() nearest:InputHoldEnd() end)
-	end
-	return true
+	return nearest
 end
 
 local function doTeleport(entry)
@@ -446,14 +363,14 @@ local function doTeleport(entry)
 	local char = LP.Character
 	local hrp  = char and char:FindFirstChild("HumanoidRootPart")
 	if not hrp then return false end
-	-- Bat TP: direct CFrame move to egg position
 	local ok = pcall(function()
 		hrp.CFrame = CFrame.new(entry.pos + Vector3.new(0, 3.5, 0))
 	end)
 	if not ok then return false end
 	task.wait(0.15)
-	-- Then immediately fire the nearest steal prompt
-	_fireNearestStealPrompt(hrp.Position)
+	local target = (entry.prompt and entry.prompt.Parent) and entry.prompt
+		or _findNearestStealPrompt(hrp.Position)
+	if target then _fireStealPrompt(target) end
 	return true
 end
 
@@ -474,7 +391,7 @@ task.spawn(function()
 	end
 end)
 
--- Auto-disable farm loop when egg is in hand (drop prompt appears near LP)
+-- Auto-disable farm loop when egg/pet is in hand (drop prompt appears near LP)
 task.spawn(function()
 	while true do
 		task.wait(0.25)
@@ -628,7 +545,8 @@ end
 -- Caption row + chevron
 local capRow = Instance.new("Frame")
 capRow.Size=UDim2.new(1,0,0,12); capRow.BackgroundTransparency=1; capRow.LayoutOrder=1; capRow.Parent=card1
-label(capRow,"BEST EGG",UDim2.new(1,-20,1,0),C.DIM,Enum.Font.GothamBold).TextSize=10
+local capLbl = label(capRow,"BEST EGG",UDim2.new(1,-20,1,0),C.DIM,Enum.Font.GothamBold)
+capLbl.TextSize=10
 local chevron = Instance.new("TextButton")
 chevron.Size=UDim2.fromOffset(18,14); chevron.Position=UDim2.new(1,-18,0,-1)
 chevron.BackgroundTransparency=1; chevron.Text="▾"; chevron.TextColor3=C.DIM
@@ -641,7 +559,6 @@ mainRow.Size=UDim2.new(1,0,0,36); mainRow.BackgroundTransparency=1; mainRow.Layo
 local mIcon = Instance.new("Frame")
 mIcon.Size=UDim2.fromOffset(32,32); mIcon.Position=UDim2.new(0,0,0.5,-16)
 mIcon.BackgroundColor3=COMMON_COLOR; mIcon.Parent=mainRow; corner(mIcon,8)
--- ImageLabel inside mIcon for real egg image
 local mIconImg = Instance.new("ImageLabel")
 mIconImg.Size=UDim2.new(1,0,1,0); mIconImg.BackgroundTransparency=1
 mIconImg.Image=""; mIconImg.ScaleType=Enum.ScaleType.Fit
@@ -658,7 +575,7 @@ local mValue = label(mainRow,"—",UDim2.new(0,70,1,0),C.GREEN,Enum.Font.GothamB
 mValue.TextSize=15; mValue.TextXAlignment=Enum.TextXAlignment.Right
 mValue.Position=UDim2.new(1,-70,0,0)
 
--- Egg picker / top-6 expandable list
+-- Egg/pet picker (Top 6, expandable)
 local listFrame = Instance.new("Frame")
 listFrame.Size=UDim2.new(1,0,0,0); listFrame.AutomaticSize=Enum.AutomaticSize.Y
 listFrame.BackgroundTransparency=1; listFrame.LayoutOrder=3; listFrame.Visible=false; listFrame.Parent=card1
@@ -708,7 +625,6 @@ local toggleKnob = Instance.new("Frame")
 toggleKnob.Size=UDim2.fromOffset(12,12); toggleKnob.Position=UDim2.new(0,2,0.5,-6)
 toggleKnob.BackgroundColor3=C.KNOB_OFF; toggleKnob.Parent=toggleTrack; corner(toggleKnob,6)
 
--- Define the forward-declared setLoopVisual now that toggle elements exist
 setLoopVisual = function(on)
 	TweenService:Create(toggleTrack, TweenInfo.new(0.15), {BackgroundColor3 = on and C.STROKE or C.TRACK_OFF}):Play()
 	TweenService:Create(toggleKnob, TweenInfo.new(0.15), {
@@ -730,8 +646,38 @@ tpBtn.MouseButton1Click:Connect(function()
 	task.delay(1, function() pcall(function() tpBtn.Text = prev end) end)
 end)
 
--- EGG PICKER ROWS — with ImageLabel support -------------------
--- Each row: [egg image 24×24] [name / rarity] [value/tag right-aligned]
+-- DEBUG COPY ROW — if detection still misses, this exports what the
+-- scanner actually sees so the real structure can be pinned down
+-- instead of guessing again.
+local debugRow = Instance.new("Frame")
+debugRow.Size=UDim2.new(1,0,0,20); debugRow.BackgroundTransparency=1; debugRow.LayoutOrder=3; debugRow.Parent=card2
+local debugBtn = Instance.new("TextButton")
+debugBtn.Size=UDim2.new(1,0,1,0); debugBtn.BackgroundTransparency=1
+debugBtn.Text="Copier debug scan"; debugBtn.TextColor3=C.DIM
+debugBtn.Font=Enum.Font.Gotham; debugBtn.TextSize=10; debugBtn.Parent=debugRow
+debugBtn.MouseButton1Click:Connect(function()
+	local lines = {}
+	table.insert(lines, "[yslemEgg debug] Plots exists: "..tostring(workspace:FindFirstChild("Plots") ~= nil))
+	table.insert(lines, "cachedEggs: "..#cachedEggs)
+	for i, e in ipairs(cachedEggs) do
+		if i > 10 then break end
+		table.insert(lines, string.format("#%d cat=%s area=%s tags=%s value=%s weight=%s",
+			i, tostring(e.cat), tostring(e.area), table.concat(e.tags or {}, ","),
+			tostring(e.valueText), tostring(e.weight)))
+	end
+	local txt = table.concat(lines, "\n")
+	print(txt)
+	local prev = debugBtn.Text
+	if type(setclipboard) == "function" then
+		pcall(function() setclipboard(txt) end)
+		debugBtn.Text = "Copie ! (voir aussi F9)"
+	else
+		debugBtn.Text = "Voir console F9"
+	end
+	task.delay(1.5, function() pcall(function() debugBtn.Text = prev end) end)
+end)
+
+-- EGG/PET PICKER ROWS — with ImageLabel support -----------------
 local _rowPool = {}
 local function getRow(i)
 	if _rowPool[i] then return _rowPool[i] end
@@ -740,7 +686,6 @@ local function getRow(i)
 	row.AutoButtonColor=false; row.Text=""; row.LayoutOrder=i; row.Parent=listFrame
 	corner(row,8)
 
-	-- Image holder (replaces the old 8×8 dot with a 26×26 square)
 	local imgHolder = Instance.new("Frame")
 	imgHolder.Size=UDim2.fromOffset(26,26); imgHolder.Position=UDim2.new(0,4,0.5,-13)
 	imgHolder.BackgroundColor3=COMMON_COLOR; imgHolder.Parent=row; corner(imgHolder,6)
@@ -748,13 +693,11 @@ local function getRow(i)
 	img.Size=UDim2.new(1,0,1,0); img.BackgroundTransparency=1
 	img.Image=""; img.ScaleType=Enum.ScaleType.Fit; img.Visible=false; img.Parent=imgHolder
 
-	-- Name + rarity stacked
 	local nm = label(row,"",UDim2.new(1,-110,0,16),C.TEXT,Enum.Font.GothamBold)
 	nm.Position=UDim2.new(0,36,0,3); nm.TextSize=12
 	local rar = label(row,"",UDim2.new(1,-110,0,12),COMMON_COLOR,Enum.Font.GothamMedium)
 	rar.Position=UDim2.new(0,36,0,17); rar.TextSize=10
 
-	-- Value right-aligned
 	local val = label(row,"",UDim2.new(0,65,1,0),C.GREEN,Enum.Font.GothamBold)
 	val.Position=UDim2.new(1,-70,0,0); val.TextSize=11
 	val.TextXAlignment=Enum.TextXAlignment.Right
@@ -773,7 +716,6 @@ task.spawn(function()
 		local ranked = rankEggs()
 		local best   = currentTarget(ranked)
 
-		-- Update main "best" display
 		if best then
 			mName.Text = tostring(best.cat or "Egg")
 			local tag = best.tags and best.tags[1]
@@ -782,21 +724,20 @@ task.spawn(function()
 				..(best.area and best.area ~= "?" and (" · "..best.area) or "")
 			mRarity.TextColor3 = col
 			mIcon.BackgroundColor3 = col
-			mValue.Text = best.weight and (best.weight.." kg")
-				or (tag and tag:sub(1,1):upper()..tag:sub(2) or "—")
-			-- Show egg image if available
+			mValue.Text = best.valueText or (best.weight and (best.weight.." kg"))
+				or (tag and (tag:sub(1,1):upper()..tag:sub(2)) or "—")
 			if best.imageId and best.imageId ~= "" then
 				mIconImg.Image = best.imageId; mIconImg.Visible = true
 			else
 				mIconImg.Image = ""; mIconImg.Visible = false
 			end
 		else
-			mName.Text = "—"; mRarity.Text = "Aucun oeuf detecte"
+			mName.Text = "—"
+			mRarity.Text = _lastScanFoundAny and "Aucun oeuf detecte" or "Scan: 0 resultat (voir debug)"
 			mRarity.TextColor3 = COMMON_COLOR; mIcon.BackgroundColor3 = COMMON_COLOR
 			mValue.Text = "—"; mIconImg.Visible = false
 		end
 
-		-- Update picker rows (top 6)
 		local N = math.min(6, #ranked)
 		for i = 1, N do
 			local e   = ranked[i]
@@ -808,10 +749,9 @@ task.spawn(function()
 			r.nm.Text  = tostring(e.cat or "Egg")
 			r.rar.Text = tag and (tag:sub(1,1):upper()..tag:sub(2)) or "Common"
 			r.rar.TextColor3 = col
-			r.val.Text = e.weight and (e.weight.." kg")
+			r.val.Text = e.valueText or (e.weight and (e.weight.." kg"))
 				or (tag and tag:sub(1,1):upper()..tag:sub(2) or "—")
 			r.row.BackgroundColor3 = (e.uid == _selectedUid) and C.ROW_SEL or C.BG
-			-- Egg image
 			if e.imageId and e.imageId ~= "" then
 				if r.img.Image ~= e.imageId then r.img.Image = e.imageId end
 				r.img.Visible = true
@@ -827,4 +767,4 @@ task.spawn(function()
 	end
 end)
 
-print("[yslemEgg] Loaded — Best Egg + Bat Teleport + Image Picker.")
+print("[yslemEgg] Loaded — Plots/AnimalPodiums scanner + Bat Teleport + Image Picker.")
