@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Moon Hub — Premium Lua Hub for Roblox</title>
+  <meta name="description" content="Moon Hub is a premium Lua hub for Roblox: stable proxy-based movement, smart automation, utility tools and an integrated key system. Current version v1-6.">
+  <meta name="theme-color" content="#06060A">
+  <meta name="color-scheme" content="dark">
+
+  <!-- Social preview -->
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Moon Hub — Premium Lua Hub for Roblox">
+  <meta property="og:description" content="Performance, stability and automation in one premium Lua hub. Protected by an integrated key system. Version v1-6.">
+  <meta property="og:image" content="assets/og-image.svg">
+  <meta name="twitter:card" content="summary_large_image">
+
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <script>document.documentElement.classList.add("js");</script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <!-- ============================================================
+       ICON SPRITE — referenced with <use href="#i-name">
+       ============================================================ -->
+  <svg class="sprite" aria-hidden="true" focusable="false" width="0" height="0">
+    <symbol id="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M20.5 14.8A8.6 8.6 0 0 1 9.2 3.5a8.6 8.6 0 1 0 11.3 11.3Z"/>
+    </symbol>
+    <symbol id="i-bolt" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M13 2 4.5 13.5H11L10 22l8.5-11.5H12L13 2Z"/>
+    </symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 3 20 6v6c0 4.4-3.2 7.8-8 9-4.8-1.2-8-4.6-8-9V6l8-3Z"/>
+      <path d="m9 12 2 2 4-4"/>
+    </symbol>
+    <symbol id="i-cpu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="7" y="7" width="10" height="10" rx="2"/>
+      <path d="M9.5 3v2M14.5 3v2M9.5 19v2M14.5 19v2M3 9.5h2M3 14.5h2M19 9.5h2M19 14.5h2"/>
+    </symbol>
+    <symbol id="i-target" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4"/><path d="M12 1.5v3M12 19.5v3M1.5 12h3M19.5 12h3"/>
+    </symbol>
+    <symbol id="i-sparkle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 3.5 13.9 9 19.5 11l-5.6 2L12 18.5 10.1 13 4.5 11 10.1 9 12 3.5Z"/>
+      <path d="M18.5 3.5v3M17 5h3"/>
+    </symbol>
+    <symbol id="i-sliders" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M4 7h6M14 7h6M4 17h10M18 17h2"/>
+      <circle cx="12" cy="7" r="2"/><circle cx="16" cy="17" r="2"/>
+    </symbol>
+    <symbol id="i-signal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M4.5 20v-3.5M9.5 20v-7M14.5 20v-11M19.5 20v-15"/>
+    </symbol>
+    <symbol id="i-key" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="15.8" cy="8.2" r="4.2"/>
+      <path d="m12.8 11.2-9.3 9.3v-3h3v-3h3l1.6-1.6"/>
+    </symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M20.5 12a8.5 8.5 0 1 1-2.5-6"/><path d="M20.5 4.5V10H15"/>
+    </symbol>
+    <symbol id="i-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/>
+      <path d="M16 5a3.5 3.5 0 0 1 0 7M17.5 14.2A6.5 6.5 0 0 1 21.5 20"/>
+    </symbol>
+    <symbol id="i-code" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <path d="m8 7-5 5 5 5M16 7l5 5-5 5M13.5 4l-3 16"/>
+    </symbol>
+    <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="m5 12.5 4.5 4.5L19 7"/>
+    </symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M4 12h15M13 6l6 6-6 6"/>
+    </symbol>
+    <symbol id="i-layers" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 13 9 5 9-5"/>
+    </symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="4" y="10" width="16" height="11" rx="2.5"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/><path d="M12 14.5v2.5"/>
+    </symbol>
+    <symbol id="i-discord" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M19.6 5.3A16.7 16.7 0 0 0 15.4 4l-.3.5a12.9 12.9 0 0 0-6.2 0L8.6 4a16.7 16.7 0 0 0-4.2 1.3C1.9 9 1.2 12.6 1.6 16.1a16.9 16.9 0 0 0 5.1 2.6l1.1-1.7c-.6-.2-1.1-.5-1.6-.8l.4-.3a12 12 0 0 0 10.8 0l.4.3c-.5.3-1 .6-1.6.8l1.1 1.7a16.9 16.9 0 0 0 5.1-2.6c.5-4.1-.8-7.7-2.8-10.8ZM8.5 14c-.9 0-1.7-.9-1.7-1.9s.8-1.9 1.7-1.9 1.7.9 1.7 1.9S9.4 14 8.5 14Zm7 0c-.9 0-1.7-.9-1.7-1.9s.8-1.9 1.7-1.9 1.7.9 1.7 1.9S16.4 14 15.5 14Z"/>
+    </symbol>
+  </svg>
+
+  <!-- Ambient background -->
+  <div class="bg" aria-hidden="true">
+    <div class="bg__grid"></div>
+    <div class="bg__orb bg__orb--a"></div>
+    <div class="bg__orb bg__orb--b"></div>
+    <div class="bg__noise"></div>
+  </div>
+
+  <!-- ============================================================
+       NAVIGATION
+       ============================================================ -->
+  <header class="nav" id="nav">
+    <div class="container nav__inner">
+      <a class="brand" href="#home" aria-label="Moon Hub — home">
+        <span class="brand__mark"><svg aria-hidden="true"><use href="#i-moon"/></svg></span>
+        <span class="brand__text">Moon<span>Hub</span></span>
+      </a>
+
+      <nav class="nav__links" id="nav-menu" aria-label="Main">
+        <a href="#home" class="nav__link">Home</a>
+        <a href="#features" class="nav__link">Features</a>
+        <a href="#versions" class="nav__link">Versions</a>
+        <a href="#key" class="nav__link">Key System</a>
+        <a href="#pricing" class="nav__link">Pricing</a>
+        <a href="#community" class="nav__link">Community</a>
+        <a href="#pricing" class="btn btn--primary btn--sm nav__cta">Get Access</a>
+      </nav>
+
+      <button class="nav__toggle" id="nav-toggle" aria-expanded="false" aria-controls="nav-menu" aria-label="Open menu">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </header>
+
+  <main id="main">
+
+    <!-- ==========================================================
+         HERO
+         ========================================================== -->
+    <section class="hero" id="home">
+      <div class="container hero__inner">
+        <div class="hero__copy">
+          <p class="pill" data-reveal>
+            <span class="pill__dot"></span>
+            Current version <strong>v1-6</strong> — available now
+          </p>
+
+          <h1 class="hero__title" data-reveal data-reveal-delay="1">
+            <span class="hero__title-line">Moon Hub</span>
+            <span class="hero__title-sub">The premium Lua hub for Roblox</span>
+          </h1>
+
+          <p class="hero__lead" data-reveal data-reveal-delay="2">
+            Engineered for players who want movement that actually holds, automation
+            that keeps up with the server, and an interface that stays out of the way.
+            Every access is protected by an integrated key system.
+          </p>
+
+          <div class="hero__actions" data-reveal data-reveal-delay="3">
+            <a href="#pricing" class="btn btn--primary btn--lg">
+              Buy access
+              <svg class="btn__icon" aria-hidden="true"><use href="#i-arrow"/></svg>
+            </a>
+            <a href="#community" class="btn btn--ghost btn--lg" data-link="discord">
+              <svg class="btn__icon" aria-hidden="true"><use href="#i-discord"/></svg>
+              Join the Discord
+            </a>
+          </div>
+
+          <dl class="stats" data-reveal data-reveal-delay="4">
+            <div class="stat">
+              <dt class="stat__label">Lines of Lua</dt>
+              <dd class="stat__value"><span data-count="3250">3,250</span>+</dd>
+            </div>
+            <div class="stat">
+              <dt class="stat__label">Community</dt>
+              <dd class="stat__value">Tens of<span class="stat__unit"> thousands</span></dd>
+            </div>
+            <div class="stat">
+              <dt class="stat__label">Access</dt>
+              <dd class="stat__value">Key<span class="stat__unit"> system</span></dd>
+            </div>
+            <div class="stat">
+              <dt class="stat__label">Updates</dt>
+              <dd class="stat__value">Regular<span class="stat__unit"> releases</span></dd>
+            </div>
+          </dl>
+        </div>
+
+        <!-- Product visual: stylised representation of the in-game interface -->
+        <div class="hero__visual" data-reveal data-reveal-delay="2">
+          <div class="mock" role="img" aria-label="Illustration of the Moon Hub in-game interface, showing the Combat tab with Fix Speed and Bat Counter enabled, Auto Play Mode set to Full and Auto Steal reporting READY.">
+            <div class="mock__glow"></div>
+            <div class="mock__window">
+              <div class="mock__bar">
+                <span class="mock__logo"><svg><use href="#i-moon"/></svg></span>
+                <span class="mock__title">MOON HUB <b>v1-6</b></span>
+                <span class="mock__verified"><svg><use href="#i-check"/></svg> KEY VERIFIED</span>
+              </div>
+              <div class="mock__body">
+                <div class="mock__side">
+                  <span class="mock__tab is-active"><svg><use href="#i-bolt"/></svg> Combat</span>
+                  <span class="mock__tab"><svg><use href="#i-sparkle"/></svg> Visual</span>
+                  <span class="mock__tab"><svg><use href="#i-sliders"/></svg> Utility</span>
+                  <span class="mock__tab"><svg><use href="#i-lock"/></svg> Access</span>
+                </div>
+                <div class="mock__panel">
+                  <div class="mock__row"><span>Fix Speed</span><i class="sw is-on"></i></div>
+                  <div class="mock__row"><span>Bat Counter</span><i class="sw is-on"></i></div>
+                  <div class="mock__row"><span>Auto Play Mode</span><em class="tag">Full</em></div>
+                  <div class="mock__row"><span>Irish Auto Steal</span><em class="tag tag--live">READY</em></div>
+                  <div class="mock__row mock__row--range">
+                    <span>Speed Bypass</span>
+                    <span class="range"><span class="range__fill"></span></span>
+                  </div>
+                  <div class="mock__row"><span>Lagger</span><em class="tag">Mid</em></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==========================================================
+         PILLARS
+         ========================================================== -->
+    <section class="pillars" aria-label="What Moon Hub stands for">
+      <div class="container">
+        <ul class="pillars__list">
+          <li class="pillars__item" data-reveal><svg><use href="#i-bolt"/></svg> Performance</li>
+          <li class="pillars__item" data-reveal data-reveal-delay="1"><svg><use href="#i-shield"/></svg> Stability</li>
+          <li class="pillars__item" data-reveal data-reveal-delay="2"><svg><use href="#i-sliders"/></svg> Simplicity</li>
+          <li class="pillars__item" data-reveal data-reveal-delay="3"><svg><use href="#i-cpu"/></svg> Automation</li>
+          <li class="pillars__item" data-reveal data-reveal-delay="4"><svg><use href="#i-refresh"/></svg> Regular updates</li>
+          <li class="pillars__item" data-reveal data-reveal-delay="5"><svg><use href="#i-key"/></svg> Secure access</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ==========================================================
+         FEATURES
+         ========================================================== -->
+    <section class="section" id="features">
+      <div class="container">
+        <header class="section__head" data-reveal>
+          <p class="eyebrow"><span></span> Features</p>
+          <h2 class="section__title">Built feature by feature,<br>tested release after release</h2>
+          <p class="section__lead">
+            Moon Hub focuses on a small set of tools that are genuinely tuned — no filler
+            toggles. Each one is refined until it behaves the same way every single run.
+          </p>
+        </header>
+
+        <!-- Combat & gameplay -->
+        <h3 class="group__title" data-reveal><span class="group__index">01</span> Combat &amp; Gameplay</h3>
+        <div class="grid grid--features">
+
+          <article class="card card--feature card--wide" data-reveal>
+            <div class="card__icon"><svg><use href="#i-bolt"/></svg></div>
+            <h4 class="card__title">Fix Speed</h4>
+            <p class="card__text">
+              Smooth, stable movement driven by a proxy system. Motion is pushed every
+              <code>Stepped</code> frame through <code>proxyMove</code>, and the real velocity comes from
+              <code>AssemblyLinearVelocity</code> applied to a welded proxy part — not from rewriting
+              the humanoid speed over and over. Server-side <code>WalkSpeed</code> stays forced at 34.
+            </p>
+            <ul class="chips">
+              <li>proxyMove</li><li>Stepped</li><li>AssemblyLinearVelocity</li><li>WalkSpeed 34</li>
+            </ul>
+          </article>
+
+          <article class="card card--feature" data-reveal data-reveal-delay="1">
+            <div class="card__icon"><svg><use href="#i-shield"/></svg></div>
+            <h4 class="card__title">Bat Counter</h4>
+            <p class="card__text">
+              An automatic counter built around the game's combat system and wired into the
+              ragdoll system, so reactions stay consistent instead of depending on your timing.
+            </p>
+            <ul class="chips"><li>BatCounter</li><li>Ragdoll-aware</li></ul>
+          </article>
+
+          <article class="card card--feature" data-reveal data-reveal-delay="2">
+            <div class="card__icon"><svg><use href="#i-cpu"/></svg></div>
+            <h4 class="card__title">Auto Play Mode</h4>
+            <p class="card__text">
+              Three levels of automation so you decide how much the hub does for you —
+              from fully hands-off to a light assist while you stay in control.
+            </p>
+            <ul class="chips"><li>Full</li><li>Half</li><li>Semi</li></ul>
+          </article>
+
+          <article class="card card--feature card--wide" data-reveal data-reveal-delay="1">
+            <div class="card__icon"><svg><use href="#i-target"/></svg></div>
+            <h4 class="card__title">Irish Auto Steal</h4>
+            <p class="card__text">
+              An optimised auto steal that stays synchronised with the game server: plot data is
+              requested once, then kept live through server updates. A client-side
+              <strong>READY</strong> / <strong>UNREADY</strong> indicator tells you the exact state before
+              anything fires, and hold timings are randomised inside a tuned window rather than fixed.
+            </p>
+            <ul class="chips">
+              <li>Steal range 8 studs</li><li>Prime range 70 studs</li>
+              <li>Hold 1.3–2.6 s</li><li>Cooldown 0.05 s</li>
+            </ul>
+            <p class="mock-status"><span class="tag tag--live">READY</span> live status, straight in the UI</p>
+          </article>
+        </div>
+
+        <!-- Visual & comfort -->
+        <h3 class="group__title" data-reveal><span class="group__index">02</span> Visual &amp; Comfort</h3>
+        <div class="grid grid--two">
+          <article class="card card--feature" data-reveal>
+            <div class="card__icon"><svg><use href="#i-sparkle"/></svg></div>
+            <h4 class="card__title">Freeze Effects</h4>
+            <p class="card__text">
+              Strips the superfluous graphical layers — gradients, strokes and halos — for a
+              cleaner, sharper render that can also be lighter on your device.
+            </p>
+            <ul class="chips"><li>Gradients</li><li>Strokes</li><li>Halos</li></ul>
+          </article>
+
+          <article class="card card--feature" data-reveal data-reveal-delay="1">
+            <div class="card__icon"><svg><use href="#i-shield"/></svg></div>
+            <h4 class="card__title">Stability first</h4>
+            <p class="card__text">
+              Heavy startup work is offloaded so the interface builds without stalling your
+              client, and the script is structured to stay inside Luau's limits. Boring on
+              purpose — a hub that loads the same way every time.
+            </p>
+            <ul class="chips"><li>Non-blocking startup</li><li>Luau-safe structure</li></ul>
+          </article>
+        </div>
+
+        <!-- Utility -->
+        <h3 class="group__title" data-reveal><span class="group__index">03</span> Utility</h3>
+        <div class="grid grid--two">
+          <article class="card card--feature" data-reveal>
+            <div class="card__icon"><svg><use href="#i-sliders"/></svg></div>
+            <h4 class="card__title">Speed Bypass</h4>
+            <p class="card__text">
+              An advanced speed bypass with its own widget and a power slider, so you dial in
+              exactly the amount you need. Bound to the <kbd>M</kbd> key for instant access.
+            </p>
+            <ul class="chips"><li>Power slider</li><li>Shortcut <kbd>M</kbd></li></ul>
+          </article>
+
+          <article class="card card--feature" data-reveal data-reveal-delay="1">
+            <div class="card__icon"><svg><use href="#i-signal"/></svg></div>
+            <h4 class="card__title">Lagger</h4>
+            <p class="card__text">
+              A network disruption tool with four calibrated levels, so you can go from a light
+              touch to full intensity without editing anything.
+            </p>
+            <ul class="chips"><li>Low</li><li>Mid</li><li>High</li><li>Ultra</li></ul>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==========================================================
+         VERSIONS
+         ========================================================== -->
+    <section class="section section--alt" id="versions">
+      <div class="container">
+        <header class="section__head" data-reveal>
+          <p class="eyebrow"><span></span> Versions</p>
+          <h2 class="section__title">Current version</h2>
+          <p class="section__lead">
+            Moon Hub ships as a single, maintained release. The version below is the one
+            currently available to every key holder.
+          </p>
+        </header>
+
+        <div class="version" data-reveal>
+          <div class="version__main">
+            <div class="version__badge">Current release</div>
+            <p class="version__number">v1-6</p>
+            <p class="version__text">
+              The active build of Moon Hub, with the full feature set, the integrated key
+              system and roughly 3,250 lines of Lua behind it.
+            </p>
+            <ul class="version__specs">
+              <li><svg><use href="#i-code"/></svg> ~3,250 lines of Lua</li>
+              <li><svg><use href="#i-key"/></svg> Integrated key system</li>
+              <li><svg><use href="#i-layers"/></svg> Complete feature set</li>
+              <li><svg><use href="#i-refresh"/></svg> Actively maintained</li>
+            </ul>
+            <a href="#pricing" class="btn btn--primary">Get v1-6 access <svg class="btn__icon" aria-hidden="true"><use href="#i-arrow"/></svg></a>
+          </div>
+
+          <ol class="timeline" aria-label="Release status">
+            <li class="timeline__item is-current">
+              <p class="timeline__tag">Available now</p>
+              <p class="timeline__title">Moon Hub v1-6</p>
+              <p class="timeline__text">The current build, available to all active keys.</p>
+            </li>
+            <li class="timeline__item is-next">
+              <p class="timeline__tag">In progress</p>
+              <p class="timeline__title">Next update</p>
+              <p class="timeline__text">
+                Upcoming releases are announced on Discord before they ship. Monthly and
+                lifetime access include future updates.
+              </p>
+            </li>
+          </ol>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==========================================================
+         KEY SYSTEM
+         ========================================================== -->
+    <section class="section" id="key">
+      <div class="container">
+        <div class="key">
+          <div class="key__copy" data-reveal>
+            <p class="eyebrow"><span></span> Access &amp; security</p>
+            <h2 class="section__title">Protected by an integrated key system</h2>
+            <p class="section__lead">
+              Moon Hub is not a public script. Access is locked behind a key system built into
+              the hub itself: <strong>one key belongs to one user</strong>. Launch the hub, enter your
+              key, and you are in — the key screen is only shown while a valid key is missing.
+            </p>
+            <ul class="key__points">
+              <li><svg><use href="#i-check"/></svg> One key, one user — no shared access</li>
+              <li><svg><use href="#i-check"/></svg> Verification handled inside the hub</li>
+              <li><svg><use href="#i-check"/></svg> Delivered automatically after checkout</li>
+              <li><svg><use href="#i-check"/></svg> Works with every plan, from 1 day to lifetime</li>
+            </ul>
+          </div>
+
+          <ol class="steps" data-reveal data-reveal-delay="1" aria-label="How to get started">
+            <li class="steps__item">
+              <span class="steps__num">1</span>
+              <div><h3 class="steps__title">Choose a plan</h3><p>Pick the access duration that fits how you play.</p></div>
+            </li>
+            <li class="steps__item">
+              <span class="steps__num">2</span>
+              <div><h3 class="steps__title">Checkout securely</h3><p>Payment is handled end to end by SellAuth.</p></div>
+            </li>
+            <li class="steps__item">
+              <span class="steps__num">3</span>
+              <div><h3 class="steps__title">Receive your key</h3><p>Your key is delivered automatically once the payment goes through.</p></div>
+            </li>
+            <li class="steps__item">
+              <span class="steps__num">4</span>
+              <div><h3 class="steps__title">Launch Moon Hub</h3><p>Enter the key once on the key screen and start playing.</p></div>
+            </li>
+          </ol>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==========================================================
+         PRICING
+         ==========================================================
+         PRICES: edit the <span class="price__amount"> values below.
+         CHECKOUT LINKS: they are NOT written here — they live in
+         js/main.js  →  CONFIG.plans.<id>.url  and are applied to the
+         buttons through their data-plan attribute.
+         ========================================================== -->
+    <section class="section section--alt" id="pricing">
+      <div class="container">
+        <header class="section__head" data-reveal>
+          <p class="eyebrow"><span></span> Store</p>
+          <h2 class="section__title">Choose your access</h2>
+          <p class="section__lead">
+            Every plan unlocks the complete feature set — the only difference is how long your
+            key stays active. Checkout and key delivery are handled by SellAuth.
+          </p>
+        </header>
+
+        <div class="grid grid--pricing">
+
+          <article class="card card--price" data-reveal>
+            <h3 class="price__name">1 Day</h3>
+            <p class="price__desc">Try the full hub for a session.</p>
+            <p class="price"><span class="price__currency">€</span><span class="price__amount">2</span></p>
+            <p class="price__period">One-time · 24 hours</p>
+            <ul class="price__features">
+              <li><svg><use href="#i-check"/></svg> All features unlocked</li>
+              <li><svg><use href="#i-check"/></svg> Personal key</li>
+              <li><svg><use href="#i-check"/></svg> Discord access</li>
+              <li class="is-muted"><svg><use href="#i-check"/></svg> Limited duration</li>
+            </ul>
+            <a class="btn btn--ghost btn--block" data-plan="day" href="#pricing">Buy 1 day</a>
+          </article>
+
+          <article class="card card--price" data-reveal data-reveal-delay="1">
+            <h3 class="price__name">1 Week</h3>
+            <p class="price__desc">A full week of everything.</p>
+            <p class="price"><span class="price__currency">€</span><span class="price__amount">5</span></p>
+            <p class="price__period">One-time · 7 days</p>
+            <ul class="price__features">
+              <li><svg><use href="#i-check"/></svg> All features unlocked</li>
+              <li><svg><use href="#i-check"/></svg> Personal key</li>
+              <li><svg><use href="#i-check"/></svg> Discord access</li>
+              <li><svg><use href="#i-check"/></svg> Updates during your week</li>
+            </ul>
+            <a class="btn btn--ghost btn--block" data-plan="week" href="#pricing">Buy 1 week</a>
+          </article>
+
+          <article class="card card--price card--featured" data-reveal data-reveal-delay="2">
+            <p class="card__ribbon">Most popular</p>
+            <h3 class="price__name">1 Month</h3>
+            <p class="price__desc">The balance most players pick.</p>
+            <p class="price"><span class="price__currency">€</span><span class="price__amount">10</span></p>
+            <p class="price__period">One-time · 30 days</p>
+            <ul class="price__features">
+              <li><svg><use href="#i-check"/></svg> All features unlocked</li>
+              <li><svg><use href="#i-check"/></svg> Personal key</li>
+              <li><svg><use href="#i-check"/></svg> Discord access</li>
+              <li><svg><use href="#i-check"/></svg> Updates included</li>
+            </ul>
+            <a class="btn btn--primary btn--block" data-plan="month" href="#pricing">Buy 1 month</a>
+          </article>
+
+          <article class="card card--price card--lifetime" data-reveal data-reveal-delay="3">
+            <p class="card__ribbon card__ribbon--alt">Best value</p>
+            <h3 class="price__name">Lifetime</h3>
+            <p class="price__desc">Buy once, keep your key.</p>
+            <p class="price"><span class="price__currency">€</span><span class="price__amount">25</span></p>
+            <p class="price__period">One-time · no expiry</p>
+            <ul class="price__features">
+              <li><svg><use href="#i-check"/></svg> All features unlocked</li>
+              <li><svg><use href="#i-check"/></svg> Personal key</li>
+              <li><svg><use href="#i-check"/></svg> Discord access</li>
+              <li><svg><use href="#i-check"/></svg> All future updates included</li>
+            </ul>
+            <a class="btn btn--primary btn--block" data-plan="lifetime" href="#pricing">Buy lifetime</a>
+          </article>
+        </div>
+
+        <p class="pricing__note" data-reveal>
+          <svg aria-hidden="true"><use href="#i-lock"/></svg>
+          Indicative prices — they may change. Checkout, payment and key delivery are handled
+          by SellAuth; Moon Hub never processes payments on this site.
+        </p>
+      </div>
+    </section>
+
+    <!-- ==========================================================
+         COMMUNITY
+         ========================================================== -->
+    <section class="section" id="community">
+      <div class="container">
+        <div class="community" data-reveal>
+          <div class="community__glow" aria-hidden="true"></div>
+          <div class="community__copy">
+            <p class="eyebrow"><span></span> Community</p>
+            <h2 class="section__title">Everything happens on Discord</h2>
+            <p class="section__lead">
+              Discord is Moon Hub's home: tens of thousands of members, update announcements,
+              support and the place where new releases land first. Distribution runs through
+              the server, so it is the fastest way to stay current.
+            </p>
+            <div class="community__actions">
+              <a href="#" class="btn btn--discord btn--lg" data-link="discord">
+                <svg class="btn__icon" aria-hidden="true"><use href="#i-discord"/></svg>
+                Join Discord
+              </a>
+              <a href="#pricing" class="btn btn--ghost btn--lg">See the plans</a>
+            </div>
+          </div>
+          <ul class="community__facts">
+            <li><svg><use href="#i-users"/></svg><strong>Tens of thousands</strong><span>of members</span></li>
+            <li><svg><use href="#i-refresh"/></svg><strong>Updates first</strong><span>announced on Discord</span></li>
+            <li><svg><use href="#i-key"/></svg><strong>Key support</strong><span>help when you need it</span></li>
+          </ul>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ============================================================
+       FOOTER
+       ============================================================ -->
+  <footer class="footer">
+    <div class="container footer__inner">
+      <div class="footer__brand">
+        <a class="brand" href="#home" aria-label="Moon Hub — home">
+          <span class="brand__mark"><svg aria-hidden="true"><use href="#i-moon"/></svg></span>
+          <span class="brand__text">Moon<span>Hub</span></span>
+        </a>
+        <p class="footer__tag">Premium Lua hub for Roblox.<br>Version <strong>v1-6</strong> — protected by an integrated key system.</p>
+      </div>
+
+      <nav class="footer__cols" aria-label="Footer">
+        <div class="footer__col">
+          <h2>Product</h2>
+          <a href="#features">Features</a>
+          <a href="#versions">Versions</a>
+          <a href="#key">Key system</a>
+        </div>
+        <div class="footer__col">
+          <h2>Store</h2>
+          <a href="#pricing">Pricing</a>
+          <a href="#pricing" data-plan="month">1 month access</a>
+          <a href="#pricing" data-plan="lifetime">Lifetime access</a>
+        </div>
+        <div class="footer__col">
+          <h2>Community</h2>
+          <a href="#community" data-link="discord">Discord server</a>
+          <a href="#community">Support</a>
+        </div>
+      </nav>
+    </div>
+
+    <div class="container footer__bottom">
+      <p>&copy; <span id="year">2026</span> Moon Hub. All rights reserved.</p>
+      <p class="footer__legal">
+        Moon Hub is an independent project and is not affiliated with, endorsed by or
+        sponsored by Roblox Corporation. Payments and key delivery are processed by SellAuth.
+      </p>
+    </div>
+  </footer>
+
+  <script src="js/main.js" defer></script>
+</body>
+</html>
