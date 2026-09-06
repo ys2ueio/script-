@@ -195,85 +195,64 @@ task.spawn(function()
 			return true
 		end
 
-		-- Source 1: Plots -> AnimalPodiums
+		-- Source 1: deep scan each non-mine plot for ANY ProximityPrompt.
+		-- Does NOT assume AnimalPodiums — walks ALL descendants so we catch
+		-- pets regardless of their container name inside the plot.
+		-- Utility-part filter: skip prompts on parts whose name hints at
+		-- fences/signs/ground — everything else is a steal candidate.
 		pcall(function()
 			local plots = workspace:FindFirstChild("Plots")
 			if not plots then return end
+			local function isUtil(name)
+				local l = name:lower()
+				return l:find("sign",1,true) or l:find("fence",1,true)
+					or l:find("wall",1,true) or l:find("floor",1,true)
+					or l:find("ground",1,true) or l:find("gate",1,true)
+					or l:find("decor",1,true) or l:find("light",1,true)
+					or l:find("grass",1,true) or l:find("baseplate",1,true)
+			end
 			for _, plot in ipairs(plots:GetChildren()) do
 				if not _isMyPlot(plot.Name) then
-					local podiums = plot:FindFirstChild("AnimalPodiums")
-					if not podiums then return end
 					dPlots = dPlots + 1
-					for _, pod in ipairs(podiums:GetChildren()) do
-						dPods = dPods + 1
-						pcall(function()
-							-- Find steal prompt: try multiple paths
-							local prompt, pos, cf = nil, nil, nil
-
-							-- A: Base.Spawn.PromptAttachment.*
-							local base = pod:FindFirstChild("Base")
-							local spawn = base and base:FindFirstChild("Spawn")
-							if spawn and spawn:IsA("BasePart") then
-								pos = spawn.Position; cf = spawn.CFrame
-								local att = spawn:FindFirstChild("PromptAttachment")
-								if att then
-									for _, c in ipairs(att:GetChildren()) do
-										if c:IsA("ProximityPrompt") then prompt=c; break end
-									end
-								end
-								-- B: directly on Spawn
-								if not prompt then
-									for _, c in ipairs(spawn:GetChildren()) do
-										if c:IsA("ProximityPrompt") then prompt=c; break end
-									end
-								end
-							end
-
-							-- C: any ProximityPrompt anywhere inside pod
-							if not prompt then
-								for _, d in ipairs(pod:GetDescendants()) do
-									if d:IsA("ProximityPrompt") then
-										prompt = d
-										if not pos then
-											local p = d.Parent
-											while p and not p:IsA("BasePart") do p=p.Parent end
-											if p then pos=p.Position; cf=p.CFrame end
-										end
+					for _, d in ipairs(plot:GetDescendants()) do
+						if d:IsA("ProximityPrompt") then
+							pcall(function()
+								-- walk up to BasePart
+								local part = d.Parent
+								while part and not part:IsA("BasePart") do part=part.Parent end
+								if not part or isUtil(part.Name) then return end
+								-- walk up to best-named Model inside plot
+								local bestName = part.Name
+								local scanRoot = part
+								local node = part.Parent
+								while node and node ~= plot and node ~= workspace do
+									if node:IsA("Model") and node.Name ~= "Model"
+										and not isUtil(node.Name) then
+										bestName = node.Name
+										scanRoot = node
 										break
 									end
+									node = node.Parent
 								end
-							end
-
-							-- D: position fallback — any BasePart in pod
-							if not pos then
-								local pp = pod.PrimaryPart
-								if pp then pos=pp.Position; cf=pp.CFrame
-								else
-									for _, d in ipairs(pod:GetDescendants()) do
-										if d:IsA("BasePart") then pos=d.Position; cf=d.CFrame; break end
-									end
-								end
-							end
-
-							if not pos then return end
-							if prompt then dPrompts=dPrompts+1 end
-
-							local _, tags, weight = _readEggLabels(pod)
-							local valueText, valueNum = _extractMoneyText(pod)
-							_upsertEgg({
-								pos=pos, cf=cf or CFrame.new(pos), area=plot.Name,
-								cat=pod.Name, tags=tags, weight=weight,
-								value=valueNum, valueText=valueText,
-								uid=tostring(pod), farmable=(prompt ~= nil),
-								imageId=_getEggImageId(pod), prompt=prompt,
-							})
-						end)
+								dPods = dPods + 1; dPrompts = dPrompts + 1
+								local _, tags, weight = _readEggLabels(scanRoot)
+								local valueText, valueNum = _extractMoneyText(scanRoot)
+								_upsertEgg({
+									pos=part.Position, cf=part.CFrame, area=plot.Name,
+									cat=bestName, tags=tags, weight=weight,
+									value=valueNum, valueText=valueText,
+									uid=tostring(d), farmable=true,
+									imageId=_getEggImageId(scanRoot), prompt=d,
+								})
+							end)
+						end
 					end
 				end
 			end
 		end)
 
-		-- Source 2: workspace-wide sweep (aggressive, minimal filter)
+		-- Source 2: workspace sweep — explicit steal-keyword filter
+		-- (catches dropped eggs / pets outside plots).
 		pcall(function()
 			local myPlotNode = nil
 			local plots = workspace:FindFirstChild("Plots")
@@ -286,12 +265,13 @@ task.spawn(function()
 				if prompt:IsA("ProximityPrompt") then
 					local action = prompt.ActionText:lower()
 					local objTxt = prompt.ObjectText:lower()
-					-- skip clear non-steal actions
-					local isShop = action:find("sell",1,true) or action:find("buy",1,true)
-						or objTxt:find("sell",1,true) or objTxt:find("buy",1,true)
-					local isDrop = action:find("drop",1,true) or objTxt:find("drop",1,true)
-					local isChat = action == "" and objTxt == ""
-					if not isShop and not isDrop and not isChat then
+					local isSteal = action:find("steal",1,true) or action:find("grab",1,true)
+						or action:find("take",1,true) or action:find("pick",1,true)
+						or action:find("hatch",1,true) or action:find("claim",1,true)
+						or action:find("harvest",1,true) or action:find("collect",1,true)
+						or objTxt:find("egg",1,true) or objTxt:find("pet",1,true)
+						or objTxt:find("brainrot",1,true) or objTxt:find("animal",1,true)
+					if isSteal then
 						local part, model = _promptOwnerModel(prompt)
 						if part then
 							local inMyPlot = myPlotNode and (part:IsDescendantOf(myPlotNode)
@@ -716,44 +696,38 @@ debugBtn.Text="Copier debug scan"; debugBtn.TextColor3=C.DIM
 debugBtn.Font=Enum.Font.Gotham; debugBtn.TextSize=10; debugBtn.Parent=debugRow
 debugBtn.MouseButton1Click:Connect(function()
 	local lines = {}
-	table.insert(lines, "[yslemEgg debug v3]")
+	table.insert(lines, "[yslemEgg debug v4]")
 	local plots = workspace:FindFirstChild("Plots")
-	table.insert(lines, "workspace.Plots: "..tostring(plots~=nil))
+	table.insert(lines, "Plots:"..tostring(plots~=nil))
 	if plots then
 		local allPlots = plots:GetChildren()
 		table.insert(lines, "plotCount="..#allPlots)
 		for i, pl in ipairs(allPlots) do
 			if i > 3 then table.insert(lines,"  ..."); break end
-			local pods = pl:FindFirstChild("AnimalPodiums")
-			local podCnt = pods and #pods:GetChildren() or 0
-			table.insert(lines, "  plot="..pl.Name.." mine="..tostring(_isMyPlot(pl.Name)).." pods="..podCnt)
-			if pods then
-				for j, pod in ipairs(pods:GetChildren()) do
-					if j > 4 then table.insert(lines,"    ..."); break end
-					local base = pod:FindFirstChild("Base")
-					local spawn = base and base:FindFirstChild("Spawn")
-					local att = spawn and spawn:FindFirstChild("PromptAttachment")
-					local pp = false
-					if att then
-						for _, c in ipairs(att:GetChildren()) do
-							if c:IsA("ProximityPrompt") then pp=true; break end
-						end
+			-- list all direct children of the plot
+			local kids = pl:GetChildren()
+			local kidNames = {}
+			for _, k in ipairs(kids) do kidNames[#kidNames+1] = k.Name end
+			table.insert(lines, "  plot="..pl.Name.." mine="..tostring(_isMyPlot(pl.Name))
+				.." children=["..table.concat(kidNames,",").."]")
+			-- for each child, count descendants with ProximityPrompt
+			for j, kid in ipairs(kids) do
+				if j > 6 then break end
+				local ppCnt = 0
+				for _, d in ipairs(kid:GetDescendants()) do
+					if d:IsA("ProximityPrompt") then ppCnt=ppCnt+1 end
+				end
+				if ppCnt > 0 then
+					table.insert(lines, "    "..kid.Name.." pp="..ppCnt)
+					-- show what models are inside
+					for _, gk in ipairs(kid:GetChildren()) do
+						table.insert(lines, "      "..gk.ClassName.."="..gk.Name)
 					end
-					-- any prompt in pod?
-					local anyPP = pp
-					if not anyPP then
-						for _, d in ipairs(pod:GetDescendants()) do
-							if d:IsA("ProximityPrompt") then anyPP=true; break end
-						end
-					end
-					table.insert(lines,"    pod="..pod.Name.." base="..tostring(base~=nil)
-						.." spawn="..tostring(spawn~=nil).." att="..tostring(att~=nil)
-						.." pp_att="..tostring(pp).." pp_any="..tostring(anyPP))
 				end
 			end
 		end
 	end
-	table.insert(lines,"dbg: plots="..tostring(_dbgPlots).." pods="..tostring(_dbgPods).." prompts="..tostring(_dbgPrompts))
+	table.insert(lines,"dbg plots="..tostring(_dbgPlots).." pods="..tostring(_dbgPods).." pp="..tostring(_dbgPrompts))
 	table.insert(lines,"cachedEggs="..#cachedEggs)
 	for i, e in ipairs(cachedEggs) do
 		if i > 8 then break end
