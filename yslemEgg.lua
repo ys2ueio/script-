@@ -146,13 +146,14 @@ local function _promptOwnerModel(prompt)
 end
 
 -- ============================================================
--- EGG / PET SCANNER
--- Source 1 (primary): workspace.Plots.<plot>.AnimalPodiums.<pod>
---   — same structure yslem_hub.lua's AutoSteal already relies on in
---   this game. pod.Name = pet identity, descendant TextLabels carry
---   rarity + $ value, Base.Spawn.PromptAttachment holds the steal prompt.
--- Source 2 (fallback): generic ProximityPrompt scan, for anything not
---   sitting on a podium (dropped eggs, other layouts).
+-- EGG / PET SCANNER  (v3 — robust multi-path detection)
+-- Source 1: workspace.Plots.<plot>.AnimalPodiums.<pod>
+--   Tries Base.Spawn.PromptAttachment first, then any ProximityPrompt
+--   anywhere in the pod, then falls back to position-only (farmable=false)
+--   so pods appear even when the prompt path differs — pod.Name = pet.
+-- Source 2: workspace-wide ProximityPrompt sweep (excludes sell/buy/drop).
+--   Filters by myPlot + myChar, accepts any action text — catches steal
+--   prompts regardless of their exact wording in this game.
 -- ============================================================
 local _plotIsMyCache = {}
 local function _isMyPlot(plotName)
@@ -174,10 +175,14 @@ local function _isMyPlot(plotName)
 end
 
 local cachedEggs = {}
-local _lastScanFoundAny = false  -- surfaced in UI so "0 found" is honest, not silent
+local _lastScanFoundAny = false
+-- diagnostic counters updated every scan cycle
+local _dbgPlots, _dbgPods, _dbgPrompts = 0, 0, 0
+
 task.spawn(function()
 	while true do
 		local eggs = {}
+		local dPlots, dPods, dPrompts = 0, 0, 0
 
 		local function _upsertEgg(entry)
 			for i, ex in ipairs(eggs) do
@@ -190,70 +195,123 @@ task.spawn(function()
 			return true
 		end
 
-		-- Source 1: Plots -> AnimalPodiums (proven structure, primary)
+		-- Source 1: Plots -> AnimalPodiums
 		pcall(function()
 			local plots = workspace:FindFirstChild("Plots")
 			if not plots then return end
 			for _, plot in ipairs(plots:GetChildren()) do
 				if not _isMyPlot(plot.Name) then
 					local podiums = plot:FindFirstChild("AnimalPodiums")
-					if podiums then
-						for _, pod in ipairs(podiums:GetChildren()) do
-							pcall(function()
-								local base = pod:FindFirstChild("Base")
-								local spawn = base and base:FindFirstChild("Spawn")
-								if not spawn then return end
+					if not podiums then return end
+					dPlots = dPlots + 1
+					for _, pod in ipairs(podiums:GetChildren()) do
+						dPods = dPods + 1
+						pcall(function()
+							-- Find steal prompt: try multiple paths
+							local prompt, pos, cf = nil, nil, nil
+
+							-- A: Base.Spawn.PromptAttachment.*
+							local base = pod:FindFirstChild("Base")
+							local spawn = base and base:FindFirstChild("Spawn")
+							if spawn and spawn:IsA("BasePart") then
+								pos = spawn.Position; cf = spawn.CFrame
 								local att = spawn:FindFirstChild("PromptAttachment")
-								local prompt = nil
 								if att then
-									for _, child in ipairs(att:GetChildren()) do
-										if child:IsA("ProximityPrompt") then prompt = child; break end
+									for _, c in ipairs(att:GetChildren()) do
+										if c:IsA("ProximityPrompt") then prompt=c; break end
 									end
 								end
-								if not prompt then return end
-								local _, tags, weight = _readEggLabels(pod)
-								local valueText, valueNum = _extractMoneyText(pod)
-								_upsertEgg({
-									pos=spawn.Position, cf=spawn.CFrame, area=plot.Name,
-									cat=pod.Name, tags=tags, weight=weight,
-									value=valueNum, valueText=valueText,
-									uid=tostring(prompt), farmable=true,
-									imageId=_getEggImageId(pod), prompt=prompt,
-								})
-							end)
-						end
+								-- B: directly on Spawn
+								if not prompt then
+									for _, c in ipairs(spawn:GetChildren()) do
+										if c:IsA("ProximityPrompt") then prompt=c; break end
+									end
+								end
+							end
+
+							-- C: any ProximityPrompt anywhere inside pod
+							if not prompt then
+								for _, d in ipairs(pod:GetDescendants()) do
+									if d:IsA("ProximityPrompt") then
+										prompt = d
+										if not pos then
+											local p = d.Parent
+											while p and not p:IsA("BasePart") do p=p.Parent end
+											if p then pos=p.Position; cf=p.CFrame end
+										end
+										break
+									end
+								end
+							end
+
+							-- D: position fallback — any BasePart in pod
+							if not pos then
+								local pp = pod.PrimaryPart
+								if pp then pos=pp.Position; cf=pp.CFrame
+								else
+									for _, d in ipairs(pod:GetDescendants()) do
+										if d:IsA("BasePart") then pos=d.Position; cf=d.CFrame; break end
+									end
+								end
+							end
+
+							if not pos then return end
+							if prompt then dPrompts=dPrompts+1 end
+
+							local _, tags, weight = _readEggLabels(pod)
+							local valueText, valueNum = _extractMoneyText(pod)
+							_upsertEgg({
+								pos=pos, cf=cf or CFrame.new(pos), area=plot.Name,
+								cat=pod.Name, tags=tags, weight=weight,
+								value=valueNum, valueText=valueText,
+								uid=tostring(pod), farmable=(prompt ~= nil),
+								imageId=_getEggImageId(pod), prompt=prompt,
+							})
+						end)
 					end
 				end
 			end
 		end)
 
-		-- Source 2: generic ProximityPrompt fallback
+		-- Source 2: workspace-wide sweep (aggressive, minimal filter)
 		pcall(function()
+			local myPlotNode = nil
+			local plots = workspace:FindFirstChild("Plots")
+			if plots then
+				for _, p in ipairs(plots:GetChildren()) do
+					if _isMyPlot(p.Name) then myPlotNode=p; break end
+				end
+			end
 			for _, prompt in ipairs(workspace:GetDescendants()) do
 				if prompt:IsA("ProximityPrompt") then
 					local action = prompt.ActionText:lower()
 					local objTxt = prompt.ObjectText:lower()
-					local parentName = (prompt.Parent and prompt.Parent.Name or ""):lower()
-					local isSellPrompt = action:find("sell",1,true) or objTxt:find("sell",1,true)
-						or action:find("vend",1,true) or objTxt:find("vend",1,true)
-					local isDropPrompt = action:find("drop",1,true) or objTxt:find("drop",1,true)
-					if not isSellPrompt and not isDropPrompt and (action:find("grab") or action:find("steal") or action:find("take")
-						or action:find("pick") or action:find("collect") or action:find("hatch")
-						or action:find("claim") or action:find("harvest")
-						or objTxt:find("egg") or parentName:find("egg") or parentName:find("field") or parentName:find("slot")) then
+					-- skip clear non-steal actions
+					local isShop = action:find("sell",1,true) or action:find("buy",1,true)
+						or objTxt:find("sell",1,true) or objTxt:find("buy",1,true)
+					local isDrop = action:find("drop",1,true) or objTxt:find("drop",1,true)
+					local isChat = action == "" and objTxt == ""
+					if not isShop and not isDrop and not isChat then
 						local part, model = _promptOwnerModel(prompt)
 						if part then
-							local _, tags3, weight3 = _readEggLabels(model or part)
-							local valueText3, valueNum3 = _extractMoneyText(model or part)
-							local cat3 = (model and model.Name ~= "Model" and model.Name)
-								or (tags3[1] and tags3[1]:upper())
-								or (objTxt ~= "" and prompt.ObjectText) or part.Name
-							_upsertEgg({
-								pos=part.Position, cf=part.CFrame, area="Trouve", cat=cat3,
-								tags=tags3, weight=weight3, value=valueNum3, valueText=valueText3,
-								uid=tostring(prompt), farmable=true,
-								imageId=_getEggImageId(model or part), prompt=prompt,
-							})
+							local inMyPlot = myPlotNode and (part:IsDescendantOf(myPlotNode)
+								or (model and model:IsDescendantOf(myPlotNode)))
+							local inChar = LP.Character and (part:IsDescendantOf(LP.Character)
+								or (model and model:IsDescendantOf(LP.Character)))
+							if not inMyPlot and not inChar then
+								local _, tags3, weight3 = _readEggLabels(model or part)
+								local valueText3, valueNum3 = _extractMoneyText(model or part)
+								local cat3 = (model and model ~= part and model.Name ~= "Model" and model.Name)
+									or (tags3[1] and tags3[1]:upper())
+									or (prompt.ObjectText ~= "" and prompt.ObjectText) or part.Name
+								_upsertEgg({
+									pos=part.Position, cf=part.CFrame, area="Scan",
+									cat=cat3, tags=tags3, weight=weight3,
+									value=valueNum3, valueText=valueText3,
+									uid=tostring(prompt), farmable=true,
+									imageId=_getEggImageId(model or part), prompt=prompt,
+								})
+							end
 						end
 					end
 				end
@@ -262,6 +320,7 @@ task.spawn(function()
 
 		cachedEggs = eggs
 		_lastScanFoundAny = (#eggs > 0)
+		_dbgPlots, _dbgPods, _dbgPrompts = dPlots, dPods, dPrompts
 		task.wait(0.75)
 	end
 end)
@@ -657,22 +716,59 @@ debugBtn.Text="Copier debug scan"; debugBtn.TextColor3=C.DIM
 debugBtn.Font=Enum.Font.Gotham; debugBtn.TextSize=10; debugBtn.Parent=debugRow
 debugBtn.MouseButton1Click:Connect(function()
 	local lines = {}
-	table.insert(lines, "[yslemEgg debug] Plots exists: "..tostring(workspace:FindFirstChild("Plots") ~= nil))
-	table.insert(lines, "cachedEggs: "..#cachedEggs)
+	table.insert(lines, "[yslemEgg debug v3]")
+	local plots = workspace:FindFirstChild("Plots")
+	table.insert(lines, "workspace.Plots: "..tostring(plots~=nil))
+	if plots then
+		local allPlots = plots:GetChildren()
+		table.insert(lines, "plotCount="..#allPlots)
+		for i, pl in ipairs(allPlots) do
+			if i > 3 then table.insert(lines,"  ..."); break end
+			local pods = pl:FindFirstChild("AnimalPodiums")
+			local podCnt = pods and #pods:GetChildren() or 0
+			table.insert(lines, "  plot="..pl.Name.." mine="..tostring(_isMyPlot(pl.Name)).." pods="..podCnt)
+			if pods then
+				for j, pod in ipairs(pods:GetChildren()) do
+					if j > 4 then table.insert(lines,"    ..."); break end
+					local base = pod:FindFirstChild("Base")
+					local spawn = base and base:FindFirstChild("Spawn")
+					local att = spawn and spawn:FindFirstChild("PromptAttachment")
+					local pp = false
+					if att then
+						for _, c in ipairs(att:GetChildren()) do
+							if c:IsA("ProximityPrompt") then pp=true; break end
+						end
+					end
+					-- any prompt in pod?
+					local anyPP = pp
+					if not anyPP then
+						for _, d in ipairs(pod:GetDescendants()) do
+							if d:IsA("ProximityPrompt") then anyPP=true; break end
+						end
+					end
+					table.insert(lines,"    pod="..pod.Name.." base="..tostring(base~=nil)
+						.." spawn="..tostring(spawn~=nil).." att="..tostring(att~=nil)
+						.." pp_att="..tostring(pp).." pp_any="..tostring(anyPP))
+				end
+			end
+		end
+	end
+	table.insert(lines,"dbg: plots="..tostring(_dbgPlots).." pods="..tostring(_dbgPods).." prompts="..tostring(_dbgPrompts))
+	table.insert(lines,"cachedEggs="..#cachedEggs)
 	for i, e in ipairs(cachedEggs) do
-		if i > 10 then break end
-		table.insert(lines, string.format("#%d cat=%s area=%s tags=%s value=%s weight=%s",
-			i, tostring(e.cat), tostring(e.area), table.concat(e.tags or {}, ","),
-			tostring(e.valueText), tostring(e.weight)))
+		if i > 8 then break end
+		table.insert(lines,string.format("#%d %s/%s/$%s farm=%s area=%s",
+			i, tostring(e.cat), table.concat(e.tags or {},","),
+			tostring(e.valueText), tostring(e.farmable), tostring(e.area)))
 	end
 	local txt = table.concat(lines, "\n")
 	print(txt)
 	local prev = debugBtn.Text
 	if type(setclipboard) == "function" then
 		pcall(function() setclipboard(txt) end)
-		debugBtn.Text = "Copie ! (voir aussi F9)"
+		debugBtn.Text = "Copie! (F9 aussi)"
 	else
-		debugBtn.Text = "Voir console F9"
+		debugBtn.Text = "Voir F9 console"
 	end
 	task.delay(1.5, function() pcall(function() debugBtn.Text = prev end) end)
 end)
