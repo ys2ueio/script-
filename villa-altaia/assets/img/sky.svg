@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" width="1920" height="1080" preserveAspectRatio="xMidYMid slice">
+
+  <defs>
+    
+    <filter id="grain" x="-2%" y="-2%" width="104%" height="104%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="3" seed="7" result="n"/>
+      <feColorMatrix in="n" type="saturate" values="0"/>
+      <feComponentTransfer><feFuncA type="linear" slope="0.55"/></feComponentTransfer>
+    </filter>
+    <filter id="soft" x="-25%" y="-25%" width="150%" height="150%">
+      <feGaussianBlur stdDeviation="26"/>
+    </filter>
+    <filter id="haze" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="9"/>
+    </filter>
+    <linearGradient id="sk" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="#0b0e11"/>
+      <stop offset="34%"  stop-color="#1a2027"/>
+      <stop offset="66%"  stop-color="#3a3f45"/>
+      <stop offset="86%"  stop-color="#6d6a63"/>
+      <stop offset="100%" stop-color="#cdbca6"/>
+    </linearGradient>
+    <radialGradient id="sun" cx="72%" cy="82%" r="46%">
+      <stop offset="0%"   stop-color="#f0c48d" stop-opacity="0.85"/>
+      <stop offset="38%"  stop-color="#d99a5c"  stop-opacity="0.30"/>
+      <stop offset="100%" stop-color="#d99a5c"  stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="cl" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%"   stop-color="#9aa1a8" stop-opacity="0"/>
+      <stop offset="50%"  stop-color="#efe7db" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#9aa1a8" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect width="1920" height="1080" fill="url(#sk)"/>
+  <g filter="url(#haze)"><ellipse cx="515.75" cy="310.41" rx="549.13" ry="25.82" fill="url(#cl)" opacity="0.121"/><ellipse cx="378.73" cy="446.07" rx="567.49" ry="29.02" fill="url(#cl)" opacity="0.255"/><ellipse cx="29.35" cy="263.01" rx="1018.87" ry="19.47" fill="url(#cl)" opacity="0.16"/><ellipse cx="285.14" cy="474.23" rx="793.33" ry="17.13" fill="url(#cl)" opacity="0.138"/><ellipse cx="566.2" cy="482.94" rx="606.76" ry="15.67" fill="url(#cl)" opacity="0.1"/><ellipse cx="984.02" cy="300.06" rx="496.46" ry="16" fill="url(#cl)" opacity="0.251"/><ellipse cx="784.63" cy="436.25" rx="935.77" ry="12.46" fill="url(#cl)" opacity="0.117"/><ellipse cx="72.63" cy="503.66" rx="561.17" ry="12.3" fill="url(#cl)" opacity="0.143"/><ellipse cx="1309.1" cy="327.34" rx="959.35" ry="35.6" fill="url(#cl)" opacity="0.102"/></g>
+  <rect width="1920" height="1080" fill="url(#sun)"/>
+  <rect width="1920" height="1080" filter="url(#grain)" opacity="0.05" style="mix-blend-mode:overlay"/>
+</svg>

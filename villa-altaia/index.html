@@ -1,0 +1,493 @@
+<!doctype html>
+<html lang="fr" class="no-js">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Villa Altaïa — refuge d'altitude, massif de la Vanoise</title>
+<meta name="description" content="Villa Altaïa : 620 m² de chalet contemporain suspendus à 2 140 mètres. Une descente cinématique des sommets enneigés jusqu'au feu du salon.">
+<meta name="theme-color" content="#0b0d0f">
+<meta property="og:title" content="Villa Altaïa — refuge d'altitude">
+<meta property="og:description" content="620 m² suspendus à 2 140 mètres, face au massif de la Vanoise.">
+<meta property="og:image" content="assets/img/hero-poster.jpg">
+<meta property="og:type" content="website">
+
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230b0d0f'/%3E%3Cpath d='M4 24 L12 10 L18 20 L22 14 L28 24 Z' fill='%23cdbca6'/%3E%3Ccircle cx='16' cy='27' r='2' fill='%23d99a5c'/%3E%3C/svg%3E">
+<link rel="preload" as="image" href="assets/img/peaks-mid.svg">
+<link rel="preload" as="image" href="assets/img/chalet.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400&family=Jost:wght@200;300;400&display=swap">
+<link rel="stylesheet" href="assets/css/villa.css">
+<script>document.documentElement.className = 'js';</script>
+</head>
+<body>
+
+<a class="skip-link" href="#salon">Aller au contenu</a>
+
+<!-- travelling WebGL : descend des sommets vers la chaleur du chalet -->
+<canvas id="gl" aria-hidden="true"></canvas>
+
+<header class="masthead">
+  <a class="wordmark" href="#sommets">Altaïa<small>Vanoise · 2 140 m</small></a>
+  <nav aria-label="Chapitres">
+    <a href="#sommets">Sommets</a>
+    <a href="#salon">Salon</a>
+    <a href="#suite">Suite</a>
+    <a href="#spa">Spa</a>
+    <a href="#terrasse">Terrasse</a>
+    <a href="#plan">Plan</a>
+    <a href="#sejourner">Séjourner</a>
+  </nav>
+</header>
+
+<nav class="rail" aria-label="Progression">
+  <a href="#sommets"   data-rail><span>Sommets</span></a>
+  <a href="#arrivee"   data-rail><span>Arrivée</span></a>
+  <a href="#salon"     data-rail><span>Salon</span></a>
+  <a href="#suite"     data-rail><span>Suite</span></a>
+  <a href="#spa"       data-rail><span>Spa</span></a>
+  <a href="#terrasse"  data-rail><span>Terrasse</span></a>
+  <a href="#plan"      data-rail><span>Plan</span></a>
+  <a href="#prestations" data-rail><span>Prestations</span></a>
+  <a href="#sejourner" data-rail><span>Séjourner</span></a>
+</nav>
+
+<main class="chapters" id="scroller">
+
+  <!-- ============ 1 · LES SOMMETS ====================================== -->
+  <section class="chapter hero" id="sommets" data-chapter="0" aria-labelledby="t-sommets">
+    <!-- profondeur : chaque calque défile à sa propre vitesse -->
+    <div class="parallax" aria-hidden="true">
+      <img class="layer layer--sky"    src="assets/img/sky.svg"       alt="" data-depth="0.04">
+      <video class="hero-video" id="hero-video" poster="assets/img/hero-poster.jpg"
+             autoplay muted loop playsinline preload="auto" tabindex="-1">
+        <source src="assets/video/mist.webm" type="video/webm">
+      </video>
+      <img class="layer layer--far"    src="assets/img/peaks-far.svg" alt="" data-depth="0.10">
+      <img class="layer layer--mid"    src="assets/img/peaks-mid.svg" alt="" data-depth="0.20">
+      <img class="layer layer--forest" src="assets/img/forest.svg"    alt="" data-depth="0.34">
+      <img class="layer layer--chalet" src="assets/img/chalet.svg"    alt="" data-depth="0.52">
+      <img class="layer layer--drift"  src="assets/img/drift.svg"     alt="" data-depth="0.78">
+    </div>
+    <div class="scrim"></div>
+
+    <div class="wrap reveal">
+      <p class="eyebrow reveal-item">Massif de la Vanoise <span>·</span> 2 140 mètres</p>
+      <h1 class="display reveal-item" id="t-sommets">Villa<br>Altaïa</h1>
+      <p class="lede reveal-item" style="margin-top:2rem">
+        Six cents mètres carrés posés sur la dernière arête avant le ciel.
+        Descendez : la maison vous attend plus bas, feu déjà allumé.
+      </p>
+      <p class="reveal-item"><a class="cta" href="#arrivee">Commencer la descente</a></p>
+    </div>
+
+    <div class="scroll-hint" aria-hidden="true"><i></i>Défiler</div>
+  </section>
+
+  <!-- ============ 2 · L'ARRIVÉE ======================================== -->
+  <section class="chapter" id="arrivee" data-chapter="1" aria-labelledby="t-arrivee">
+    <div class="canvas-full holder">
+      <img class="lazy" data-src="assets/img/chalet.svg" alt="Le chalet Altaïa au crépuscule, fenêtres éclairées sur la congère"
+           style="object-position:50% 62%" data-scrub="1.14">
+    </div>
+    <div class="scrim"></div>
+
+    <div class="wrap">
+      <div class="col reveal">
+        <p class="eyebrow reveal-item">Chapitre I <span>·</span> L'arrivée</p>
+        <hr class="hair reveal-item">
+        <h2 class="title reveal-item" id="t-arrivee">La route s'arrête.<br>La maison commence.</h2>
+        <p class="body reveal-item">
+          Mélèze brossé, pierre de Maurienne, toiture à faible pente pour retenir
+          la neige. Rien ne dépasse. La villa a été dessinée pour disparaître
+          dans la pente et ne se révéler qu'au dernier virage.
+        </p>
+        <ul class="meta reveal-item">
+          <li><div class="k">Surface</div><div class="v">620 m²</div></li>
+          <li><div class="k">Suites</div><div class="v">6</div></li>
+          <li><div class="k">Voyageurs</div><div class="v">12</div></li>
+          <li><div class="k">Altitude</div><div class="v">2&#8239;140 m</div></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 3 · LE SALON ========================================= -->
+  <section class="chapter" id="salon" data-chapter="2" aria-labelledby="t-salon">
+    <div class="canvas-full holder">
+      <img class="lazy" data-src="assets/img/salon.svg"
+           alt="Le salon double hauteur : cheminée de pierre, poutres de mélèze, baie sur la vallée"
+           data-scrub="1.12">
+    </div>
+    <div class="scrim scrim--flip"></div>
+
+    <div class="wrap">
+      <div class="col col--right reveal">
+        <p class="eyebrow reveal-item">Chapitre II <span>·</span> Le salon</p>
+        <hr class="hair reveal-item">
+        <h2 class="title reveal-item" id="t-salon">Neuf mètres<br>sous poutres.</h2>
+        <p class="lede reveal-item">
+          Le feu est le seul bruit de la pièce.
+        </p>
+        <p class="body reveal-item">
+          Un foyer ouvert taillé dans un seul bloc de pierre, une baie de onze
+          mètres orientée plein sud, et des poutres de mélèze récupérées sur une
+          grange de 1890. La lumière tombe d'ouest en fin de journée et traverse
+          toute la pièce jusqu'à l'âtre.
+        </p>
+        <ul class="meta reveal-item">
+          <li><div class="k">Hauteur</div><div class="v">9,20 m</div></li>
+          <li><div class="k">Baie sud</div><div class="v">11 m</div></li>
+          <li><div class="k">Foyer</div><div class="v">Pierre</div></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 4 · LA SUITE ========================================= -->
+  <section class="chapter" id="suite" data-chapter="3" aria-labelledby="t-suite">
+    <div class="canvas-full holder">
+      <img class="lazy" data-src="assets/img/chambre.svg"
+           alt="Suite d'altitude : lit face à une baie panoramique ouverte sur les crêtes"
+           data-scrub="1.10">
+    </div>
+    <div class="scrim"></div>
+
+    <div class="wrap">
+      <div class="col reveal">
+        <p class="eyebrow reveal-item">Chapitre III <span>·</span> La suite d'altitude</p>
+        <hr class="hair reveal-item">
+        <h2 class="title reveal-item" id="t-suite">Se réveiller<br>au-dessus des nuages.</h2>
+        <p class="body reveal-item">
+          La chambre principale n'a qu'un mur : celui du fond, entièrement vitré.
+          Lin lavé, laine des Alpes, chêne huilé. Aucun interrupteur visible —
+          la lumière suit la course du soleil et s'éteint d'elle-même.
+        </p>
+        <ul class="meta reveal-item">
+          <li><div class="k">Surface</div><div class="v">74 m²</div></li>
+          <li><div class="k">Orientation</div><div class="v">Sud-est</div></li>
+          <li><div class="k">Vue</div><div class="v">Panorama</div></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 5 · LE SPA =========================================== -->
+  <section class="chapter" id="spa" data-chapter="4" aria-labelledby="t-spa">
+    <div class="canvas-full holder">
+      <img class="lazy" data-src="assets/img/spa.svg"
+           alt="Bassin intérieur chauffé, vapeur et meurtrière panoramique sur la montagne"
+           data-scrub="1.12">
+    </div>
+    <div class="scrim scrim--flip"></div>
+
+    <div class="wrap">
+      <div class="col col--right reveal">
+        <p class="eyebrow reveal-item">Chapitre IV <span>·</span> Le spa</p>
+        <hr class="hair reveal-item">
+        <h2 class="title reveal-item" id="t-spa">Dix-sept mètres<br>d'eau tiède.</h2>
+        <p class="lede reveal-item">
+          Sous la maison, la montagne se tait complètement.
+        </p>
+        <p class="body reveal-item">
+          Bassin chauffé à 34 °C, hammam en pierre brute, sauna finlandais en
+          épicéa et une fente horizontale ouverte à hauteur d'eau sur la vallée.
+          On y descend en peignoir, on en ressort une heure plus tard.
+        </p>
+        <ul class="meta reveal-item">
+          <li><div class="k">Bassin</div><div class="v">17 m</div></li>
+          <li><div class="k">Eau</div><div class="v">34 °C</div></li>
+          <li><div class="k">Sauna</div><div class="v">Épicéa</div></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 6 · LA TERRASSE ====================================== -->
+  <section class="chapter" id="terrasse" data-chapter="5" aria-labelledby="t-terrasse">
+    <div class="canvas-full holder">
+      <img class="lazy" data-src="assets/img/terrasse.svg"
+           alt="Terrasse en mélèze au coucher du soleil, brasero allumé face aux crêtes"
+           data-scrub="1.14">
+    </div>
+    <div class="scrim"></div>
+
+    <div class="wrap">
+      <div class="col reveal">
+        <p class="eyebrow reveal-item">Chapitre V <span>·</span> La terrasse</p>
+        <hr class="hair reveal-item">
+        <h2 class="title reveal-item" id="t-terrasse">Le dernier<br>quart d'heure du jour.</h2>
+        <p class="body reveal-item">
+          Cent quarante mètres carrés de mélèze sur trois niveaux, un brasero
+          central, deux bains nordiques en bout de plateforme. Face à vous, rien
+          d'autre que la ligne des crêtes qui vire du gris au cuivre.
+        </p>
+        <ul class="meta reveal-item">
+          <li><div class="k">Terrasse</div><div class="v">140 m²</div></li>
+          <li><div class="k">Exposition</div><div class="v">Ouest</div></li>
+          <li><div class="k">Bains</div><div class="v">2</div></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 7 · LE PLAN ========================================== -->
+  <section class="chapter chapter--tall" id="plan" data-chapter="6" aria-labelledby="t-plan">
+    <div class="wrap">
+      <div class="plan-stage">
+        <div class="reveal">
+          <p class="eyebrow reveal-item">Chapitre VI <span>·</span> Le plan</p>
+          <hr class="hair reveal-item">
+          <h2 class="title reveal-item" id="t-plan">Niveau<br>principal.</h2>
+          <p class="body reveal-item">
+            Une seule circulation traverse la maison d'ouest en est : on entre
+            par le nord, on la quitte par la terrasse. Le salon occupe le centre
+            et distribue tout le reste.
+          </p>
+          <p class="caption reveal-item">Le tracé se dessine au fil du défilement.</p>
+        </div>
+
+        <figure class="plan-figure reveal-item" style="margin:0">
+          <svg class="plan-draw" id="plan-svg" viewBox="0 0 1200 830" role="img"
+               aria-labelledby="plan-title plan-desc">
+            <title id="plan-title">Plan du niveau principal de la Villa Altaïa</title>
+            <desc id="plan-desc">Entrée et ski-room au nord-ouest, cuisine au sud-ouest,
+              salon central avec cheminée, suite au nord-est, spa et bassin au sud-est,
+              terrasse en prolongement sud.</desc>
+
+            <!-- enveloppe -->
+            <path class="pl-wall" d="M 120 120 L 1080 120 L 1080 660 L 120 660 Z"/>
+
+            <!-- refends -->
+            <path class="pl-part" d="M 340 120 L 340 200"/>
+            <path class="pl-part" d="M 340 260 L 340 520"/>
+            <path class="pl-part" d="M 340 580 L 340 660"/>
+            <path class="pl-part" d="M 760 120 L 760 160"/>
+            <path class="pl-part" d="M 760 220 L 760 520"/>
+            <path class="pl-part" d="M 760 580 L 760 660"/>
+            <path class="pl-part" d="M 120 300 L 340 300"/>
+            <path class="pl-part" d="M 120 420 L 340 420"/>
+            <path class="pl-part" d="M 760 380 L 1080 380"/>
+
+            <!-- ouvertures : arcs de portes -->
+            <path class="pl-fix" d="M 340 200 A 60 60 0 0 1 400 260"/>
+            <path class="pl-fix" d="M 340 520 A 60 60 0 0 0 400 580"/>
+            <path class="pl-fix" d="M 760 160 A 60 60 0 0 0 700 220"/>
+            <path class="pl-fix" d="M 760 520 A 60 60 0 0 1 700 580"/>
+            <path class="pl-fix" d="M 120 190 A 60 60 0 0 1 180 250"/>
+
+            <!-- baies vitrées : double trait -->
+            <path class="pl-fix" d="M 400 653 L 700 653 M 400 667 L 700 667"/>
+            <path class="pl-fix" d="M 800 113 L 1040 113 M 800 127 L 1040 127"/>
+            <path class="pl-fix" d="M 1073 420 L 1073 620 M 1087 420 L 1087 620"/>
+
+            <!-- cheminée : masse en saillie dans le salon -->
+            <path class="pl-fix" d="M 700 300 L 760 300 L 760 400 L 700 400 Z"/>
+            <path class="pl-water" d="M 712 328 L 748 328 L 748 372 L 712 372 Z"/>
+
+            <!-- salon : assises et table basse -->
+            <path class="pl-fix" d="M 420 380 L 680 380 L 680 470 L 420 470 Z"/>
+            <path class="pl-fix" d="M 420 380 L 420 350 L 680 350 L 680 380"/>
+            <path class="pl-fix" d="M 500 512 L 600 512 L 600 566 L 500 566 Z"/>
+
+            <!-- suite : lit, tête de lit, chevets -->
+            <path class="pl-fix" d="M 848 176 L 1000 176 L 1000 330 L 848 330 Z"/>
+            <path class="pl-fix" d="M 848 176 L 848 158 L 1000 158 L 1000 176"/>
+            <path class="pl-fix" d="M 810 160 L 842 160 L 842 192 L 810 192 Z"/>
+            <path class="pl-fix" d="M 1006 160 L 1038 160 L 1038 192 L 1006 192 Z"/>
+
+            <!-- spa : bassin -->
+            <path class="pl-water" d="M 802 432 L 1040 432 L 1040 620 L 802 620 Z"/>
+            <path class="pl-water" d="M 820 450 L 1022 450 L 1022 602 L 820 602 Z"/>
+
+            <!-- cuisine : îlot et linéaire -->
+            <path class="pl-fix" d="M 160 500 L 300 500 L 300 572 L 160 572 Z"/>
+            <path class="pl-fix" d="M 128 432 L 332 432 L 332 468 L 128 468 Z"/>
+
+            <!-- ski-room : banc -->
+            <path class="pl-fix" d="M 140 330 L 320 330 L 320 362 L 140 362 Z"/>
+
+            <!-- entrée : vestiaire -->
+            <path class="pl-fix" d="M 200 140 L 300 140 L 300 176 L 200 176 Z"/>
+
+            <!-- terrasse -->
+            <path class="pl-part" d="M 220 660 L 220 780 L 980 780 L 980 660"/>
+            <path class="pl-fix" d="M 268 700 L 392 700 L 392 748 L 268 748 Z"/>
+            <path class="pl-fix" d="M 808 700 L 932 700 L 932 748 L 808 748 Z"/>
+            <path class="pl-water" d="M 574 712 A 26 26 0 1 1 626 712 A 26 26 0 1 1 574 712"/>
+
+            <!-- cotes -->
+            <path class="pl-dim" d="M 120 80 L 1080 80 M 120 68 L 120 92 M 1080 68 L 1080 92"/>
+            <path class="pl-dim" d="M 80 120 L 80 660 M 68 120 L 92 120 M 68 660 L 92 660"/>
+            <text class="pl-num" x="600" y="66" text-anchor="middle">28,40 m</text>
+            <text class="pl-num" x="66" y="396" text-anchor="middle"
+                  transform="rotate(-90 66 396)">16,20 m</text>
+
+            <!-- nord + échelle -->
+            <path class="pl-dim" d="M 1140 200 L 1140 128 M 1128 148 L 1140 128 L 1152 148"/>
+            <text class="pl-num" x="1140" y="224" text-anchor="middle">N</text>
+            <path class="pl-dim" d="M 120 812 L 280 812 M 120 804 L 120 820 M 200 806 L 200 818 M 280 804 L 280 820"/>
+            <text class="pl-num" x="120" y="798" text-anchor="middle">0</text>
+            <text class="pl-num" x="280" y="798" text-anchor="middle">5 m</text>
+
+            <!-- nomenclature -->
+            <text class="pl-label" x="230" y="228" text-anchor="middle">Entrée</text>
+            <text class="pl-label" x="230" y="398" text-anchor="middle">Ski-room</text>
+            <text class="pl-label" x="230" y="636" text-anchor="middle">Cuisine</text>
+            <text class="pl-label pl-label--key" x="550" y="222" text-anchor="middle">Salon</text>
+            <text class="pl-label" x="920" y="368" text-anchor="middle">Suite</text>
+            <text class="pl-label" x="920" y="648" text-anchor="middle">Spa</text>
+            <text class="pl-label" x="600" y="688" text-anchor="middle">Terrasse</text>
+          </svg>
+          <figcaption class="caption">Niveau principal · 1:200 · relevé d'exécution</figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 8 · LES PRESTATIONS ================================== -->
+  <section class="chapter chapter--tall" id="prestations" data-chapter="7" aria-labelledby="t-prestations">
+    <div class="wrap">
+      <div class="reveal" style="max-width:46rem">
+        <p class="eyebrow reveal-item">Chapitre VII <span>·</span> Les prestations</p>
+        <hr class="hair reveal-item">
+        <h2 class="title reveal-item" id="t-prestations">Tout est déjà là.</h2>
+        <p class="body reveal-item">
+          Six espaces supplémentaires, ouverts en permanence, sans réservation
+          ni supplément. Approchez le curseur : chaque carte s'incline.
+        </p>
+      </div>
+
+      <div class="deck" id="deck">
+        <article class="card" data-tilt>
+          <span class="card__index">01</span>
+          <div class="card__media holder">
+            <img class="lazy" data-src="assets/img/card-cuisine.svg" alt="Cuisine ouverte avec îlot central en bois massif">
+          </div>
+          <div class="card__body">
+            <h3 class="card__title">Cuisine du chef</h3>
+            <p class="card__text">Îlot de sept mètres, piano à bois, chef privé sur simple demande la veille.</p>
+          </div>
+          <span class="card__sheen" aria-hidden="true"></span>
+        </article>
+
+        <article class="card" data-tilt>
+          <span class="card__index">02</span>
+          <div class="card__media holder">
+            <img class="lazy" data-src="assets/img/card-cave.svg" alt="Cave à vin voûtée aux casiers de chêne">
+          </div>
+          <div class="card__body">
+            <h3 class="card__title">Cave à vin</h3>
+            <p class="card__text">Neuf cents références alpines et bourguignonnes, tenue à 12 °C toute l'année.</p>
+          </div>
+          <span class="card__sheen" aria-hidden="true"></span>
+        </article>
+
+        <article class="card" data-tilt>
+          <span class="card__index">03</span>
+          <div class="card__media holder">
+            <img class="lazy" data-src="assets/img/card-ski.svg" alt="Ski-room chauffé avec banc et rangement vertical">
+          </div>
+          <div class="card__body">
+            <h3 class="card__title">Ski-room</h3>
+            <p class="card__text">Sèche-chaussures, atelier de fartage et accès direct au départ des pistes.</p>
+          </div>
+          <span class="card__sheen" aria-hidden="true"></span>
+        </article>
+
+        <article class="card" data-tilt>
+          <span class="card__index">04</span>
+          <div class="card__media holder">
+            <img class="lazy" data-src="assets/img/card-cinema.svg" alt="Salle de projection avec fauteuils en velours">
+          </div>
+          <div class="card__body">
+            <h3 class="card__title">Salle de projection</h3>
+            <p class="card__text">Douze places, écran de quatre mètres, acoustique traitée en laine de bois.</p>
+          </div>
+          <span class="card__sheen" aria-hidden="true"></span>
+        </article>
+
+        <article class="card" data-tilt>
+          <span class="card__index">05</span>
+          <div class="card__media holder">
+            <img class="lazy" data-src="assets/img/chambre.svg" alt="Seconde suite panoramique">
+          </div>
+          <div class="card__body">
+            <h3 class="card__title">Six suites</h3>
+            <p class="card__text">Chacune sa salle de bains en pierre, sa cheminée et son orientation propre.</p>
+          </div>
+          <span class="card__sheen" aria-hidden="true"></span>
+        </article>
+
+        <article class="card" data-tilt>
+          <span class="card__index">06</span>
+          <div class="card__media holder">
+            <img class="lazy" data-src="assets/img/spa.svg" alt="Bassin intérieur chauffé du spa">
+          </div>
+          <div class="card__body">
+            <h3 class="card__title">Spa &amp; bassin</h3>
+            <p class="card__text">Bassin de dix-sept mètres, hammam, sauna, cabine de soins et praticien à demeure.</p>
+          </div>
+          <span class="card__sheen" aria-hidden="true"></span>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 9 · SÉJOURNER ======================================== -->
+  <section class="chapter chapter--tall" id="sejourner" data-chapter="8" aria-labelledby="t-sejourner">
+    <div class="canvas-full holder">
+      <img class="lazy" data-src="assets/img/view.svg" alt="Panorama sur les crêtes depuis la villa"
+           style="opacity:.35" data-scrub="1.08">
+    </div>
+    <div class="scrim scrim--soft"></div>
+
+    <div class="wrap">
+      <div class="split reveal">
+        <div>
+          <p class="eyebrow reveal-item">Chapitre VIII <span>·</span> Séjourner</p>
+          <hr class="hair reveal-item">
+          <h2 class="title reveal-item" id="t-sejourner">Vous connaissez<br>déjà la maison.</h2>
+          <p class="body reveal-item">
+            Il ne reste qu'à choisir la semaine. La villa se loue entière, avec
+            gouvernante, chef et chauffeur, du samedi au samedi. Douze voyageurs
+            au maximum — au-delà, ce n'est plus un refuge.
+          </p>
+          <p class="reveal-item">
+            <a class="cta" href="mailto:sejour@altaia.example?subject=Villa%20Alta%C3%AFa%20%E2%80%94%20demande%20de%20s%C3%A9jour">Demander une semaine</a>
+          </p>
+        </div>
+        <div class="reveal-item">
+          <div class="figures" style="margin-top:0">
+            <div><b>620</b><span>m² habitables</span></div>
+            <div><b>6</b><span>suites</span></div>
+            <div><b>140</b><span>m² de terrasse</span></div>
+            <div><b>2&#8239;140</b><span>mètres</span></div>
+          </div>
+          <ul class="meta reveal-item" style="margin-top:2.4rem">
+            <li><div class="k">Saison</div><div class="v">Déc. → Avr.</div></li>
+            <li><div class="k">Séjour</div><div class="v">7 nuits</div></li>
+            <li><div class="k">Accès</div><div class="v">Héliport</div></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="colophon">
+  <span>Villa Altaïa · Massif de la Vanoise · Savoie</span>
+  <span>sejour@altaia.example · +33 (0)4 79 00 00 00</span>
+  <span>Résidence fictive — projet de démonstration</span>
+</footer>
+
+<script src="assets/vendor/gsap.min.js" defer></script>
+<script src="assets/vendor/ScrollTrigger.min.js" defer></script>
+<script src="assets/vendor/vanilla-tilt.min.js" defer></script>
+<script src="assets/vendor/three.min.js" defer></script>
+<script src="assets/js/lazy.js" defer></script>
+<script src="assets/js/scene.js" defer></script>
+<script src="assets/js/plan.js" defer></script>
+<script src="assets/js/main.js" defer></script>
+</body>
+</html>

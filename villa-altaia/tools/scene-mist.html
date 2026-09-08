@@ -1,0 +1,149 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8">
+<title>Rendu — brume d'altitude</title>
+<style>html,body{margin:0;background:#0d0f11;overflow:hidden}canvas{display:block}</style>
+</head><body>
+<canvas id="c" width="1280" height="720"></canvas>
+<script>
+/* Scène périodique : render(t) avec t dans [0,1[ boucle sans raccord.
+   Utilisée par tools/make-video.mjs pour produire assets/video/mist.webm. */
+const C = document.getElementById('c'), X = C.getContext('2d');
+const W = C.width, H = C.height, TAU = Math.PI * 2;
+
+function rng(seed){let a=seed>>>0;return function(){a|=0;a=(a+0x6d2b79f5)|0;let t=Math.imul(a^(a>>>15),1|a);t=(t+Math.imul(t^(t>>>7),61|t))^t;return((t^(t>>>14))>>>0)/4294967296}}
+function fractal(rnd,levels,rough){let arr=[rnd(),rnd()],amp=1;
+  for(let l=0;l<levels;l++){const nx=[];for(let i=0;i<arr.length-1;i++){nx.push(arr[i]);nx.push((arr[i]+arr[i+1])/2+(rnd()-.5)*amp)}nx.push(arr.at(-1));arr=nx;amp*=rough}
+  const mn=Math.min(...arr),mx=Math.max(...arr);return arr.map(v=>(v-mn)/(mx-mn||1))}
+function envelope(len,peaks){const o=new Array(len).fill(.12);
+  for(let i=0;i<len;i++){const x=i/(len-1);for(const p of peaks)o[i]=Math.max(o[i],p.h*Math.exp(-((x-p.x)**2)/(2*p.w*p.w)))}return o}
+
+/* trois crêtes pré-calculées : arrière-plan, plan moyen, premier plan */
+const RIDGES = [
+  {seed:22, baseY:H*0.70, amp:H*0.42, fill:'#5a626a', snow:'#e9eef2', snowDrop:60,
+   peaks:[{x:.14,h:.86,w:.13},{x:.42,h:1,w:.11},{x:.66,h:.74,w:.15},{x:.9,h:.92,w:.12}]},
+  {seed:907, baseY:H*0.82, amp:H*0.46, fill:'#333940', snow:'#c8cfd5', snowDrop:52,
+   peaks:[{x:.06,h:.72,w:.16},{x:.32,h:.98,w:.12},{x:.58,h:.82,w:.14},{x:.84,h:1,w:.1}]},
+  {seed:5150, baseY:H*0.96, amp:H*0.34, fill:'#14181c', snow:null, snowDrop:0,
+   peaks:[{x:.2,h:.8,w:.22},{x:.72,h:.95,w:.2}]}
+].map(r=>{
+  const rnd=rng(r.seed), raw=fractal(rnd,7,.54), env=envelope(raw.length,r.peaks);
+  const hs=raw.map((v,i)=>Math.min(1,(.34+v*.66)*env[i]));
+  const pts=hs.map((v,i)=>[i/(hs.length-1)*W, r.baseY-v*r.amp]);
+  const low=pts.map(([x,y])=>[x,y+r.snowDrop*(.55+.9*rnd())]);
+  return {...r, pts, low};
+});
+
+const SNOW = Array.from({length:190},(_,i)=>{const rnd=rng(1000+i);
+  return {x:rnd(),y:rnd(),r:.5+rnd()*1.6,vx:.05+rnd()*.14,vy:.55+rnd()*1.2,ph:rnd()*TAU,sw:8+rnd()*26,
+          a:(.10+rnd()*.34)}});
+
+const FOG = Array.from({length:7},(_,i)=>{const rnd=rng(300+i*17);
+  return {y:.34+rnd()*.5, h:.06+rnd()*.16, sp:.25+rnd()*.75, a:.10+rnd()*.20, bob:8+rnd()*26, ph:rnd()*TAU}});
+
+function ridgePath(pts){X.beginPath();X.moveTo(pts[0][0],pts[0][1]);
+  for(let i=1;i<pts.length;i++)X.lineTo(pts[i][0],pts[i][1]);
+  X.lineTo(W,H);X.lineTo(0,H);X.closePath()}
+
+/* Nappe de brume : chaque nappe est pré-composée une fois hors écran
+   (fondu vertical × modulation horizontale en masque alpha), puis simplement
+   translatée. Aucun raccord, aucune tranche visible. */
+const fogTile = new WeakMap();
+function tileFor(f){
+  let c=fogTile.get(f); if(c) return c;
+  const span=W*2, h=Math.round(f.h*H);
+  c=document.createElement('canvas'); c.width=span; c.height=h;
+  const o=c.getContext('2d');
+  const g=o.createLinearGradient(0,0,0,h);
+  g.addColorStop(0,'rgba(214,220,226,0)');
+  g.addColorStop(.5,'rgba(233,237,241,1)');
+  g.addColorStop(1,'rgba(214,220,226,0)');
+  o.fillStyle=g; o.fillRect(0,0,span,h);
+  /* masque : densité irrégulière mais continue et périodique sur la largeur */
+  o.globalCompositeOperation='destination-in';
+  const m=o.createLinearGradient(0,0,span,0);
+  const N=96;
+  for(let i=0;i<=N;i++){
+    const u=i/N;
+    const a=.22+.78*(.5+.5*Math.sin(u*TAU*2+f.ph))*(.5+.5*Math.sin(u*TAU*5+f.ph*2.3));
+    m.addColorStop(u,`rgba(255,255,255,${a.toFixed(3)})`);
+  }
+  o.fillStyle=m; o.fillRect(0,0,span,h);
+  fogTile.set(f,c); return c;
+}
+function fogBand(f,t){
+  const tile=tileFor(f), span=W*2;
+  const y=f.y*H+Math.sin(TAU*t+f.ph)*f.bob;
+  const off=((t*f.sp)%1)*span;
+  X.save();
+  X.globalCompositeOperation='screen';
+  X.globalAlpha=f.a;
+  X.drawImage(tile,-off,y);
+  X.drawImage(tile,-off+span,y);
+  X.restore();X.globalAlpha=1;
+}
+
+/* Voile d'éloignement : éclaircit le pied de chaque crête (perspective aérienne) */
+function veil(yTop,yBot,alpha,warm){
+  const g=X.createLinearGradient(0,yTop,0,yBot);
+  g.addColorStop(0,`rgba(${warm?'214,196,170':'186,196,206'},0)`);
+  g.addColorStop(1,`rgba(${warm?'226,206,178':'202,211,220'},${alpha})`);
+  X.fillStyle=g;X.fillRect(0,yTop,W,yBot-yTop);
+}
+
+function render(t){
+  /* ciel : anthracite en zénith, beige chaud sur l'horizon */
+  const sky=X.createLinearGradient(0,0,0,H);
+  sky.addColorStop(0,'#090b0d');sky.addColorStop(.26,'#141a21');
+  sky.addColorStop(.52,'#2f363d');sky.addColorStop(.72,'#6a655d');
+  sky.addColorStop(.88,'#a3907a');sky.addColorStop(1,'#d8c3a4');
+  X.fillStyle=sky;X.fillRect(0,0,W,H);
+
+  /* soleil rasant : respiration lente, cœur chaud */
+  const pulse=.86+.14*Math.sin(TAU*t);
+  const sg=X.createRadialGradient(W*.68,H*.66,0,W*.68,H*.66,W*.52);
+  sg.addColorStop(0,`rgba(255,220,172,${.62*pulse})`);
+  sg.addColorStop(.28,`rgba(240,196,141,${.30*pulse})`);
+  sg.addColorStop(.62,`rgba(217,154,92,${.12*pulse})`);
+  sg.addColorStop(1,'rgba(217,154,92,0)');
+  X.save();X.globalCompositeOperation='screen';X.fillStyle=sg;X.fillRect(0,0,W,H);X.restore();
+
+  RIDGES.forEach((r,i)=>{
+    ridgePath(r.pts);X.fillStyle=r.fill;X.fill();
+    if(r.snow){
+      X.save();X.clip();
+      X.beginPath();X.moveTo(r.pts[0][0],r.pts[0][1]);
+      for(let k=1;k<r.pts.length;k++)X.lineTo(r.pts[k][0],r.pts[k][1]);
+      for(let k=r.low.length-1;k>=0;k--)X.lineTo(r.low[k][0],r.low[k][1]);
+      X.closePath();
+      const g=X.createLinearGradient(0,0,0,H*.82);
+      g.addColorStop(0,r.snow);g.addColorStop(1,'rgba(200,207,213,0.05)');
+      X.fillStyle=g;X.fill();
+      /* rebond chaud du soleil sur les faces exposées */
+      const wg=X.createRadialGradient(W*.68,H*.66,0,W*.68,H*.66,W*.55);
+      wg.addColorStop(0,'rgba(255,214,164,0.30)');
+      wg.addColorStop(1,'rgba(255,214,164,0)');
+      X.globalCompositeOperation='overlay';X.fillStyle=wg;X.fillRect(0,0,W,H);
+      X.restore();
+    }
+    if(i===0){veil(H*.42,H*.78,.30,true);FOG.slice(0,3).forEach(f=>fogBand(f,t))}
+    if(i===1){veil(H*.58,H*.92,.20,false);FOG.slice(3,5).forEach(f=>fogBand(f,t))}
+  });
+  FOG.slice(5).forEach(f=>fogBand(f,t));
+
+  /* neige : positions enroulées sur [0,1[ — la boucle est sans raccord */
+  X.save();X.globalCompositeOperation='screen';
+  for(const s of SNOW){
+    const x=((((s.x+s.vx*t)%1)+1)%1)*W+Math.sin(TAU*t+s.ph)*s.sw;
+    const y=((((s.y+s.vy*t)%1)+1)%1)*H;
+    X.globalAlpha=s.a;X.fillStyle='#eef2f5';
+    X.beginPath();X.arc(x,y,s.r,0,TAU);X.fill();
+  }
+  X.restore();X.globalAlpha=1;
+
+  /* vignettage */
+  const vg=X.createRadialGradient(W/2,H*.46,H*.22,W/2,H*.46,H*1.02);
+  vg.addColorStop(0,'rgba(0,0,0,0)');vg.addColorStop(1,'rgba(0,0,0,0.66)');
+  X.fillStyle=vg;X.fillRect(0,0,W,H);
+}
+window.render=render;
+render(0);
+</script></body></html>

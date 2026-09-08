@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" width="1920" height="1080" preserveAspectRatio="xMidYMid slice">
+
+  <defs>
+    
+    <filter id="grainD" x="-2%" y="-2%" width="104%" height="104%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="3" seed="7" result="n"/>
+      <feColorMatrix in="n" type="saturate" values="0"/>
+      <feComponentTransfer><feFuncA type="linear" slope="0.55"/></feComponentTransfer>
+    </filter>
+    <filter id="softD" x="-25%" y="-25%" width="150%" height="150%">
+      <feGaussianBlur stdDeviation="26"/>
+    </filter>
+    <filter id="hazeD" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="9"/>
+    </filter>
+    <linearGradient id="dg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f1ede6"/><stop offset="100%" stop-color="#8f8d89"/>
+    </linearGradient>
+  </defs>
+  <path d="M 0 940 C 260 880 460 942 720 918 C 980 894 1180 950 1420 924 C 1640 900 1820 940 1920 918 L 1920 1080 L 0 1080 Z"
+        fill="url(#dg)"/>
+  <path d="M 0 1000 C 320 962 600 1002 900 986 C 1220 968 1560 1004 1920 986 L 1920 1080 L 0 1080 Z"
+        fill="#4a4843" opacity="0.35"/>
+  <rect width="1920" height="1080" filter="url(#grainD)" opacity="0.09" style="mix-blend-mode:overlay"/>
+</svg>

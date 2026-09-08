@@ -1,0 +1,103 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1800 1200" width="1800" height="1200" preserveAspectRatio="xMidYMid slice">
+<defs>
+    <filter id="grainB" x="-2%" y="-2%" width="104%" height="104%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="3" seed="7" result="n"/>
+      <feColorMatrix in="n" type="saturate" values="0"/>
+      <feComponentTransfer><feFuncA type="linear" slope="0.55"/></feComponentTransfer>
+    </filter>
+    <filter id="softB" x="-25%" y="-25%" width="150%" height="150%">
+      <feGaussianBlur stdDeviation="26"/>
+    </filter>
+    <filter id="hazeB" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="9"/>
+    </filter>
+  <linearGradient id="day" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%"   stop-color="#7d8b98"/>
+    <stop offset="46%"  stop-color="#c3c8cb"/>
+    <stop offset="78%"  stop-color="#e8dcc8"/>
+    <stop offset="100%" stop-color="#f3e9d8"/>
+  </linearGradient>
+  <linearGradient id="dawn" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%"   stop-color="#2b3742"/>
+    <stop offset="38%"  stop-color="#8d9499"/>
+    <stop offset="74%"  stop-color="#dcc7a6"/>
+    <stop offset="100%" stop-color="#f0dcbb"/>
+  </linearGradient>
+  <linearGradient id="fire" x1="0" y1="1" x2="0" y2="0">
+    <stop offset="0%"   stop-color="#ffe6bb"/>
+    <stop offset="46%"  stop-color="#f0a95e"/>
+    <stop offset="100%" stop-color="#6d3512"/>
+  </linearGradient>
+  <linearGradient id="woodv" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="#c6a781"/><stop offset="100%" stop-color="#3f2f1f"/>
+  </linearGradient>
+  <linearGradient id="beam" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="#f2ece3" stop-opacity="0.55"/>
+    <stop offset="100%" stop-color="#f2ece3" stop-opacity="0"/>
+  </linearGradient>
+  <linearGradient id="beamw" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="#f0c48d" stop-opacity="0.5"/>
+    <stop offset="100%" stop-color="#d99a5c" stop-opacity="0"/>
+  </linearGradient>
+  <radialGradient id="warm" cx="50%" cy="50%" r="50%">
+    <stop offset="0%"  stop-color="#f0c48d" stop-opacity="0.9"/>
+    <stop offset="40%" stop-color="#d99a5c"  stop-opacity="0.34"/>
+    <stop offset="100%" stop-color="#d99a5c" stop-opacity="0"/>
+  </radialGradient>
+  <radialGradient id="cool" cx="50%" cy="50%" r="50%">
+    <stop offset="0%"  stop-color="#dde6ee" stop-opacity="0.55"/>
+    <stop offset="100%" stop-color="#dde6ee" stop-opacity="0"/>
+  </radialGradient>
+  <linearGradient id="aqua" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%"   stop-color="#2f6a79" stop-opacity="0.55"/>
+    <stop offset="42%"  stop-color="#3f8494" stop-opacity="0.30"/>
+    <stop offset="100%" stop-color="#8fd0dd" stop-opacity="0.18"/>
+  </linearGradient>
+  <radialGradient id="vg" cx="50%" cy="46%" r="72%">
+    <stop offset="52%" stop-color="#000" stop-opacity="0"/>
+    <stop offset="100%" stop-color="#000" stop-opacity="0.52"/>
+  </radialGradient></defs>
+
+  
+  <path d="M -600 -280 L 2400 -280 L 1538.3 237.02 L 261.7 237.02 Z" fill="#0b0d0f"/>
+  <path d="M -600 1520 L 2400 1520 L 1538.3 1002.98 L 261.7 1002.98 Z" fill="#1d1710"/>
+  <path d="M -600 1520 L 261.7 1002.98 L 261.7 237.02 L -600 -280 Z" fill="#1b1f24"/>
+  <path d="M 2400 1520 L 1538.3 1002.98 L 1538.3 237.02 L 2400 -280 Z" fill="#15181c"/>
+  <path d="M 261.7 1002.98 L 1538.3 1002.98 L 1538.3 237.02 L 261.7 237.02 Z" fill="#0d1013"/>
+  <path d="M -600 1519.1 L 261.7 1002.6 M -450 1519.1 L 325.53 1002.6 M -300 1519.1 L 389.36 1002.6 M -150 1519.1 L 453.19 1002.6 M 0 1519.1 L 517.02 1002.6 M 150 1519.1 L 580.85 1002.6 M 300 1519.1 L 644.68 1002.6 M 450 1519.1 L 708.51 1002.6 M 600 1519.1 L 772.34 1002.6 M 750 1519.1 L 836.17 1002.6 M 900 1519.1 L 900 1002.6 M 1050 1519.1 L 963.83 1002.6 M 1200 1519.1 L 1027.66 1002.6 M 1350 1519.1 L 1091.49 1002.6 M 1500 1519.1 L 1155.32 1002.6 M 1650 1519.1 L 1219.15 1002.6 M 1800 1519.1 L 1282.98 1002.6 M 1950 1519.1 L 1346.81 1002.6 M 2100 1519.1 L 1410.64 1002.6 M 2250 1519.1 L 1474.47 1002.6 M 2400 1519.1 L 1538.3 1002.6 " stroke="#08090a" stroke-width="1.7" opacity="0.4" fill="none"/>
+
+  <!-- baie panoramique plein cadre -->
+  <path d="M 376.29 926.56 L 1423.71 926.56 L 1423.71 328.77 L 376.29 328.77 Z" fill="url(#dawn)"/>
+  <path d="M 375.99 926.74 L 375.99 721.75 L 410.93 797.56 L 445.86 705.06 L 480.79 715.74 L 515.73 562.46 L 550.66 580.78 L 585.6 559.8 L 620.53 620.72 L 655.46 604.84 L 690.4 564.94 L 725.33 660.5 L 760.26 711.81 L 795.2 668.24 L 830.13 751.27 L 865.07 719.02 L 900 646.01 L 934.93 673.92 L 969.87 571.63 L 1004.8 616.53 L 1039.74 520.43 L 1074.67 544.4 L 1109.6 489.19 L 1144.54 569.77 L 1179.47 695.54 L 1214.4 593.43 L 1249.34 724.15 L 1284.27 711.91 L 1319.21 715.83 L 1354.14 700.78 L 1389.07 608.55 L 1424.01 664.71 L 1424.01 926.74 Z" fill="#6f7780" opacity="0.75"/><path d="M 375.99 926.74 L 375.99 801.02 L 410.93 781.74 L 445.86 804.7 L 480.79 777.59 L 515.73 693.47 L 550.66 614.64 L 585.6 636.42 L 620.53 618.5 L 655.46 607.6 L 690.4 653.37 L 725.33 677.78 L 760.26 768.54 L 795.2 767.27 L 830.13 792.41 L 865.07 769.13 L 900 762.85 L 934.93 722.7 L 969.87 688.63 L 1004.8 655.03 L 1039.74 609 L 1074.67 591.55 L 1109.6 627.19 L 1144.54 685.72 L 1179.47 666.3 L 1214.4 699.32 L 1249.34 761.67 L 1284.27 764.15 L 1319.21 761.63 L 1354.14 730.39 L 1389.07 694.78 L 1424.01 625.25 L 1424.01 926.74 Z" fill="#3f464e" opacity="0.9"/><path d="M 375.99 926.74 L 375.99 818.97 L 410.93 859.4 L 445.86 838.05 L 480.79 781.71 L 515.73 730.08 L 550.66 762.44 L 585.6 732.38 L 620.53 755.56 L 655.46 740 L 690.4 740.73 L 725.33 754.74 L 760.26 791.64 L 795.2 791 L 830.13 851.92 L 865.07 811.8 L 900 798.04 L 934.93 762.52 L 969.87 736.82 L 1004.8 789.89 L 1039.74 745.29 L 1074.67 770.13 L 1109.6 716.6 L 1144.54 719.81 L 1179.47 752.57 L 1214.4 746.72 L 1249.34 778.56 L 1284.27 814.1 L 1319.21 828.05 L 1354.14 779.06 L 1389.07 743.96 L 1424.01 730.9 L 1424.01 926.74 Z" fill="#1b1f24" opacity="1"/>
+  <path d="M 892.97 926.91 L 907.03 926.91 L 907.03 328.43 L 892.97 328.43 Z" fill="#0a0c0e"/>
+  <path d="M 618.66 926.91 L 631.45 926.91 L 631.45 328.43 L 618.66 328.43 Z" fill="#0a0c0e" opacity="0.7"/>
+  <path d="M 1168.55 926.91 L 1181.34 926.91 L 1181.34 328.43 L 1168.55 328.43 Z" fill="#0a0c0e" opacity="0.7"/>
+  <path d="M 375.39 927.09 L 1424.61 927.09 L 1424.61 913.27 L 375.39 913.27 Z" fill="#0a0c0e"/>
+  <path d="M 375.39 342.08 L 1424.61 342.08 L 1424.61 328.27 L 375.39 328.27 Z" fill="#0a0c0e"/>
+
+  <!-- la lumière du jour glisse sur le sol -->
+  <path d="M 373.57 1004.42 L 1426.43 1004.42 L 2305.15 1461.41 L -505.15 1461.41 Z" fill="url(#beam)" opacity="0.26" filter="url(#softB)" style="mix-blend-mode:screen"/>
+  <ellipse cx="900" cy="700" rx="620" ry="230" fill="url(#cool)" opacity="0.7"/>
+
+  <!-- lit : silhouette, seul le bord du drap accroche la lumière -->
+  <path d="M 504.46 711.28 L 1295.54 711.28 L 1285 708.85 L 515 708.85 Z" fill="#141118"/><path d="M 504.46 985.11 L 1295.54 985.11 L 1295.54 711.28 L 504.46 711.28 Z" fill="#0a0c0e"/><path d="M 504.46 711.28 L 1295.54 711.28" stroke="#e9dcc4" stroke-width="2.6" opacity="0.5" fill="none"/>
+  <path d="M 333.53 1143.41 L 1466.47 1143.41 L 1280.32 971.42 L 519.68 971.42 Z" fill="#191410"/><path d="M 333.53 1299.76 L 1466.47 1299.76 L 1466.47 1143.41 L 333.53 1143.41 Z" fill="#0b0d0f"/>
+  <path d="M 333.53 1027.85 L 1466.47 1027.85 L 1280.32 893.83 L 519.68 893.83 Z" fill="#2c241a"/><path d="M 333.53 1143.41 L 1466.47 1143.41 L 1466.47 1027.85 L 333.53 1027.85 Z" fill="#15100b"/><path d="M 333.53 1027.85 L 1466.47 1027.85" stroke="#efe2ca" stroke-width="2.6" opacity="0.55" fill="none"/>
+  <path d="M 333.53 980.27 L 1466.47 980.27 L 1378.62 924.4 L 421.38 924.4 Z" fill="#5d4c35"/><path d="M 333.53 1027.85 L 1466.47 1027.85 L 1466.47 980.27 L 333.53 980.27 Z" fill="#241d14"/><path d="M 333.53 980.27 L 1466.47 980.27" stroke="#f2e7d3" stroke-width="2.6" opacity="0.45" fill="none"/>
+  <path d="M 589.71 840.47 L 859.17 840.47 L 861.71 826.79 L 608.96 826.79 Z" fill="#4a3f2e"/><path d="M 589.71 913.96 L 859.17 913.96 L 859.17 840.47 L 589.71 840.47 Z" fill="#1d1811"/><path d="M 589.71 840.47 L 859.17 840.47" stroke="#f2e7d3" stroke-width="2.6" opacity="0.5" fill="none"/>
+  <path d="M 940.83 840.47 L 1210.29 840.47 L 1191.04 826.79 L 938.29 826.79 Z" fill="#4a3f2e"/><path d="M 940.83 913.96 L 1210.29 913.96 L 1210.29 840.47 L 940.83 840.47 Z" fill="#1d1811"/><path d="M 940.83 840.47 L 1210.29 840.47" stroke="#f2e7d3" stroke-width="2.6" opacity="0.5" fill="none"/>
+
+  <!-- chevets et liseuses -->
+  <path d="M 279.42 972.75 L 442.73 972.75 L 479.79 944.16 L 329.71 944.16 Z" fill="#17130e"/><path d="M 279.42 1109.93 L 442.73 1109.93 L 442.73 972.75 L 279.42 972.75 Z" fill="#0a0c0e"/><path d="M 279.42 972.75 L 442.73 972.75" stroke="#f0c48d" stroke-width="2.6" opacity="0.3" fill="none"/>
+  <path d="M 1357.27 972.75 L 1520.58 972.75 L 1470.29 944.16 L 1320.21 944.16 Z" fill="#17130e"/><path d="M 1357.27 1109.93 L 1520.58 1109.93 L 1520.58 972.75 L 1357.27 972.75 Z" fill="#0a0c0e"/><path d="M 1357.27 972.75 L 1520.58 972.75" stroke="#f0c48d" stroke-width="2.6" opacity="0.3" fill="none"/>
+  <ellipse cx="440" cy="628" rx="105" ry="82" fill="url(#warm)" opacity="0.75"/>
+  <ellipse cx="1360" cy="628" rx="105" ry="82" fill="url(#warm)" opacity="0.75"/>
+  <path d="M -560.56 -256.34 L 2360.56 -256.34 L 2295.34 -217.2 L -495.34 -217.2 Z" fill="#181209"/><path d="M -495.34 -217.2 L 2295.34 -217.2 L 2288.37 -213.02 L -488.37 -213.02 Z"
+                fill="#4a3a26" opacity="0.5"/><path d="M -390.88 -154.53 L 2190.88 -154.53 L 2142.71 -125.63 L -342.71 -125.63 Z" fill="#181209"/><path d="M -342.71 -125.63 L 2142.71 -125.63 L 2137.18 -122.31 L -337.18 -122.31 Z"
+                fill="#4a3a26" opacity="0.5"/><path d="M -256.52 -73.91 L 2056.52 -73.91 L 2020.18 -52.11 L -220.18 -52.11 Z" fill="#181209"/><path d="M -220.18 -52.11 L 2020.18 -52.11 L 2015.68 -49.41 L -215.68 -49.41 Z"
+                fill="#4a3a26" opacity="0.5"/><path d="M -147.49 -8.49 L 1947.49 -8.49 L 1919.65 8.21 L -119.65 8.21 Z" fill="#181209"/><path d="M -119.65 8.21 L 1919.65 8.21 L 1915.92 10.45 L -115.92 10.45 Z"
+                fill="#4a3a26" opacity="0.5"/><path d="M -57.24 45.65 L 1857.24 45.65 L 1835.67 58.6 L -35.67 58.6 Z" fill="#181209"/><path d="M -35.67 58.6 L 1835.67 58.6 L 1832.53 60.48 L -32.53 60.48 Z"
+                fill="#4a3a26" opacity="0.5"/>
+  <path d="M -600 1520 L 261.7 1002.98 M 2400 1520 L 1538.3 1002.98 M -600 -280 L 261.7 237.02 M 2400 -280 L 1538.3 237.02 M 261.7 1002.98 L 1538.3 1002.98 M 261.7 237.02 L 1538.3 237.02 M 261.7 1002.98 L 261.7 237.02 M 1538.3 1002.98 L 1538.3 237.02 " stroke="#e8e0d2" stroke-width="1.4" fill="none" opacity="0.1"/>
+<rect width="1800" height="1200" filter="url(#grainB)" opacity="0.055" style="mix-blend-mode:overlay"/><rect width="1800" height="1200" fill="url(#vg)"/>
+</svg>
