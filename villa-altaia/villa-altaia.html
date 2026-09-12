@@ -1,0 +1,1381 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Villa Altaïa — Refuge de luxe en haute montagne</title>
+<meta name="description" content="Villa Altaïa : sept espaces suspendus à 2 140 m, entre sommets, feu de bois et lumière rasante. Location privée, service d'exception.">
+<meta name="theme-color" content="#12110F">
+
+<meta property="og:title" content="Villa Altaïa — Refuge de luxe en haute montagne">
+<meta property="og:description" content="Sept espaces suspendus au-dessus des nuages, ouverts sur la lumière rasante du soir.">
+<meta property="og:type" content="website">
+<meta property="og:image" content="https://images.unsplash.com/photo-1506905925346-21bda4d32df4?auto=format&fit=crop&w=1200&q=80">
+
+<link rel="preconnect" href="https://images.unsplash.com" crossorigin>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preload" as="image" fetchpriority="high"
+      href="https://images.unsplash.com/photo-1506905925346-21bda4d32df4?auto=format&fit=crop&w=2000&q=80">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400&family=Jost:wght@200;300;400;500&display=swap" rel="stylesheet">
+<style>
+/* =========================================================
+   VILLA ALTAÏA — feuille de style
+   Photographie plein cadre · serif élégant · beige/anthracite
+   ========================================================= */
+
+:root{
+  --ink:        #100F0D;
+  --anthracite: #1D1B18;
+  --smoke:      #2A2724;
+  --beige:      #E9E1D4;
+  --beige-dim:  rgba(233,225,212,.62);
+  --sand:       #C9B79C;
+  --gold:       #BE9C67;
+  --paper:      #F6F1E8;
+
+  --serif: "Cormorant Garamond", "Times New Roman", Times, serif;
+  --sans:  "Jost", "Helvetica Neue", Arial, sans-serif;
+
+  --gutter: clamp(1.25rem, 4.5vw, 5.5rem);
+  --rail:   clamp(3.25rem, 5vw, 5rem);
+  --ease:   cubic-bezier(.22,1,.36,1);
+  --vh: 100vh;
+}
+
+*,*::before,*::after{ box-sizing:border-box; }
+
+html{
+  scroll-behavior:smooth;
+  scroll-snap-type: y mandatory;
+  background:var(--ink);
+  -webkit-text-size-adjust:100%;
+}
+
+body{
+  margin:0;
+  font-family:var(--sans);
+  font-weight:300;
+  color:var(--beige);
+  background:var(--ink);
+  overscroll-behavior-y:none;
+  -webkit-font-smoothing:antialiased;
+  text-rendering:optimizeLegibility;
+}
+
+img{ display:block; max-width:100%; }
+a{ color:inherit; text-decoration:none; }
+::selection{ background:var(--gold); color:var(--ink); }
+
+/* ---------------------------------------------------------
+   1. TYPOGRAPHIE
+   --------------------------------------------------------- */
+
+.display{
+  font-family:var(--serif);
+  font-weight:300;
+  line-height:.98;
+  letter-spacing:-.015em;
+  margin:0;
+  font-size:clamp(2.9rem, 7.4vw, 7.4rem);
+  text-shadow:0 2px 40px rgba(0,0,0,.45);
+}
+.display--xl{ font-size:clamp(3.6rem, 13vw, 12rem); letter-spacing:-.03em; }
+.display em{
+  font-style:italic;
+  color:var(--sand);
+}
+
+.eyebrow{
+  margin:0 0 clamp(1rem,2.2vw,1.8rem);
+  font-size:.68rem;
+  font-weight:400;
+  letter-spacing:.42em;
+  text-transform:uppercase;
+  color:var(--beige-dim);
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  gap:.55em .9em;
+}
+.eyebrow i{
+  width:clamp(1.4rem,4vw,2.6rem); height:1px; flex:none;
+  background:var(--sand); opacity:.65; display:inline-block;
+}
+.eyebrow .idx{
+  font-family:var(--serif);
+  font-size:1.05rem;
+  letter-spacing:.06em;
+  color:var(--gold);
+  font-style:italic;
+}
+
+.lede{
+  max-width:34ch;
+  margin:clamp(1.4rem,3vw,2.2rem) 0 0;
+  font-size:clamp(1rem,1.25vw,1.15rem);
+  line-height:1.72;
+  color:var(--beige-dim);
+}
+
+/* ---------------------------------------------------------
+   2. CALQUES GLOBAUX — grain, vignettage, progression
+   --------------------------------------------------------- */
+
+.grain{
+  position:fixed; inset:-120%;
+  z-index:60; pointer-events:none;
+  opacity:.16; mix-blend-mode:overlay;
+  background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.82' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  animation:grainShift 7s steps(6) infinite;
+}
+@keyframes grainShift{
+  0%{transform:translate(0,0)}      20%{transform:translate(-3%,2%)}
+  40%{transform:translate(2%,-3%)}  60%{transform:translate(-2%,-2%)}
+  80%{transform:translate(3%,1%)}   100%{transform:translate(0,0)}
+}
+
+.vignette{
+  position:fixed; inset:0; z-index:55; pointer-events:none;
+  background:radial-gradient(120% 85% at 50% 45%, transparent 42%, rgba(0,0,0,.55) 100%);
+}
+
+.progress{
+  position:fixed; top:0; left:0; right:0; height:2px;
+  z-index:70; background:rgba(233,225,212,.10);
+}
+.progress i{
+  display:block; height:100%; width:0%;
+  background:linear-gradient(90deg,var(--sand),var(--gold));
+}
+
+/* ---------------------------------------------------------
+   3. PRELOADER
+   --------------------------------------------------------- */
+
+.preloader{
+  position:fixed; inset:0; z-index:100;
+  display:grid; place-items:center;
+  background:var(--ink);
+  transition:opacity .9s var(--ease), visibility .9s;
+}
+.preloader.is-done{ opacity:0; visibility:hidden; }
+.preloader__inner{ display:grid; justify-items:center; gap:1.1rem; }
+.preloader__mark{
+  font-family:var(--serif); font-size:2.6rem; font-style:italic;
+  color:var(--gold); line-height:1;
+}
+.preloader__name{
+  font-family:var(--serif); font-size:1.35rem; letter-spacing:.34em;
+  text-transform:uppercase; color:var(--beige);
+}
+.preloader__bar{ width:min(46vw,220px); height:1px; background:rgba(233,225,212,.18); display:block; }
+.preloader__bar i{ display:block; height:100%; width:0%; background:var(--sand); transition:width .35s linear; }
+.preloader__meta{ font-size:.6rem; letter-spacing:.4em; text-transform:uppercase; color:var(--beige-dim); }
+
+/* ---------------------------------------------------------
+   4. TOPBAR & MENUS
+   --------------------------------------------------------- */
+
+.topbar{
+  position:fixed; top:0; left:0; right:0; z-index:50;
+  display:flex; align-items:center; justify-content:space-between;
+  gap:1.5rem;
+  padding:clamp(1.1rem,2.4vw,1.9rem) var(--gutter);
+  transition:background .5s var(--ease), backdrop-filter .5s var(--ease), padding .5s var(--ease);
+}
+.topbar.is-stuck{
+  background:rgba(16,15,13,.72);
+  backdrop-filter:blur(14px) saturate(1.1);
+  padding-top:.85rem; padding-bottom:.85rem;
+}
+
+.brand{ display:flex; align-items:baseline; gap:.7rem; }
+.brand__mark{
+  font-family:var(--serif); font-style:italic; font-size:1.5rem;
+  color:var(--gold); line-height:1;
+}
+.brand__name{
+  font-family:var(--serif); font-size:1.02rem;
+  letter-spacing:.3em; text-transform:uppercase;
+}
+
+.topnav{ display:flex; gap:clamp(1.2rem,2.4vw,2.4rem); }
+.topnav a{
+  position:relative;
+  font-size:.68rem; letter-spacing:.26em; text-transform:uppercase;
+  color:var(--beige-dim); transition:color .35s var(--ease);
+}
+.topnav a::after{
+  content:""; position:absolute; left:0; bottom:-.5em;
+  width:100%; height:1px; background:var(--sand);
+  transform:scaleX(0); transform-origin:right; transition:transform .45s var(--ease);
+}
+.topnav a:hover{ color:var(--beige); }
+.topnav a:hover::after{ transform:scaleX(1); transform-origin:left; }
+
+.burger{
+  display:none; width:34px; height:24px;
+  background:none; border:0; padding:0; cursor:pointer;
+}
+.burger span{
+  display:block; height:1px; background:var(--beige); margin:7px 0;
+  transition:transform .4s var(--ease), opacity .3s;
+}
+.burger[aria-expanded="true"] span:first-child{ transform:translateY(4px) rotate(45deg); }
+.burger[aria-expanded="true"] span:last-child{ transform:translateY(-4px) rotate(-45deg); }
+
+.drawer{
+  position:fixed; inset:0; z-index:49;
+  display:grid; align-content:center; gap:1.4rem;
+  padding:var(--gutter);
+  background:rgba(16,15,13,.96);
+  backdrop-filter:blur(10px);
+  font-family:var(--serif); font-size:clamp(1.6rem,7vw,2.4rem);
+}
+.drawer[hidden]{ display:none; }
+.drawer a{ color:var(--beige); border-bottom:1px solid rgba(233,225,212,.12); padding-bottom:.5rem; }
+
+/* ---------------------------------------------------------
+   5. BOUTONS
+   --------------------------------------------------------- */
+
+.btn{
+  display:inline-flex; align-items:center; justify-content:center;
+  padding:.95em 2.1em;
+  font-size:.68rem; letter-spacing:.28em; text-transform:uppercase;
+  border:1px solid rgba(233,225,212,.35);
+  transition:background .45s var(--ease), color .45s var(--ease),
+             border-color .45s var(--ease), transform .45s var(--ease);
+  cursor:pointer;
+}
+.btn--solid{ background:var(--beige); color:var(--ink); border-color:var(--beige); }
+.btn--solid:hover{ background:var(--sand); border-color:var(--sand); transform:translateY(-2px); }
+.btn--ghost:hover{ background:rgba(233,225,212,.10); border-color:var(--beige); transform:translateY(-2px); }
+.btn--full{ width:100%; margin-top:.4rem; }
+
+.hero__actions{
+  display:flex; flex-wrap:wrap;
+  gap:.75rem;
+  margin-top:clamp(1.9rem,3.6vw,2.8rem);
+}
+
+/* ---------------------------------------------------------
+   6. DOT NAV LATÉRALE
+   --------------------------------------------------------- */
+
+.dots{
+  position:fixed; z-index:50;
+  right:clamp(1rem,2vw,2rem); top:50%; transform:translateY(-50%);
+  display:grid; gap:1.15rem; justify-items:end;
+}
+.dots a{ display:flex; align-items:center; gap:.85rem; }
+.dots__label{
+  font-size:.58rem; letter-spacing:.24em; text-transform:uppercase;
+  color:var(--beige-dim);
+  opacity:0; transform:translateX(8px);
+  transition:opacity .4s var(--ease), transform .4s var(--ease);
+}
+.dots__dot{
+  width:7px; height:7px; border-radius:50%;
+  border:1px solid rgba(233,225,212,.55); background:transparent;
+  transition:background .4s var(--ease), transform .4s var(--ease), border-color .4s var(--ease);
+}
+.dots a:hover .dots__label{ opacity:1; transform:translateX(0); }
+.dots a.is-active .dots__label{ opacity:1; transform:translateX(0); color:var(--beige); }
+.dots a.is-active .dots__dot{ background:var(--gold); border-color:var(--gold); transform:scale(1.35); }
+
+/* ---------------------------------------------------------
+   7. SECTIONS PLEIN ÉCRAN + PHOTOGRAPHIE
+   --------------------------------------------------------- */
+
+.scene{
+  position:relative;
+  width:100%;
+  min-height:100vh;
+  min-height:100svh;
+  height:100vh;
+  height:100svh;
+  scroll-snap-align:start;
+  overflow:hidden;
+  display:flex; flex-direction:column; justify-content:flex-end;
+  isolation:isolate;
+}
+
+/* le conteneur porte le parallaxe, l'image porte le zoom */
+.scene__media{
+  position:absolute;
+  top:-8%; bottom:-8%;
+  left:50%; width:100vw; margin-left:-50vw;
+  z-index:-2;
+  will-change:transform;
+}
+.scene__img{
+  width:100vw; height:100%;
+  object-fit:cover;
+  object-position:center;
+  opacity:0;
+  transform-origin:center;
+  transition:opacity 1.1s var(--ease);
+  will-change:transform, opacity;
+  background-color:var(--anthracite);
+}
+.scene__img.is-loaded{ opacity:1; }
+
+/* overlay sombre imposé sur chaque photo */
+.scene__overlay{
+  position:absolute; inset:0; z-index:-1;
+  background:linear-gradient(rgba(0,0,0,0.4), rgba(0,0,0,0.7));
+}
+.scene__overlay--deep{
+  background:
+    linear-gradient(rgba(0,0,0,0.45), rgba(0,0,0,0.78)),
+    radial-gradient(90% 60% at 50% 100%, rgba(0,0,0,.5), transparent 70%);
+}
+
+.scene__content{
+  position:relative; z-index:2;
+  padding:0 var(--gutter) clamp(6rem,12vh,9rem);
+  width:100%;
+}
+@media (min-width:981px){
+  .scene__content,
+  .scene__foot{ padding-right:calc(var(--gutter) + var(--rail)); }
+}
+.scene--hero .scene__content{ padding-bottom:clamp(9rem,20vh,13rem); }
+
+.scene__content--split{
+  display:grid;
+  grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr);
+  gap:clamp(1.5rem,5vw,5rem);
+  align-items:end;
+}
+.scene__content--wide{
+  display:grid;
+  gap:clamp(1.4rem,3vw,2.4rem);
+  padding-bottom:clamp(3.5rem,8vh,6rem);
+}
+
+.scene__body p{
+  margin:0;
+  max-width:46ch;
+  font-size:clamp(.94rem,1.05vw,1.05rem);
+  line-height:1.8;
+  color:var(--beige-dim);
+}
+
+.specs{
+  list-style:none; margin:clamp(1.5rem,3vw,2.2rem) 0 0; padding:0;
+  display:flex; flex-wrap:wrap; gap:clamp(1.4rem,3vw,2.8rem);
+  border-top:1px solid rgba(233,225,212,.18);
+  padding-top:1.2rem;
+}
+.specs li{ display:grid; gap:.35rem; }
+.specs b{
+  font-family:var(--serif); font-weight:400;
+  font-size:clamp(1.35rem,2vw,1.75rem); letter-spacing:.01em;
+  color:var(--beige);
+}
+.specs span{
+  font-size:.6rem; letter-spacing:.22em; text-transform:uppercase;
+  color:var(--beige-dim);
+}
+
+/* pied de section du hero */
+.scene__foot{
+  position:absolute; left:0; right:0; bottom:0; z-index:2;
+  display:flex; align-items:flex-end; justify-content:space-between; gap:2rem;
+  padding:0 var(--gutter) clamp(1.6rem,4vh,2.6rem);
+}
+.scene__caption{ display:flex; align-items:center; gap:1.1rem; max-width:46ch; }
+.scene__caption .rule{ width:clamp(2rem,6vw,5rem); height:1px; background:var(--sand); flex:none; }
+.scene__caption p{
+  margin:0; font-size:.66rem; letter-spacing:.16em; text-transform:uppercase;
+  color:var(--beige-dim); line-height:1.7;
+}
+
+.scrollcue{ display:grid; justify-items:center; gap:.8rem; flex:none; }
+.scrollcue span{
+  font-size:.58rem; letter-spacing:.32em; text-transform:uppercase; color:var(--beige-dim);
+}
+.scrollcue i{
+  width:1px; height:3.2rem; background:linear-gradient(var(--sand),transparent);
+  position:relative; overflow:hidden;
+}
+.scrollcue i::after{
+  content:""; position:absolute; inset:0; background:var(--beige);
+  animation:cue 2.4s var(--ease) infinite;
+}
+@keyframes cue{
+  0%{transform:translateY(-100%)} 60%,100%{transform:translateY(100%)}
+}
+
+/* masques d'apparition du titre */
+.line-mask{
+  display:inline-block; vertical-align:bottom;
+  overflow:hidden; padding-bottom:.09em;
+}
+.word{ display:inline-block; will-change:transform, opacity; }
+
+/* états initiaux appliqués uniquement si GSAP est bien chargé */
+.is-ready .reveal,
+.is-ready .card,
+.is-ready .word{ opacity:0; }
+
+/* ---------------------------------------------------------
+   8. SECTION PLAN — cartes 3D
+   --------------------------------------------------------- */
+
+.scene--plan,
+.scene--book{ height:auto; }
+.scene--plan .scene__content,
+.scene--book .scene__content{ justify-content:center; }
+.scene--plan .display,
+.scene--book .display{ font-size:clamp(2.6rem,5.4vw,5rem); }
+
+.plan__head{ max-width:60ch; }
+.plan__note{
+  margin:1rem 0 0; font-size:.66rem; letter-spacing:.2em;
+  text-transform:uppercase; color:var(--beige-dim);
+}
+
+.cards{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:clamp(.8rem,1.4vw,1.4rem);
+}
+
+.card{
+  position:relative;
+  transform-style:preserve-3d;
+  background:rgba(29,27,24,.55);
+  border:1px solid rgba(233,225,212,.14);
+  overflow:hidden;
+  will-change:transform;
+}
+.card__media{
+  position:relative;
+  aspect-ratio:3/4;
+  overflow:hidden;
+  max-width:100%;
+}
+.card__img{
+  width:100%; height:100%;
+  object-fit:cover;
+  opacity:0;
+  transform:scale(1.04);
+  transition:opacity 1s var(--ease), transform 1.2s var(--ease), filter .6s var(--ease);
+  background-color:var(--anthracite);
+  filter:saturate(.86) contrast(1.04);
+}
+.card__img.is-loaded{ opacity:1; }
+.card:hover .card__img{ transform:scale(1.1); filter:saturate(1) contrast(1.06); }
+.card__media::after{
+  content:""; position:absolute; inset:0;
+  background:linear-gradient(rgba(0,0,0,0.15), rgba(0,0,0,0.72));
+}
+.card__body{
+  position:absolute; left:0; right:0; bottom:0;
+  padding:clamp(.9rem,1.4vw,1.4rem);
+  transform:translateZ(42px);
+}
+.card__idx{
+  font-family:var(--serif); font-style:italic; font-size:.85rem;
+  color:var(--gold); letter-spacing:.1em;
+}
+.card__body h3{
+  font-family:var(--serif); font-weight:400;
+  font-size:clamp(1.25rem,1.9vw,1.75rem);
+  margin:.15rem 0 .35rem; letter-spacing:.01em;
+}
+.card__body p{
+  margin:0; font-size:.6rem; letter-spacing:.16em;
+  text-transform:uppercase; color:var(--beige-dim);
+}
+
+/* ---------------------------------------------------------
+   9. SECTION SÉJOURNER — formulaire
+   --------------------------------------------------------- */
+
+.book{
+  grid-template-columns:minmax(0,1fr) minmax(0,.85fr);
+  align-items:end;
+  column-gap:clamp(2rem,6vw,6rem);
+}
+.book__intro p{
+  max-width:44ch; margin:clamp(1.2rem,2.5vw,1.8rem) 0 0;
+  font-size:clamp(.94rem,1.05vw,1.05rem); line-height:1.8; color:var(--beige-dim);
+}
+.book__facts{
+  display:flex; flex-wrap:wrap; gap:clamp(1.4rem,3vw,2.6rem);
+  margin:clamp(1.5rem,3vw,2.2rem) 0 0; padding-top:1.2rem;
+  border-top:1px solid rgba(233,225,212,.18);
+}
+.book__facts dt{
+  font-size:.58rem; letter-spacing:.22em; text-transform:uppercase; color:var(--beige-dim);
+}
+.book__facts dd{
+  margin:.35rem 0 0; font-family:var(--serif); font-size:1.3rem; font-weight:400;
+}
+
+.book__form{
+  display:grid; grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:.9rem clamp(.8rem,1.4vw,1.2rem);
+}
+.field{ grid-column:1 / -1; display:grid; gap:.45rem; }
+.field--half{ grid-column:span 1; }
+.field label{
+  font-size:.56rem; letter-spacing:.24em; text-transform:uppercase; color:var(--beige-dim);
+}
+.field input,.field select,.field textarea{
+  width:100%;
+  font-family:var(--sans); font-size:.9rem; font-weight:300; color:var(--beige);
+  background:rgba(16,15,13,.42);
+  border:1px solid rgba(233,225,212,.24);
+  padding:.8em .95em;
+  border-radius:0;
+  transition:border-color .35s var(--ease), background .35s var(--ease);
+  -webkit-appearance:none; appearance:none;
+}
+.field textarea{ resize:vertical; min-height:3.4em; }
+.field select{
+  background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%23C9B79C' stroke-width='1.2'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;
+  background-position:right 1rem center;
+  padding-right:2.6rem;
+}
+.field input:focus,.field select:focus,.field textarea:focus{
+  outline:none; border-color:var(--sand); background:rgba(16,15,13,.65);
+}
+.field input::placeholder,.field textarea::placeholder{ color:rgba(233,225,212,.35); }
+.field input[type="date"]::-webkit-calendar-picker-indicator{
+  filter:invert(.92) sepia(.2); opacity:.55; cursor:pointer;
+}
+.field select option{ background:var(--anthracite); color:var(--beige); }
+.field input:invalid.is-touched{ border-color:#8c4a3f; }
+
+.book__status{
+  grid-column:1 / -1; margin:.2rem 0 0; min-height:1.1em;
+  font-size:.62rem; letter-spacing:.18em; text-transform:uppercase; color:var(--sand);
+}
+
+.sitefoot{
+  grid-column:1 / -1;
+  display:flex; flex-wrap:wrap; justify-content:space-between; gap:.8rem 2rem;
+  margin-top:clamp(1.6rem,3.5vh,2.6rem); padding-top:1.1rem;
+  border-top:1px solid rgba(233,225,212,.16);
+  font-size:.58rem; letter-spacing:.2em; text-transform:uppercase; color:var(--beige-dim);
+}
+.sitefoot a:hover{ color:var(--beige); }
+
+/* ---------------------------------------------------------
+   10. RESPONSIVE
+   --------------------------------------------------------- */
+
+@media (max-width:1180px){
+  .cards{ grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .card__media{ aspect-ratio:4/3; }
+}
+
+@media (max-width:980px){
+  .dots{ display:none; }
+  .scene__content--split,.book{ grid-template-columns:minmax(0,1fr); align-items:start; }
+  .scene__body{ margin-top:1.6rem; }
+}
+
+@media (max-width:820px){
+  html{ scroll-snap-type:y proximity; }
+  .scene{ height:auto; min-height:100svh; padding-top:6rem; }
+  .topnav,.topbar__cta{ display:none; }
+  .burger{ display:block; }
+  .scene__foot{ position:static; padding-top:1rem; flex-direction:column; align-items:flex-start; gap:1.4rem; }
+  .scene--hero .scene__content{ padding-bottom:2rem; }
+  .scene__content{ padding-bottom:clamp(2.5rem,8vh,4rem); }
+  .scrollcue{ justify-items:start; }
+}
+
+@media (max-width:620px){
+  .cards{ grid-template-columns:minmax(0,1fr); gap:.9rem; }
+  .card__media{ aspect-ratio:16/10; }
+  .book__form{ grid-template-columns:minmax(0,1fr); }
+  .field--half{ grid-column:1 / -1; }
+  .sitefoot{ flex-direction:column; }
+}
+
+@media (hover:none){
+  .card{ transform:none !important; }
+}
+
+@media (prefers-reduced-motion:reduce){
+  html{ scroll-behavior:auto; scroll-snap-type:none; }
+  .grain{ animation:none; }
+  .scrollcue i::after{ animation:none; }
+  .scene__img{ opacity:1; }
+  .is-ready .reveal,
+  .is-ready .card,
+  .is-ready .word{ opacity:1 !important; }
+  *{ transition-duration:.01ms !important; }
+}
+</style>
+</head>
+
+<body>
+
+<!-- ============ PRELOADER ============ -->
+<div class="preloader" id="preloader" aria-hidden="true">
+  <div class="preloader__inner">
+    <span class="preloader__mark">A</span>
+    <span class="preloader__name">Villa Altaïa</span>
+    <span class="preloader__bar"><i id="preloaderBar"></i></span>
+    <span class="preloader__meta">Alpes · 2 140 m</span>
+  </div>
+</div>
+
+<!-- ============ TEXTURE / PROGRESS ============ -->
+<div class="grain" aria-hidden="true"></div>
+<div class="vignette" aria-hidden="true"></div>
+<div class="progress" aria-hidden="true"><i id="progressBar"></i></div>
+
+<!-- ============ TOPBAR ============ -->
+<header class="topbar" id="topbar">
+  <a class="brand" href="#sommets">
+    <span class="brand__mark">A</span>
+    <span class="brand__name">Villa Altaïa</span>
+  </a>
+
+  <nav class="topnav" aria-label="Navigation principale">
+    <a href="#salon">Salon</a>
+    <a href="#suite">Suite</a>
+    <a href="#spa">Spa</a>
+    <a href="#terrasse">Terrasse</a>
+    <a href="#plan">Plan</a>
+  </nav>
+
+  <a class="btn btn--ghost topbar__cta" href="#sejourner">Séjourner</a>
+
+  <button class="burger" id="burger" aria-label="Ouvrir le menu" aria-expanded="false" aria-controls="drawer">
+    <span></span><span></span>
+  </button>
+</header>
+
+<div class="drawer" id="drawer" hidden>
+  <a href="#sommets">01 — Sommets</a>
+  <a href="#salon">02 — Salon</a>
+  <a href="#suite">03 — Suite</a>
+  <a href="#spa">04 — Spa</a>
+  <a href="#terrasse">05 — Terrasse</a>
+  <a href="#plan">06 — Plan</a>
+  <a href="#sejourner">07 — Séjourner</a>
+</div>
+
+<!-- ============ DOT NAV ============ -->
+<nav class="dots" id="dots" aria-label="Sections">
+  <a href="#sommets"   data-target="sommets"><span class="dots__label">Sommets</span><span class="dots__dot"></span></a>
+  <a href="#salon"     data-target="salon"><span class="dots__label">Salon</span><span class="dots__dot"></span></a>
+  <a href="#suite"     data-target="suite"><span class="dots__label">Suite</span><span class="dots__dot"></span></a>
+  <a href="#spa"       data-target="spa"><span class="dots__label">Spa</span><span class="dots__dot"></span></a>
+  <a href="#terrasse"  data-target="terrasse"><span class="dots__label">Terrasse</span><span class="dots__dot"></span></a>
+  <a href="#plan"      data-target="plan"><span class="dots__label">Plan</span><span class="dots__dot"></span></a>
+  <a href="#sejourner" data-target="sejourner"><span class="dots__label">Séjourner</span><span class="dots__dot"></span></a>
+</nav>
+
+<main id="scroller">
+
+  <!-- ============ 01 · SOMMETS (HERO) ============ -->
+  <section class="scene scene--hero" id="sommets" data-index="01" data-label="Sommets">
+    <div class="scene__media">
+      <img class="scene__img" alt="Chaîne de sommets alpins baignée par la lumière du couchant"
+           fetchpriority="high"
+           src="https://images.unsplash.com/photo-1506905925346-21bda4d32df4?auto=format&fit=crop&w=2000&q=80"
+           data-fallback="1464822759023-fed622ff2c3b|1483728642387-6c3bdd6c93e5|1470770841072-f978cf4d019e">
+    </div>
+    <div class="scene__overlay"></div>
+
+    <div class="scene__content">
+      <p class="eyebrow reveal">Alpes françaises <i></i> 2 140 mètres</p>
+      <h1 class="display display--xl hero__title">Villa Altaïa</h1>
+      <p class="lede reveal">Sept espaces suspendus au-dessus des nuages, ouverts sur la lumière
+        rasante du soir et le silence minéral des cimes.</p>
+      <div class="hero__actions reveal">
+        <a class="btn btn--solid" href="#sejourner">Demander les disponibilités</a>
+        <a class="btn btn--ghost" href="#salon">Découvrir la villa</a>
+      </div>
+    </div>
+
+    <div class="scene__foot">
+      <div class="scene__caption reveal">
+        <span class="rule"></span>
+        <p>Hiver 2026 — locations privatives à la semaine, chef et conciergerie inclus.</p>
+      </div>
+      <a class="scrollcue reveal" href="#salon" aria-label="Descendre vers la section suivante">
+        <span>Défiler</span><i></i>
+      </a>
+    </div>
+  </section>
+
+  <!-- ============ 02 · SALON ============ -->
+  <section class="scene" id="salon" data-index="02" data-label="Salon">
+    <div class="scene__media">
+      <img class="scene__img" alt="Salon de chalet de luxe avec cheminée allumée et grandes baies vitrées"
+           data-src="1600585154340-be6161a56a0c"
+           data-fallback="1600607687939-ce8a6c25118c|1616486338812-3dadae4b4ace|1600210492486-724fe5c67fb0">
+    </div>
+    <div class="scene__overlay"></div>
+
+    <div class="scene__content scene__content--split">
+      <div>
+        <p class="eyebrow reveal"><span class="idx">02</span> Le grand salon</p>
+        <h2 class="display split-title">Le feu, <em>puis le silence</em></h2>
+      </div>
+      <div class="scene__body">
+        <p class="reveal">Douze mètres de baie vitrée, une cheminée centrale en pierre de Maurienne
+          et des assises basses en laine bouclée. À la tombée du jour, la vallée devient une
+          braise et la pièce se teinte d'ambre.</p>
+        <ul class="specs reveal">
+          <li><b>92 m²</b><span>Volume principal</span></li>
+          <li><b>4,8 m</b><span>Hauteur sous charpente</span></li>
+          <li><b>Sud-ouest</b><span>Orientation couchant</span></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 03 · SUITE ============ -->
+  <section class="scene" id="suite" data-index="03" data-label="Suite">
+    <div class="scene__media">
+      <img class="scene__img" alt="Suite principale d'un chalet de luxe, lit habillé de lin et vue sur la montagne"
+           data-src="1611892440504-42a792e24d32"
+           data-fallback="1505693416388-ac5ce068fe85|1590490360182-c33d57733427|1571896349842-33c89424de2d">
+    </div>
+    <div class="scene__overlay"></div>
+
+    <div class="scene__content scene__content--split">
+      <div>
+        <p class="eyebrow reveal"><span class="idx">03</span> Suite Altaïa</p>
+        <h2 class="display split-title">Dormir <em>face au vide</em></h2>
+      </div>
+      <div class="scene__body">
+        <p class="reveal">La suite occupe tout le dernier niveau. Le lit fait face au nord-est :
+          au réveil, la première lumière touche les arêtes avant d'atteindre la vallée. Lin lavé,
+          chêne brossé, rien d'autre.</p>
+        <ul class="specs reveal">
+          <li><b>58 m²</b><span>Suite et dressing</span></li>
+          <li><b>King</b><span>Literie sur mesure</span></li>
+          <li><b>Bain</b><span>Îlot en pierre brute</span></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 04 · SPA ============ -->
+  <section class="scene" id="spa" data-index="04" data-label="Spa">
+    <div class="scene__media">
+      <img class="scene__img" alt="Spa privé du chalet : bassin chauffé, pierre sombre et lumière tamisée"
+           data-src="1540555700478-4be289fbecef"
+           data-fallback="1600334129128-685c5582fd35|1544161515-4ab6ce6db874|1571902943202-507ec2618e8f">
+    </div>
+    <div class="scene__overlay"></div>
+
+    <div class="scene__content scene__content--split">
+      <div>
+        <p class="eyebrow reveal"><span class="idx">04</span> Spa & hammam</p>
+        <h2 class="display split-title">L'eau <em>sous la roche</em></h2>
+      </div>
+      <div class="scene__body">
+        <p class="reveal">Creusé dans le socle rocheux : bassin chauffé à 34°, hammam en marbre
+          gris, sauna en mélèze et deux cabines de soin. Les praticiens montent à la villa
+          sur simple demande.</p>
+        <ul class="specs reveal">
+          <li><b>34°C</b><span>Bassin intérieur</span></li>
+          <li><b>2</b><span>Cabines de soin</span></li>
+          <li><b>7 h – 23 h</b><span>Accès privatif</span></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 05 · TERRASSE ============ -->
+  <section class="scene" id="terrasse" data-index="05" data-label="Terrasse">
+    <div class="scene__media">
+      <img class="scene__img" alt="Terrasse panoramique avec bassin extérieur ouvert sur les montagnes"
+           data-src="1566073771259-6a8506099945"
+           data-fallback="1582719478250-c89cae4dc85b|1520250497591-112f2f40a3f4|1551882547-ff40c63fe5fa">
+    </div>
+    <div class="scene__overlay"></div>
+
+    <div class="scene__content scene__content--split">
+      <div>
+        <p class="eyebrow reveal"><span class="idx">05</span> Terrasse panoramique</p>
+        <h2 class="display split-title">Dehors, <em>à 2 140 m</em></h2>
+      </div>
+      <div class="scene__body">
+        <p class="reveal">Une avancée de bois brut au-dessus du couloir d'avalanche, brasero
+          central et bain nordique chauffé au feu. Le service du soir s'y installe dès que la
+          météo le permet.</p>
+        <ul class="specs reveal">
+          <li><b>180°</b><span>Panorama dégagé</span></li>
+          <li><b>38°C</b><span>Bain nordique</span></li>
+          <li><b>Ski-in</b><span>Accès direct piste</span></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 06 · PLAN (CARTES 3D) ============ -->
+  <section class="scene scene--plan" id="plan" data-index="06" data-label="Plan">
+    <div class="scene__media">
+      <img class="scene__img" alt="Le chalet de la Villa Altaïa au crépuscule, lumières allumées dans la neige"
+           data-src="1518780664697-55e3ad937233"
+           data-fallback="1449158743715-0a90ebb6d2d8|1580587771525-78b9dba3b914|1512917774080-9991f1c4c750">
+    </div>
+    <div class="scene__overlay scene__overlay--deep"></div>
+
+    <div class="scene__content scene__content--wide">
+      <header class="plan__head">
+        <p class="eyebrow reveal"><span class="idx">06</span> Plan des chambres</p>
+        <h2 class="display split-title">Quatre <em>chambres</em></h2>
+        <p class="plan__note reveal">Huit couchages, quatre salles d'eau, un niveau par suite.</p>
+      </header>
+
+      <div class="cards" id="cards">
+
+        <article class="card" data-tilt data-tilt-max="12" data-tilt-speed="600"
+                 data-tilt-glare data-tilt-max-glare="0.28" data-tilt-perspective="1100">
+          <div class="card__media">
+            <img class="card__img" alt="Chambre Aiguille, lit en lin clair et bois brossé"
+                 data-src="1505693416388-ac5ce068fe85"
+                 data-fallback="1522771739844-6a9f6d5f14af|1571896349842-33c89424de2d" data-w="900">
+          </div>
+          <div class="card__body">
+            <span class="card__idx">I</span>
+            <h3>Aiguille</h3>
+            <p>32 m² · lit king · balcon est</p>
+          </div>
+        </article>
+
+        <article class="card" data-tilt data-tilt-max="12" data-tilt-speed="600"
+                 data-tilt-glare data-tilt-max-glare="0.28" data-tilt-perspective="1100">
+          <div class="card__media">
+            <img class="card__img" alt="Chambre Névé, ambiance chaude et tête de lit capitonnée"
+                 data-src="1618773928121-c32242e63f39"
+                 data-fallback="1540541338287-41700207dee6|1566665797739-1674de7a421a" data-w="900">
+          </div>
+          <div class="card__body">
+            <span class="card__idx">II</span>
+            <h3>Névé</h3>
+            <p>28 m² · lits jumeaux · bain privatif</p>
+          </div>
+        </article>
+
+        <article class="card" data-tilt data-tilt-max="12" data-tilt-speed="600"
+                 data-tilt-glare data-tilt-max-glare="0.28" data-tilt-perspective="1100">
+          <div class="card__media">
+            <img class="card__img" alt="Chambre Crête, vue dégagée sur les sommets depuis le lit"
+                 data-src="1571896349842-33c89424de2d"
+                 data-fallback="1578683010236-d716f9a3f461|1616594039964-ae9021a400a0" data-w="900">
+          </div>
+          <div class="card__body">
+            <span class="card__idx">III</span>
+            <h3>Crête</h3>
+            <p>30 m² · lit queen · bureau</p>
+          </div>
+        </article>
+
+        <article class="card" data-tilt data-tilt-max="12" data-tilt-speed="600"
+                 data-tilt-glare data-tilt-max-glare="0.28" data-tilt-perspective="1100">
+          <div class="card__media">
+            <img class="card__img" alt="Salle de bain en pierre de la suite Séracs"
+                 data-src="1618221195710-dd6b41faaea6"
+                 data-fallback="1584622650111-993a426fbf0a|1552321554-5fefe8c9ef14" data-w="900">
+          </div>
+          <div class="card__body">
+            <span class="card__idx">IV</span>
+            <h3>Séracs</h3>
+            <p>34 m² · suite parentale · hammam</p>
+          </div>
+        </article>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 07 · SÉJOURNER ============ -->
+  <section class="scene scene--book" id="sejourner" data-index="07" data-label="Séjourner">
+    <div class="scene__media">
+      <img class="scene__img" alt="Sommets enneigés au coucher du soleil, ciel orangé"
+           data-src="1519681393784-d120267933ba"
+           data-fallback="1491555103944-7c647fd857e6|1486870591958-9b9d0d1dda99|1454391304352-2bf4678b1a7a">
+    </div>
+    <div class="scene__overlay scene__overlay--deep"></div>
+
+    <div class="scene__content scene__content--wide book">
+      <div class="book__intro">
+        <p class="eyebrow reveal"><span class="idx">07</span> Séjourner</p>
+        <h2 class="display split-title">Écrivez-<em>nous</em></h2>
+        <p class="reveal">Locations privatives à la semaine, du samedi au samedi.
+          Chef, conciergerie, transferts et moniteur privé inclus dans chaque séjour.</p>
+        <dl class="book__facts reveal">
+          <div><dt>Capacité</dt><dd>8 personnes</dd></div>
+          <div><dt>Haute saison</dt><dd>Sur demande</dd></div>
+          <div><dt>Accès</dt><dd>Genève · 1 h 40</dd></div>
+        </dl>
+      </div>
+
+      <form class="book__form reveal" id="bookForm" novalidate>
+        <div class="field">
+          <label for="f-name">Nom</label>
+          <input id="f-name" name="name" type="text" autocomplete="name" required placeholder="Votre nom">
+        </div>
+        <div class="field">
+          <label for="f-mail">Email</label>
+          <input id="f-mail" name="email" type="email" autocomplete="email" required placeholder="vous@exemple.com">
+        </div>
+        <div class="field field--half">
+          <label for="f-from">Arrivée</label>
+          <input id="f-from" name="from" type="date" required>
+        </div>
+        <div class="field field--half">
+          <label for="f-guests">Voyageurs</label>
+          <select id="f-guests" name="guests">
+            <option>2 personnes</option>
+            <option>4 personnes</option>
+            <option selected>6 personnes</option>
+            <option>8 personnes</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="f-msg">Message</label>
+          <textarea id="f-msg" name="message" rows="2" placeholder="Dates souhaitées, demandes particulières…"></textarea>
+        </div>
+        <button class="btn btn--solid btn--full" type="submit">Envoyer la demande</button>
+        <p class="book__status" id="bookStatus" role="status"></p>
+      </form>
+
+      <footer class="sitefoot">
+        <span>Villa Altaïa · Route des Séracs · 73440 Alpes</span>
+        <span><a href="mailto:reservations@villa-altaia.example">reservations@villa-altaia.example</a></span>
+        <span>© 2026 — Photographies Unsplash</span>
+      </footer>
+    </div>
+  </section>
+
+</main>
+
+<noscript>
+  <style>
+    .preloader{display:none!important}
+    .reveal,.scene__content,.split-title,.hero__title{opacity:1!important;transform:none!important}
+    .scene__img{opacity:1!important}
+  </style>
+</noscript>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/vanilla-tilt/1.8.1/vanilla-tilt.min.js"></script>
+<script>
+/* =========================================================
+   VILLA ALTAÏA — interactions
+   GSAP + ScrollTrigger · Vanilla-Tilt · IntersectionObserver
+   ========================================================= */
+(function () {
+  'use strict';
+
+  var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var isTouch = window.matchMedia('(hover: none)').matches;
+  var hasGSAP = typeof window.gsap !== 'undefined';
+  var hasST   = typeof window.ScrollTrigger !== 'undefined';
+  var animate = hasGSAP && hasST && !reduced;
+
+  // Les états initiaux masqués ne s'appliquent que si les animations tourneront.
+  if (animate) document.documentElement.classList.add('is-ready');
+
+  /* -------------------------------------------------------
+     1. PHOTOGRAPHIES — URL Unsplash, lazy load, repli
+     ------------------------------------------------------- */
+
+  // Construit une URL Unsplash réelle à partir d'un identifiant de photo.
+  function unsplash(id, w) {
+    return 'https://images.unsplash.com/photo-' + id +
+           '?auto=format&fit=crop&w=' + w + '&q=80';
+  }
+
+  // Largeur demandée en fonction de l'écran (évite de tirer 2000px sur mobile).
+  function widthFor(img) {
+    if (img.dataset.w) return parseInt(img.dataset.w, 10);
+    var dpr = Math.min(window.devicePixelRatio || 1, 2);
+    var target = window.innerWidth * dpr;
+    if (target <= 900)  return 1200;
+    if (target <= 1500) return 1600;
+    if (target <= 2200) return 2000;
+    return 2560;
+  }
+
+  // Chaîne de repli : si une photo ne répond pas, on passe à la suivante.
+  function guard(img) {
+    var queue = (img.dataset.fallback || '').split('|').filter(Boolean);
+    var w = widthFor(img);
+
+    img.addEventListener('load', function () {
+      img.classList.add('is-loaded');
+      document.dispatchEvent(new CustomEvent('photo:loaded', { detail: img }));
+    });
+
+    img.addEventListener('error', function () {
+      var next = queue.shift();
+      if (next) img.src = unsplash(next, w);
+    });
+
+    if (img.complete && img.naturalWidth > 0) img.classList.add('is-loaded');
+  }
+
+  var photos = Array.prototype.slice.call(document.querySelectorAll('img[data-src], img[src]'));
+  photos.forEach(guard);
+
+  // Chargement différé : on charge une photo quand sa section approche.
+  var lazy = document.querySelectorAll('img[data-src]');
+  if ('IntersectionObserver' in window) {
+    var io = new IntersectionObserver(function (entries, obs) {
+      entries.forEach(function (entry) {
+        if (!entry.isIntersecting) return;
+        var img = entry.target;
+        img.src = unsplash(img.dataset.src, widthFor(img));
+        delete img.dataset.src;
+        obs.unobserve(img);
+      });
+    }, { rootMargin: '150% 0px', threshold: 0 });
+
+    Array.prototype.forEach.call(lazy, function (img) { io.observe(img); });
+  } else {
+    Array.prototype.forEach.call(lazy, function (img) {
+      img.src = unsplash(img.dataset.src, widthFor(img));
+    });
+  }
+
+  /* -------------------------------------------------------
+     2. PRELOADER
+     ------------------------------------------------------- */
+
+  var preloader = document.getElementById('preloader');
+  var preloaderBar = document.getElementById('preloaderBar');
+  var heroImg = document.querySelector('.scene--hero .scene__img');
+  var started = false;
+  var pct = 0;
+
+  var tick = setInterval(function () {
+    pct = Math.min(pct + Math.random() * 14, 92);
+    if (preloaderBar) preloaderBar.style.width = pct + '%';
+  }, 180);
+
+  function launch() {
+    if (started) return;
+    started = true;
+    clearInterval(tick);
+    if (preloaderBar) preloaderBar.style.width = '100%';
+
+    setTimeout(function () {
+      preloader.classList.add('is-done');
+      intro();
+    }, 260);
+  }
+
+  if (heroImg && heroImg.complete && heroImg.naturalWidth > 0) {
+    launch();
+  } else if (heroImg) {
+    heroImg.addEventListener('load', launch);
+    heroImg.addEventListener('error', function () { setTimeout(launch, 900); });
+  }
+  setTimeout(launch, 4500);              // filet de sécurité
+  window.addEventListener('load', function () { setTimeout(launch, 300); });
+
+  /* -------------------------------------------------------
+     3. DÉCOUPAGE DES TITRES EN MOTS
+     ------------------------------------------------------- */
+
+  function splitTitle(el) {
+    if (!el || el.dataset.split) return [];
+    el.dataset.split = '1';
+
+    var words = [];
+    var nodes = Array.prototype.slice.call(el.childNodes);
+    el.innerHTML = '';
+
+    nodes.forEach(function (node) {
+      var isEm = node.nodeType === 1;
+      var text = (node.textContent || '').trim();
+      if (!text) return;
+
+      text.split(/\s+/).forEach(function (w) {
+        var mask = document.createElement('span');
+        mask.className = 'line-mask';
+
+        var word = document.createElement('span');
+        word.className = 'word';
+        word.textContent = w;
+
+        if (isEm) {
+          var em = document.createElement('em');
+          em.appendChild(word);
+          mask.appendChild(em);
+        } else {
+          mask.appendChild(word);
+        }
+        el.appendChild(mask);
+        // Un mot terminé par un trait d'union reste collé au suivant.
+        if (!/[-–—']$/.test(w)) el.appendChild(document.createTextNode(' '));
+        words.push(word);
+      });
+    });
+    return words;
+  }
+
+  /* -------------------------------------------------------
+     4. ANIMATION D'OUVERTURE (HERO)
+     ------------------------------------------------------- */
+
+  function intro() {
+    var heroTitle = document.querySelector('.hero__title');
+    var words = splitTitle(heroTitle);
+    var bits = document.querySelectorAll('.scene--hero .reveal');
+
+    if (!animate) {
+      words.forEach(function (w) { w.style.transform = 'none'; w.style.opacity = 1; });
+      Array.prototype.forEach.call(bits, function (b) { b.style.opacity = 1; b.style.transform = 'none'; });
+      return;
+    }
+
+    var tl = gsap.timeline({ defaults: { ease: 'power3.out' } });
+
+    // Zoom arrière lent de la photo de fond : 1.15 → 1 en 2,5 s
+    tl.fromTo(heroImg,
+      { scale: 1.15 },
+      { scale: 1, duration: 2.5, ease: 'power3.out' }, 0);
+
+    // Titre : fondu + translation verticale, mot par mot
+    tl.fromTo(words,
+      { yPercent: 115, opacity: 0 },
+      { yPercent: 0, opacity: 1, duration: 1.3, stagger: 0.09 }, 0.35);
+
+    // Sur-titre, accroche, boutons, légende
+    tl.fromTo(bits,
+      { y: 26, opacity: 0 },
+      { y: 0, opacity: 1, duration: 1.05, stagger: 0.12 }, 0.85);
+
+    if (hasST) ScrollTrigger.refresh();
+  }
+
+  /* -------------------------------------------------------
+     5. SCROLLTRIGGER — parallaxe, apparitions, progression
+     ------------------------------------------------------- */
+
+  function scrollScenes() {
+    if (!animate) return;
+    gsap.registerPlugin(ScrollTrigger);
+
+    var scenes = document.querySelectorAll('.scene');
+
+    Array.prototype.forEach.call(scenes, function (scene, i) {
+      var media = scene.querySelector('.scene__media');
+      var isHero = scene.classList.contains('scene--hero');
+
+      // Parallaxe douce de la photo pendant le défilement
+      if (media) {
+        gsap.fromTo(media,
+          { yPercent: -5 },
+          {
+            yPercent: 5, ease: 'none',
+            scrollTrigger: {
+              trigger: scene,
+              start: 'top bottom',
+              end: 'bottom top',
+              scrub: 0.6
+            }
+          });
+      }
+
+      if (isHero) return;
+
+      // Titre de section
+      var words = splitTitle(scene.querySelector('.split-title'));
+      if (words.length) {
+        gsap.fromTo(words,
+          { yPercent: 115, opacity: 0 },
+          {
+            yPercent: 0, opacity: 1, duration: 1.15, stagger: 0.07, ease: 'power3.out',
+            scrollTrigger: { trigger: scene, start: 'top 55%', once: true }
+          });
+      }
+
+      // Textes, listes, formulaire
+      var bits = scene.querySelectorAll('.reveal');
+      if (bits.length) {
+        gsap.fromTo(bits,
+          { y: 30, opacity: 0 },
+          {
+            y: 0, opacity: 1, duration: 1, stagger: 0.11, ease: 'power3.out',
+            scrollTrigger: { trigger: scene, start: 'top 50%', once: true }
+          });
+      }
+
+      // Cartes de chambres
+      var cards = scene.querySelectorAll('.card');
+      if (cards.length) {
+        gsap.fromTo(cards,
+          { y: 48, opacity: 0 },
+          {
+            y: 0, opacity: 1, duration: 1.1, stagger: 0.12, ease: 'power3.out',
+            scrollTrigger: { trigger: scene, start: 'top 55%', once: true }
+          });
+      }
+    });
+
+    // Barre de progression
+    var bar = document.getElementById('progressBar');
+    if (bar) {
+      ScrollTrigger.create({
+        trigger: document.body,
+        start: 'top top',
+        end: 'bottom bottom',
+        onUpdate: function (self) { bar.style.width = (self.progress * 100).toFixed(2) + '%'; }
+      });
+    }
+  }
+
+  /* -------------------------------------------------------
+     6. CARTES 3D — Vanilla-Tilt
+     ------------------------------------------------------- */
+
+  function tilt() {
+    var cards = document.querySelectorAll('[data-tilt]');
+    if (!cards.length) return;
+
+    Array.prototype.forEach.call(cards, function (c) {
+      if (c.vanillaTilt) c.vanillaTilt.destroy();
+      var glare = c.querySelector('.js-tilt-glare');
+      if (glare) glare.parentNode.removeChild(glare);
+      c.style.transform = '';
+    });
+
+    if (isTouch || reduced || typeof window.VanillaTilt === 'undefined') return;
+
+    VanillaTilt.init(cards, {
+      max: 12,
+      speed: 600,
+      scale: 1.03,
+      perspective: 1100,
+      glare: true,
+      'max-glare': 0.28,
+      gyroscope: false
+    });
+  }
+
+  /* -------------------------------------------------------
+     7. NAVIGATION — barre, pastilles, menu mobile
+     ------------------------------------------------------- */
+
+  function nav() {
+    var topbar = document.getElementById('topbar');
+    var dots = document.querySelectorAll('.dots a');
+    var scenes = document.querySelectorAll('.scene');
+
+    window.addEventListener('scroll', function () {
+      if (topbar) topbar.classList.toggle('is-stuck', window.scrollY > 60);
+    }, { passive: true });
+
+    if ('IntersectionObserver' in window) {
+      var spy = new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+          if (!entry.isIntersecting) return;
+          var id = entry.target.id;
+          Array.prototype.forEach.call(dots, function (d) {
+            d.classList.toggle('is-active', d.dataset.target === id);
+          });
+        });
+      }, { threshold: 0.55 });
+
+      Array.prototype.forEach.call(scenes, function (s) { spy.observe(s); });
+    }
+
+    var burger = document.getElementById('burger');
+    var drawer = document.getElementById('drawer');
+    if (burger && drawer) {
+      burger.addEventListener('click', function () {
+        var open = burger.getAttribute('aria-expanded') === 'true';
+        burger.setAttribute('aria-expanded', String(!open));
+        drawer.hidden = open;
+        document.body.style.overflow = open ? '' : 'hidden';
+      });
+      drawer.addEventListener('click', function (e) {
+        if (e.target.tagName !== 'A') return;
+        burger.setAttribute('aria-expanded', 'false');
+        drawer.hidden = true;
+        document.body.style.overflow = '';
+      });
+    }
+  }
+
+  /* -------------------------------------------------------
+     8. FORMULAIRE DE DEMANDE
+     ------------------------------------------------------- */
+
+  function form() {
+    var f = document.getElementById('bookForm');
+    var status = document.getElementById('bookStatus');
+    if (!f) return;
+
+    var today = new Date().toISOString().split('T')[0];
+    var from = document.getElementById('f-from');
+    if (from) { from.min = today; from.value = today; }
+
+    f.addEventListener('submit', function (e) {
+      e.preventDefault();
+
+      Array.prototype.forEach.call(f.querySelectorAll('input'), function (i) {
+        i.classList.add('is-touched');
+      });
+
+      if (!f.checkValidity()) {
+        status.textContent = 'Merci de compléter votre nom et votre email.';
+        return;
+      }
+
+      var name = f.querySelector('#f-name').value.trim().split(/\s+/)[0];
+      status.textContent = 'Merci ' + name + ' — notre conciergerie vous répond sous 24 h.';
+      f.reset();
+      if (from) from.value = today;
+    });
+  }
+
+  /* -------------------------------------------------------
+     9. DÉMARRAGE
+     ------------------------------------------------------- */
+
+  function boot() {
+    scrollScenes();
+    tilt();
+    nav();
+    form();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    boot();
+  }
+
+  // Les photos qui arrivent après coup décalent la page : on recalcule.
+  document.addEventListener('photo:loaded', function () {
+    if (hasST) ScrollTrigger.refresh();
+  });
+
+  var resizeTimer;
+  window.addEventListener('resize', function () {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(function () {
+      if (hasST) ScrollTrigger.refresh();
+      tilt();
+    }, 220);
+  });
+})();
+</script>
+</body>
+</html>
