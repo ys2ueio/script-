@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Villa Altaïa — Refuge de luxe en haute montagne</title>
+<meta name="description" content="Villa Altaïa : sept espaces suspendus à 2 140 m, entre sommets, feu de bois et lumière rasante. Location privée, service d'exception.">
+<meta name="theme-color" content="#12110F">
+
+<meta property="og:title" content="Villa Altaïa — Refuge de luxe en haute montagne">
+<meta property="og:description" content="Sept espaces suspendus au-dessus des nuages, ouverts sur la lumière rasante du soir.">
+<meta property="og:type" content="website">
+<meta property="og:image" content="https://images.unsplash.com/photo-1506905925346-21bda4d32df4?auto=format&fit=crop&w=1200&q=80">
+
+<link rel="preconnect" href="https://images.unsplash.com" crossorigin>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preload" as="image" fetchpriority="high"
+      href="https://images.unsplash.com/photo-1506905925346-21bda4d32df4?auto=format&fit=crop&w=2000&q=80">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400&family=Jost:wght@200;300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+
+<!-- ============ PRELOADER ============ -->
+<div class="preloader" id="preloader" aria-hidden="true">
+  <div class="preloader__inner">
+    <span class="preloader__mark">A</span>
+    <span class="preloader__name">Villa Altaïa</span>
+    <span class="preloader__bar"><i id="preloaderBar"></i></span>
+    <span class="preloader__meta">Alpes · 2 140 m</span>
+  </div>
+</div>
+
+<!-- ============ TEXTURE / PROGRESS ============ -->
+<div class="grain" aria-hidden="true"></div>
+<div class="vignette" aria-hidden="true"></div>
+<div class="progress" aria-hidden="true"><i id="progressBar"></i></div>
+
+<!-- ============ TOPBAR ============ -->
+<header class="topbar" id="topbar">
+  <a class="brand" href="#sommets">
+    <span class="brand__mark">A</span>
+    <span class="brand__name">Villa Altaïa</span>
+  </a>
+
+  <nav class="topnav" aria-label="Navigation principale">
+    <a href="#salon">Salon</a>
+    <a href="#suite">Suite</a>
+    <a href="#spa">Spa</a>
+    <a href="#terrasse">Terrasse</a>
+    <a href="#plan">Plan</a>
+  </nav>
+
+  <a class="btn btn--ghost topbar__cta" href="#sejourner">Séjourner</a>
+
+  <button class="burger" id="burger" aria-label="Ouvrir le menu" aria-expanded="false" aria-controls="drawer">
+    <span></span><span></span>
+  </button>
+</header>
+
+<div class="drawer" id="drawer" hidden>
+  <a href="#sommets">01 — Sommets</a>
+  <a href="#salon">02 — Salon</a>
+  <a href="#suite">03 — Suite</a>
+  <a href="#spa">04 — Spa</a>
+  <a href="#terrasse">05 — Terrasse</a>
+  <a href="#plan">06 — Plan</a>
+  <a href="#sejourner">07 — Séjourner</a>
+</div>
+
+<!-- ============ DOT NAV ============ -->
+<nav class="dots" id="dots" aria-label="Sections">
+  <a href="#sommets"   data-target="sommets"><span class="dots__label">Sommets</span><span class="dots__dot"></span></a>
+  <a href="#salon"     data-target="salon"><span class="dots__label">Salon</span><span class="dots__dot"></span></a>
+  <a href="#suite"     data-target="suite"><span class="dots__label">Suite</span><span class="dots__dot"></span></a>
+  <a href="#spa"       data-target="spa"><span class="dots__label">Spa</span><span class="dots__dot"></span></a>
+  <a href="#terrasse"  data-target="terrasse"><span class="dots__label">Terrasse</span><span class="dots__dot"></span></a>
+  <a href="#plan"      data-target="plan"><span class="dots__label">Plan</span><span class="dots__dot"></span></a>
+  <a href="#sejourner" data-target="sejourner"><span class="dots__label">Séjourner</span><span class="dots__dot"></span></a>
+</nav>
+
+<main id="scroller">
+
+  <!-- ============ 01 · SOMMETS (HERO) ============ -->
+  <section class="scene scene--hero" id="sommets" data-index="01" data-label="Sommets">
+    <div class="scene__media">
+      <img class="scene__img" alt="Chaîne de sommets alpins baignée par la lumière du couchant"
+           fetchpriority="high"
+           src="https://images.unsplash.com/photo-1506905925346-21bda4d32df4?auto=format&fit=crop&w=2000&q=80"
+           data-fallback="1464822759023-fed622ff2c3b|1483728642387-6c3bdd6c93e5|1470770841072-f978cf4d019e">
+    </div>
+    <div class="scene__overlay"></div>
+
+    <div class="scene__content">
+      <p class="eyebrow reveal">Alpes françaises <i></i> 2 140 mètres</p>
+      <h1 class="display display--xl hero__title">Villa Altaïa</h1>
+      <p class="lede reveal">Sept espaces suspendus au-dessus des nuages, ouverts sur la lumière
+        rasante du soir et le silence minéral des cimes.</p>
+      <div class="hero__actions reveal">
+        <a class="btn btn--solid" href="#sejourner">Demander les disponibilités</a>
+        <a class="btn btn--ghost" href="#salon">Découvrir la villa</a>
+      </div>
+    </div>
+
+    <div class="scene__foot">
+      <div class="scene__caption reveal">
+        <span class="rule"></span>
+        <p>Hiver 2026 — locations privatives à la semaine, chef et conciergerie inclus.</p>
+      </div>
+      <a class="scrollcue reveal" href="#salon" aria-label="Descendre vers la section suivante">
+        <span>Défiler</span><i></i>
+      </a>
+    </div>
+  </section>
+
+  <!-- ============ 02 · SALON ============ -->
+  <section class="scene" id="salon" data-index="02" data-label="Salon">
+    <div class="scene__media">
+      <img class="scene__img" alt="Salon de chalet de luxe avec cheminée allumée et grandes baies vitrées"
+           data-src="1600585154340-be6161a56a0c"
+           data-fallback="1600607687939-ce8a6c25118c|1616486338812-3dadae4b4ace|1600210492486-724fe5c67fb0">
+    </div>
+    <div class="scene__overlay"></div>
+
+    <div class="scene__content scene__content--split">
+      <div>
+        <p class="eyebrow reveal"><span class="idx">02</span> Le grand salon</p>
+        <h2 class="display split-title">Le feu, <em>puis le silence</em></h2>
+      </div>
+      <div class="scene__body">
+        <p class="reveal">Douze mètres de baie vitrée, une cheminée centrale en pierre de Maurienne
+          et des assises basses en laine bouclée. À la tombée du jour, la vallée devient une
+          braise et la pièce se teinte d'ambre.</p>
+        <ul class="specs reveal">
+          <li><b>92 m²</b><span>Volume principal</span></li>
+          <li><b>4,8 m</b><span>Hauteur sous charpente</span></li>
+          <li><b>Sud-ouest</b><span>Orientation couchant</span></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 03 · SUITE ============ -->
+  <section class="scene" id="suite" data-index="03" data-label="Suite">
+    <div class="scene__media">
+      <img class="scene__img" alt="Suite principale d'un chalet de luxe, lit habillé de lin et vue sur la montagne"
+           data-src="1611892440504-42a792e24d32"
+           data-fallback="1505693416388-ac5ce068fe85|1590490360182-c33d57733427|1571896349842-33c89424de2d">
+    </div>
+    <div class="scene__overlay"></div>
+
+    <div class="scene__content scene__content--split">
+      <div>
+        <p class="eyebrow reveal"><span class="idx">03</span> Suite Altaïa</p>
+        <h2 class="display split-title">Dormir <em>face au vide</em></h2>
+      </div>
+      <div class="scene__body">
+        <p class="reveal">La suite occupe tout le dernier niveau. Le lit fait face au nord-est :
+          au réveil, la première lumière touche les arêtes avant d'atteindre la vallée. Lin lavé,
+          chêne brossé, rien d'autre.</p>
+        <ul class="specs reveal">
+          <li><b>58 m²</b><span>Suite et dressing</span></li>
+          <li><b>King</b><span>Literie sur mesure</span></li>
+          <li><b>Bain</b><span>Îlot en pierre brute</span></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 04 · SPA ============ -->
+  <section class="scene" id="spa" data-index="04" data-label="Spa">
+    <div class="scene__media">
+      <img class="scene__img" alt="Spa privé du chalet : bassin chauffé, pierre sombre et lumière tamisée"
+           data-src="1540555700478-4be289fbecef"
+           data-fallback="1600334129128-685c5582fd35|1544161515-4ab6ce6db874|1571902943202-507ec2618e8f">
+    </div>
+    <div class="scene__overlay"></div>
+
+    <div class="scene__content scene__content--split">
+      <div>
+        <p class="eyebrow reveal"><span class="idx">04</span> Spa & hammam</p>
+        <h2 class="display split-title">L'eau <em>sous la roche</em></h2>
+      </div>
+      <div class="scene__body">
+        <p class="reveal">Creusé dans le socle rocheux : bassin chauffé à 34°, hammam en marbre
+          gris, sauna en mélèze et deux cabines de soin. Les praticiens montent à la villa
+          sur simple demande.</p>
+        <ul class="specs reveal">
+          <li><b>34°C</b><span>Bassin intérieur</span></li>
+          <li><b>2</b><span>Cabines de soin</span></li>
+          <li><b>7 h – 23 h</b><span>Accès privatif</span></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 05 · TERRASSE ============ -->
+  <section class="scene" id="terrasse" data-index="05" data-label="Terrasse">
+    <div class="scene__media">
+      <img class="scene__img" alt="Terrasse panoramique avec bassin extérieur ouvert sur les montagnes"
+           data-src="1566073771259-6a8506099945"
+           data-fallback="1582719478250-c89cae4dc85b|1520250497591-112f2f40a3f4|1551882547-ff40c63fe5fa">
+    </div>
+    <div class="scene__overlay"></div>
+
+    <div class="scene__content scene__content--split">
+      <div>
+        <p class="eyebrow reveal"><span class="idx">05</span> Terrasse panoramique</p>
+        <h2 class="display split-title">Dehors, <em>à 2 140 m</em></h2>
+      </div>
+      <div class="scene__body">
+        <p class="reveal">Une avancée de bois brut au-dessus du couloir d'avalanche, brasero
+          central et bain nordique chauffé au feu. Le service du soir s'y installe dès que la
+          météo le permet.</p>
+        <ul class="specs reveal">
+          <li><b>180°</b><span>Panorama dégagé</span></li>
+          <li><b>38°C</b><span>Bain nordique</span></li>
+          <li><b>Ski-in</b><span>Accès direct piste</span></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 06 · PLAN (CARTES 3D) ============ -->
+  <section class="scene scene--plan" id="plan" data-index="06" data-label="Plan">
+    <div class="scene__media">
+      <img class="scene__img" alt="Le chalet de la Villa Altaïa au crépuscule, lumières allumées dans la neige"
+           data-src="1518780664697-55e3ad937233"
+           data-fallback="1449158743715-0a90ebb6d2d8|1580587771525-78b9dba3b914|1512917774080-9991f1c4c750">
+    </div>
+    <div class="scene__overlay scene__overlay--deep"></div>
+
+    <div class="scene__content scene__content--wide">
+      <header class="plan__head">
+        <p class="eyebrow reveal"><span class="idx">06</span> Plan des chambres</p>
+        <h2 class="display split-title">Quatre <em>chambres</em></h2>
+        <p class="plan__note reveal">Huit couchages, quatre salles d'eau, un niveau par suite.</p>
+      </header>
+
+      <div class="cards" id="cards">
+
+        <article class="card" data-tilt data-tilt-max="12" data-tilt-speed="600"
+                 data-tilt-glare data-tilt-max-glare="0.28" data-tilt-perspective="1100">
+          <div class="card__media">
+            <img class="card__img" alt="Chambre Aiguille, lit en lin clair et bois brossé"
+                 data-src="1505693416388-ac5ce068fe85"
+                 data-fallback="1522771739844-6a9f6d5f14af|1571896349842-33c89424de2d" data-w="900">
+          </div>
+          <div class="card__body">
+            <span class="card__idx">I</span>
+            <h3>Aiguille</h3>
+            <p>32 m² · lit king · balcon est</p>
+          </div>
+        </article>
+
+        <article class="card" data-tilt data-tilt-max="12" data-tilt-speed="600"
+                 data-tilt-glare data-tilt-max-glare="0.28" data-tilt-perspective="1100">
+          <div class="card__media">
+            <img class="card__img" alt="Chambre Névé, ambiance chaude et tête de lit capitonnée"
+                 data-src="1618773928121-c32242e63f39"
+                 data-fallback="1540541338287-41700207dee6|1566665797739-1674de7a421a" data-w="900">
+          </div>
+          <div class="card__body">
+            <span class="card__idx">II</span>
+            <h3>Névé</h3>
+            <p>28 m² · lits jumeaux · bain privatif</p>
+          </div>
+        </article>
+
+        <article class="card" data-tilt data-tilt-max="12" data-tilt-speed="600"
+                 data-tilt-glare data-tilt-max-glare="0.28" data-tilt-perspective="1100">
+          <div class="card__media">
+            <img class="card__img" alt="Chambre Crête, vue dégagée sur les sommets depuis le lit"
+                 data-src="1571896349842-33c89424de2d"
+                 data-fallback="1578683010236-d716f9a3f461|1616594039964-ae9021a400a0" data-w="900">
+          </div>
+          <div class="card__body">
+            <span class="card__idx">III</span>
+            <h3>Crête</h3>
+            <p>30 m² · lit queen · bureau</p>
+          </div>
+        </article>
+
+        <article class="card" data-tilt data-tilt-max="12" data-tilt-speed="600"
+                 data-tilt-glare data-tilt-max-glare="0.28" data-tilt-perspective="1100">
+          <div class="card__media">
+            <img class="card__img" alt="Salle de bain en pierre de la suite Séracs"
+                 data-src="1618221195710-dd6b41faaea6"
+                 data-fallback="1584622650111-993a426fbf0a|1552321554-5fefe8c9ef14" data-w="900">
+          </div>
+          <div class="card__body">
+            <span class="card__idx">IV</span>
+            <h3>Séracs</h3>
+            <p>34 m² · suite parentale · hammam</p>
+          </div>
+        </article>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 07 · SÉJOURNER ============ -->
+  <section class="scene scene--book" id="sejourner" data-index="07" data-label="Séjourner">
+    <div class="scene__media">
+      <img class="scene__img" alt="Sommets enneigés au coucher du soleil, ciel orangé"
+           data-src="1519681393784-d120267933ba"
+           data-fallback="1491555103944-7c647fd857e6|1486870591958-9b9d0d1dda99|1454391304352-2bf4678b1a7a">
+    </div>
+    <div class="scene__overlay scene__overlay--deep"></div>
+
+    <div class="scene__content scene__content--wide book">
+      <div class="book__intro">
+        <p class="eyebrow reveal"><span class="idx">07</span> Séjourner</p>
+        <h2 class="display split-title">Écrivez-<em>nous</em></h2>
+        <p class="reveal">Locations privatives à la semaine, du samedi au samedi.
+          Chef, conciergerie, transferts et moniteur privé inclus dans chaque séjour.</p>
+        <dl class="book__facts reveal">
+          <div><dt>Capacité</dt><dd>8 personnes</dd></div>
+          <div><dt>Haute saison</dt><dd>Sur demande</dd></div>
+          <div><dt>Accès</dt><dd>Genève · 1 h 40</dd></div>
+        </dl>
+      </div>
+
+      <form class="book__form reveal" id="bookForm" novalidate>
+        <div class="field">
+          <label for="f-name">Nom</label>
+          <input id="f-name" name="name" type="text" autocomplete="name" required placeholder="Votre nom">
+        </div>
+        <div class="field">
+          <label for="f-mail">Email</label>
+          <input id="f-mail" name="email" type="email" autocomplete="email" required placeholder="vous@exemple.com">
+        </div>
+        <div class="field field--half">
+          <label for="f-from">Arrivée</label>
+          <input id="f-from" name="from" type="date" required>
+        </div>
+        <div class="field field--half">
+          <label for="f-guests">Voyageurs</label>
+          <select id="f-guests" name="guests">
+            <option>2 personnes</option>
+            <option>4 personnes</option>
+            <option selected>6 personnes</option>
+            <option>8 personnes</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="f-msg">Message</label>
+          <textarea id="f-msg" name="message" rows="2" placeholder="Dates souhaitées, demandes particulières…"></textarea>
+        </div>
+        <button class="btn btn--solid btn--full" type="submit">Envoyer la demande</button>
+        <p class="book__status" id="bookStatus" role="status"></p>
+      </form>
+
+      <footer class="sitefoot">
+        <span>Villa Altaïa · Route des Séracs · 73440 Alpes</span>
+        <span><a href="mailto:reservations@villa-altaia.example">reservations@villa-altaia.example</a></span>
+        <span>© 2026 — Photographies Unsplash</span>
+      </footer>
+    </div>
+  </section>
+
+</main>
+
+<noscript>
+  <style>
+    .preloader{display:none!important}
+    .reveal,.scene__content,.split-title,.hero__title{opacity:1!important;transform:none!important}
+    .scene__img{opacity:1!important}
+  </style>
+</noscript>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js" defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js" defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/vanilla-tilt/1.8.1/vanilla-tilt.min.js" defer></script>
+<script src="script.js" defer></script>
+</body>
+</html>
