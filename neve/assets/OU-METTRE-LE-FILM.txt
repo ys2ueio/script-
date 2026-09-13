@@ -1,0 +1,16 @@
+Le film du héros se pose ici.
+
+Deux fichiers, exactement ces noms :
+  hero-scrub.mp4    la vidéo, réencodée pour le défilement
+  hero-poster.jpg   la première image, affichée le temps du chargement
+
+Puis une seule ligne à changer dans index.html :
+  var HAS_VIDEO=false;   devient   var HAS_VIDEO=true;
+
+Rien d'autre ne bouge. Le décor dessiné s'efface tout seul quand le film arrive,
+et il reprend la main si le film ne se charge pas.
+
+La commande de réencodage, celle qui rend le défilement fluide :
+  ffmpeg -i brut.mp4 -c:v libx264 -crf 18 -preset slow -g 8 -keyint_min 8 \
+    -pix_fmt yuv420p -movflags +faststart -an assets/hero-scrub.mp4
+  ffmpeg -i assets/hero-scrub.mp4 -frames:v 1 -q:v 2 assets/hero-poster.jpg
