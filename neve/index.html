@@ -20,7 +20,7 @@
 <!-- Les polices ne bloquent jamais le rendu ni le script : la page est vivante tout de suite,
      et les lettres se remplacent quand elles arrivent. -->
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&family=IBM+Plex+Mono:wght@400&family=Newsreader:opsz,wght@6..72,300;6..72,400&display=swap">
-<link rel="stylesheet" media="print" onload="this.media='all';this.onload=null" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&family=IBM+Plex+Mono:wght@400&family=Newsreader:opsz,wght@6..72,300;6..72,400&display=swap">
+<link id="fonts" rel="stylesheet" media="print" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&family=IBM+Plex+Mono:wght@400&family=Newsreader:opsz,wght@6..72,300;6..72,400&display=swap">
 <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&family=IBM+Plex+Mono:wght@400&family=Newsreader:opsz,wght@6..72,300;6..72,400&display=swap"></noscript>
 
 <style>
@@ -1299,6 +1299,8 @@ rmq.addEventListener('change',function(e){
 if(rmq.matches)pinToFinalStates();
 
 /* ---------- go ---------- */
+var fontsLink=document.getElementById('fonts');
+if(fontsLink)fontsLink.media='all';   /* les polices arrivent sans jamais bloquer la page */
 applyHeroMode();
 requestAnimationFrame(function(){document.body.classList.add('lit');});
 
